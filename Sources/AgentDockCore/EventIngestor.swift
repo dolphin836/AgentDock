@@ -34,7 +34,12 @@ public enum EventIngestor {
         guard let sessionId = p["session_id"] as? String,
               let name = p["hook_event_name"] as? String
         else { return .ignored }
-        let detail = (p["tool_name"] as? String) ?? (p["message"] as? String)
+        // detail 优先取操作的文件名(展示价值最高),其次工具名/消息
+        var detail = (p["tool_name"] as? String) ?? (p["message"] as? String)
+        if let input = p["tool_input"] as? [String: Any],
+           let filePath = input["file_path"] as? String, !filePath.isEmpty {
+            detail = (filePath as NSString).lastPathComponent
+        }
         return .event(AgentEvent(
             sessionId: sessionId, kind: .claudeCode,
             cwd: p["cwd"] as? String, name: name, detail: detail))

@@ -3,6 +3,12 @@ import AgentDockCore
 
 struct SessionCardView: View {
     let session: AgentSession
+    let settings: AppSettings
+
+    /// 只展示有实质内容的事件;一条都没有就整块隐藏
+    private var displayEvents: [AgentEvent] {
+        session.recentEvents.filter { $0.detail?.isEmpty == false }.suffix(3)
+    }
 
     var body: some View {
         Button {
@@ -18,7 +24,7 @@ struct SessionCardView: View {
                         .foregroundStyle(.white)
                     Spacer()
                     StatusDot(state: session.state)
-                    Text(session.state.label)
+                    Text(settings.label(for: session.state))
                         .font(.system(size: 11))
                         .foregroundStyle(session.state.dotColor)
                 }
@@ -29,8 +35,8 @@ struct SessionCardView: View {
                         if let cost = m.costUSD { metric(String(format: "$%.2f", cost)) }
                     }
                 }
-                ForEach(session.recentEvents.suffix(3), id: \.timestamp) { event in
-                    Text("· \(event.name)\(event.detail.map { " — \($0)" } ?? "")")
+                ForEach(displayEvents, id: \.timestamp) { event in
+                    Text("· \(event.name) — \(event.detail ?? "")")
                         .font(.system(size: 10))
                         .foregroundStyle(.white.opacity(0.45))
                         .lineLimit(1)

@@ -8,7 +8,7 @@ final class NotchWindow {
     private let panel: NSPanel
     private let store: SessionStore
 
-    init(store: SessionStore) {
+    init(store: SessionStore, settings: AppSettings) {
         self.store = store
         panel = NSPanel(
             contentRect: .zero,
@@ -22,7 +22,7 @@ final class NotchWindow {
         panel.isMovable = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
 
-        let root = NotchRootView(store: store)
+        let root = NotchRootView(store: store, settings: settings)
         panel.contentView = NSHostingView(rootView: root)
     }
 

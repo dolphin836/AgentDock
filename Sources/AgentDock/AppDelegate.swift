@@ -21,7 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startCodexTailer()
         setupStatusItem()
 
-        notchWindow = NotchWindow(store: store)
+        notchWindow = NotchWindow(store: store, settings: AppSettings.shared)
         notchWindow?.show()
 
         pruneTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
@@ -76,17 +76,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(systemSymbolName: "cpu", accessibilityDescription: "AgentDock")
-        let menu = NSMenu()
-        menu.addItem(withTitle: "安装 Claude Code 集成", action: #selector(installClaude), keyEquivalent: "")
-        menu.addItem(withTitle: "卸载 Claude Code 集成", action: #selector(uninstallClaude), keyEquivalent: "")
-        menu.addItem(.separator())
-        menu.addItem(withTitle: "安装 Codex 集成", action: #selector(installCodex), keyEquivalent: "")
-        menu.addItem(withTitle: "卸载 Codex 集成", action: #selector(uninstallCodex), keyEquivalent: "")
-        menu.addItem(.separator())
-        menu.addItem(withTitle: "退出 AgentDock", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        for i in menu.items where i.action != #selector(NSApplication.terminate(_:)) { i.target = self }
-        item.menu = menu
         statusItem = item
+        rebuildMenu()
+    }
+
+    private func rebuildMenu() {
+        let t = AppSettings.shared.t
+        let menu = NSMenu()
+        menu.addItem(withTitle: t("Install Claude Code Integration", "安装 Claude Code 集成"),
+                     action: #selector(installClaude), keyEquivalent: "")
+        menu.addItem(withTitle: t("Uninstall Claude Code Integration", "卸载 Claude Code 集成"),
+                     action: #selector(uninstallClaude), keyEquivalent: "")
+        menu.addItem(.separator())
+        menu.addItem(withTitle: t("Install Codex Integration", "安装 Codex 集成"),
+                     action: #selector(installCodex), keyEquivalent: "")
+        menu.addItem(withTitle: t("Uninstall Codex Integration", "卸载 Codex 集成"),
+                     action: #selector(uninstallCodex), keyEquivalent: "")
+        menu.addItem(.separator())
+
+        let langItem = NSMenuItem(title: t("Language", "语言"), action: nil, keyEquivalent: "")
+        let langMenu = NSMenu()
+        for lang in AppLanguage.allCases {
+            let mi = NSMenuItem(title: lang.displayName, action: #selector(switchLanguage(_:)), keyEquivalent: "")
+            mi.representedObject = lang.rawValue
+            mi.state = AppSettings.shared.language == lang ? .on : .off
+            mi.target = self
+            langMenu.addItem(mi)
+        }
+        langItem.submenu = langMenu
+        menu.addItem(langItem)
+        menu.addItem(.separator())
+        menu.addItem(withTitle: t("Quit AgentDock", "退出 AgentDock"),
+                     action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        for i in menu.items where i.action != #selector(NSApplication.terminate(_:)) { i.target = self }
+        statusItem?.menu = menu
+    }
+
+    @objc private func switchLanguage(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let lang = AppLanguage(rawValue: raw) else { return }
+        AppSettings.shared.language = lang
+        rebuildMenu()
     }
 
     private var claudeInstaller: ClaudeInstaller {
@@ -108,7 +138,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try body()
         } catch {
             let alert = NSAlert()
-            alert.messageText = "操作失败"
+            alert.messageText = AppSettings.shared.t("Operation failed", "操作失败")
             alert.informativeText = error.localizedDescription
             alert.runModal()
         }

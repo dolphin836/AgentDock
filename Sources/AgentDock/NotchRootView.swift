@@ -1,22 +1,31 @@
 import SwiftUI
+import AppKit
 import AgentDockCore
 
 /// 顶层视图:收起态胶囊 + 悬停/告警展开面板
 struct NotchRootView: View {
     let store: SessionStore
+    let settings: AppSettings
     @State private var hovering = false
     @State private var alertExpanded = false
     @State private var lastAlertedIds: Set<String> = []
 
     private var expanded: Bool { hovering || alertExpanded }
 
+    /// 刘海高度:内容必须从刘海下沿开始,否则被遮挡
+    private var topInset: CGFloat {
+        NSScreen.screens.first { $0.safeAreaInsets.top > 0 }?.safeAreaInsets.top
+            ?? NSScreen.main.map { $0.frame.maxY - $0.visibleFrame.maxY } ?? 24
+    }
+
     var body: some View {
         VStack(spacing: 0) {
+            Color.clear.frame(height: topInset)
             Group {
                 if expanded {
-                    PanelView(store: store)
+                    PanelView(store: store, settings: settings)
                 } else {
-                    CapsuleView(sessions: store.sessions)
+                    CapsuleView(sessions: store.sessions, settings: settings)
                 }
             }
             .onHover { hovering = $0 }
@@ -54,14 +63,10 @@ extension SessionState {
         }
     }
 
-    var label: String {
+    var isActive: Bool {
         switch self {
-        case .idle: "空闲"
-        case .thinking: "思考中"
-        case .runningTool: "执行工具"
-        case .waitingApproval: "等待审批"
-        case .done: "已完成"
-        case .disconnected: "已断开"
+        case .thinking, .runningTool, .waitingApproval: true
+        default: false
         }
     }
 }

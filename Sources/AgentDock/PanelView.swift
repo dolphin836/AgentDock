@@ -4,17 +4,18 @@ import AgentDockCore
 /// 展开态面板:与刘海融合的黑色圆角卡片列表
 struct PanelView: View {
     let store: SessionStore
+    let settings: AppSettings
 
     var body: some View {
         VStack(spacing: 8) {
             if store.sessions.isEmpty {
-                Text("暂无 Agent 会话")
+                Text(settings.t("No agent sessions", "暂无 Agent 会话"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 20)
             } else {
                 ForEach(store.sessions) { session in
-                    SessionCardView(session: session)
+                    SessionCardView(session: session, settings: settings)
                 }
             }
         }
