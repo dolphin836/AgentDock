@@ -29,14 +29,17 @@ struct CapsuleView: View {
     }
 
     var body: some View {
-        if visible.isEmpty {
-            Color.clear.frame(width: 1, height: 1)
+        if active.isEmpty {
+            // 没有运行中的项目:不显示内容,但保留刘海大小的透明悬停区,便于展开查看闲置会话
+            Color.clear
+                .frame(width: notchWidth + 20, height: notchHeight)
+                .contentShape(Rectangle())
         } else {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 let primary = rotatingPrimary(at: context.date)
                 // 左右翼等宽(取两侧内容较宽者,再设上限),保证整体居中后中间空位
                 // 与物理刘海精确对齐,文字绝不滑入刘海底下,同时短文字不会撑出大黑条
-                let wing: CGFloat = wingWidth(primary: primary, now: context.date)
+                let wing: CGFloat = wingWidth(primary: primary)
                 HStack(spacing: 0) {
                     // 左翼:摘要文字,靠刘海一侧对齐,超长截断
                     Group {
@@ -60,16 +63,10 @@ struct CapsuleView: View {
                     .frame(maxHeight: .infinity)
                     // 物理刘海占位:什么都不画,反正被摄像头区域盖住
                     Color.clear.frame(width: notchWidth)
-                    // 右翼:耗时 + 状态点,靠刘海一侧对齐
-                    HStack(spacing: 5) {
-                        if let primary, primary.state.isActive {
-                            Text(elapsedText(primary, now: context.date))
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.7))
-                                .monospacedDigit()
-                        }
-                        ForEach(visible) { session in
-                            StatusDot(state: session.state)
+                    // 右翼:仅当前轮播项目的状态点
+                    Group {
+                        if let primary {
+                            StatusDot(state: primary.state)
                         }
                     }
                     .padding(.horizontal, 10)
@@ -83,15 +80,12 @@ struct CapsuleView: View {
     }
 
     /// 按两侧实际内容测量翼宽:等宽对称,上限 250pt(超出交给两行/截断)
-    private func wingWidth(primary: AgentSession?, now: Date) -> CGFloat {
+    private func wingWidth(primary: AgentSession?) -> CGFloat {
         let padding: CGFloat = 20  // 两侧 horizontal padding
         var left: CGFloat = 0
-        var right: CGFloat = CGFloat(visible.count) * 13  // 状态点
+        let right: CGFloat = 13  // 单个状态点
         if let primary {
             left = 14 + 5 + measure(summaryText(primary), size: 10, weight: .medium)
-            if primary.state.isActive {
-                right += measure(elapsedText(primary, now: now), size: 10, weight: .medium) + 5
-            }
         }
         return min(250, max(30, max(left, right)) + padding)
     }
@@ -109,16 +103,7 @@ struct CapsuleView: View {
     }
 
     private func summaryText(_ session: AgentSession) -> String {
-        let detail = session.recentEvents.last(where: { $0.detail?.isEmpty == false })?.detail
-        return "\(detail ?? session.projectName) · \(settings.label(for: session.state))"
-    }
-
-    /// 本轮耗时:从最近一次 UserPromptSubmit 起算,退化为最后活动时间
-    private func elapsedText(_ session: AgentSession, now: Date) -> String {
-        let start = session.recentEvents.last(where: { $0.name == "UserPromptSubmit" })?.timestamp
-            ?? session.lastActivity
-        let seconds = max(0, Int(now.timeIntervalSince(start)))
-        return seconds < 60 ? "\(seconds)s" : "\(seconds / 60)m \(seconds % 60)s"
+        AgentSession.summaryLine(session, settings: settings)
     }
 }
 

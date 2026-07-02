@@ -1,45 +1,43 @@
 import SwiftUI
 import AgentDockCore
 
+extension AgentSession {
+    /// 收起态与卡片第一行共用的摘要:「文件/项目 · 状态」
+    @MainActor
+    static func summaryLine(_ session: AgentSession, settings: AppSettings) -> String {
+        let detail = session.recentEvents.last(where: { $0.detail?.isEmpty == false })?.detail
+        return "\(detail ?? session.projectName) · \(settings.label(for: session.state))"
+    }
+}
+
 struct SessionCardView: View {
     let session: AgentSession
     let settings: AppSettings
-
-    /// 只展示有实质内容的事件;一条都没有就整块隐藏
-    private var displayEvents: [AgentEvent] {
-        session.recentEvents.filter { $0.detail?.isEmpty == false }.suffix(3)
-    }
 
     var body: some View {
         Button {
             TerminalJumper.jump(toCwd: session.cwd)
         } label: {
             VStack(alignment: .leading, spacing: 4) {
+                // 第一行:与收起态一致
                 HStack(spacing: 6) {
                     Image(systemName: session.kind.symbolName)
                         .font(.system(size: 12))
                         .foregroundStyle(.white.opacity(0.9))
-                    Text(session.projectName)
+                    Text(AgentSession.summaryLine(session, settings: settings))
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.white)
+                        .lineLimit(1)
                     Spacer()
                     StatusDot(state: session.state)
-                    Text(settings.label(for: session.state))
-                        .font(.system(size: 11))
-                        .foregroundStyle(session.state.dotColor)
                 }
+                // 第二行:模型 / ctx / 费用
                 if let m = session.metrics {
                     HStack(spacing: 8) {
                         if let model = m.model { metric(model) }
                         if let pct = m.contextPct { metric("ctx \(pct)%") }
                         if let cost = m.costUSD { metric(String(format: "$%.2f", cost)) }
                     }
-                }
-                ForEach(displayEvents, id: \.timestamp) { event in
-                    Text("· \(event.name) — \(event.detail ?? "")")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.white.opacity(0.45))
-                        .lineLimit(1)
                 }
             }
             .padding(10)

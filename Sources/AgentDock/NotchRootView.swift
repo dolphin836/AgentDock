@@ -7,10 +7,9 @@ struct NotchRootView: View {
     let store: SessionStore
     let settings: AppSettings
     @State private var hovering = false
-    @State private var alertExpanded = false
-    @State private var lastAlertedIds: Set<String> = []
 
-    private var expanded: Bool { hovering || alertExpanded }
+    /// 有会话等待用户操作时保持展开提示,直到用户处理完
+    private var expanded: Bool { hovering || !waitingIds.isEmpty }
 
     /// 刘海高度:内容必须从刘海下沿开始,否则被遮挡
     private var topInset: CGFloat {
@@ -36,17 +35,6 @@ struct NotchRootView: View {
         }
         .frame(maxWidth: .infinity)
         .animation(.spring(duration: 0.25), value: expanded)
-        .onChange(of: waitingIds) { _, newIds in
-            // 新出现的 waitingApproval 会话 → 自动展开 4 秒
-            let fresh = newIds.subtracting(lastAlertedIds)
-            lastAlertedIds = newIds
-            guard !fresh.isEmpty else { return }
-            alertExpanded = true
-            Task {
-                try? await Task.sleep(for: .seconds(4))
-                alertExpanded = false
-            }
-        }
     }
 
     private var waitingIds: Set<String> {
