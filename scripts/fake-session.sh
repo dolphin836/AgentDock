@@ -5,11 +5,11 @@ SOCK="$HOME/.agentdock/agentdock.sock"
 [ -S "$SOCK" ] || { echo "AgentDock 未运行($SOCK 不存在)"; exit 1; }
 
 emit() {
-  printf '{"source":"claude-code","type":"hook","payload":{"session_id":"fake-1","hook_event_name":"%s","cwd":"/Users/eric/AgentDock","tool_name":"%s"}}\n' "$1" "$2" \
+  printf '{"source":"claude-code","type":"hook","payload":{"session_id":"agentdock-demo","hook_event_name":"%s","cwd":"/tmp/agentdock-demo","tool_name":"%s"}}\n' "$1" "$2" \
     | nc -U -w 1 "$SOCK"
 }
 metrics() {
-  printf '{"source":"claude-code","type":"statusline","payload":{"session_id":"fake-1","model":{"display_name":"Opus"},"cost":{"total_cost_usd":0.42},"context_window":{"used_percentage":37}}}\n' \
+  printf '{"source":"claude-code","type":"statusline","payload":{"session_id":"agentdock-demo","model":{"display_name":"Opus"},"cost":{"total_cost_usd":0.42},"context_window":{"used_percentage":37}}}\n' \
     | nc -U -w 1 "$SOCK"
 }
 
