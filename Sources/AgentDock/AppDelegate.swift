@@ -24,9 +24,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         notchWindow = NotchWindow(store: store, settings: AppSettings.shared)
         notchWindow?.show()
 
+        backfillSessions()
         pruneTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.store.prune() }
+            Task { @MainActor in
+                self?.store.prune()
+                self?.backfillSessions()
+            }
         }
+    }
+
+    /// 扫描磁盘 transcript,补上「启动前就存在、还没发过事件」的会话(CLI/桌面端/插件)
+    private func backfillSessions() {
+        let claudeRoot = Self.home + "/.claude/projects"
+        let codexRoot = Self.home + "/.codex/sessions"
+        let scanned = SessionBackfillScanner.scanClaude(projectsRoot: claudeRoot)
+            + SessionBackfillScanner.scanCodex(root: codexRoot)
+        store.backfill(scanned)
     }
 
     func applicationWillTerminate(_ notification: Notification) {

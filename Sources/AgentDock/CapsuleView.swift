@@ -35,11 +35,11 @@ struct CapsuleView: View {
                 .frame(width: centerWidth + 20, height: barHeight)
                 .contentShape(Rectangle())
         } else {
-            TimelineView(.periodic(from: .now, by: 3)) { context in
+            TimelineView(.periodic(from: .now, by: 1)) { context in
                 let primary = rotatingPrimary(at: context.date)
-                let wing = wingWidth(primary)
+                let wing = wingWidth(primary, now: context.date)
                 HStack(spacing: 0) {
-                    // 左翼:loading 图标 + 任务名
+                    // 左翼:loading 图标 + 任务名,左对齐
                     HStack(spacing: 5) {
                         AgentIcon(kind: primary.kind, spinning: true)
                         Text(primary.projectName)
@@ -48,7 +48,7 @@ struct CapsuleView: View {
                             .lineLimit(1)
                     }
                     .padding(.horizontal, 10)
-                    .frame(width: wing, alignment: .trailing)
+                    .frame(width: wing, alignment: .leading)
                     .frame(maxHeight: .infinity)
                     // 中段:最新动态文本,可被物理刘海遮挡,无所谓
                     Text(primary.latestText ?? "")
@@ -59,8 +59,12 @@ struct CapsuleView: View {
                         .padding(.horizontal, 6)
                         .frame(width: centerWidth)
                         .frame(maxHeight: .infinity)
-                    // 右翼:状态文案 + 状态点
+                    // 右翼:耗时 + 状态文案 + 状态点,右对齐
                     HStack(spacing: 5) {
+                        Text(elapsedText(primary, now: context.date))
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.6))
+                            .monospacedDigit()
                         Text(settings.label(for: primary.state))
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(primary.state.dotColor)
@@ -68,7 +72,7 @@ struct CapsuleView: View {
                         StatusDot(state: primary.state)
                     }
                     .padding(.horizontal, 10)
-                    .frame(width: wing, alignment: .leading)
+                    .frame(width: wing, alignment: .trailing)
                     .frame(maxHeight: .infinity)
                 }
                 .frame(height: barHeight)
@@ -86,10 +90,19 @@ struct CapsuleView: View {
     }
 
     /// 左右翼等宽(取内容较宽者),保证中段精确压在(虚拟)刘海上
-    private func wingWidth(_ primary: AgentSession) -> CGFloat {
+    private func wingWidth(_ primary: AgentSession, now: Date) -> CGFloat {
         let left = 14 + 5 + measure(primary.projectName, size: 11, weight: .semibold)
-        let right = measure(settings.label(for: primary.state), size: 11, weight: .medium) + 5 + 13
-        return min(240, max(50, max(left, right)) + 20)
+        let right = measure(elapsedText(primary, now: now), size: 11, weight: .medium) + 5
+            + measure(settings.label(for: primary.state), size: 11, weight: .medium) + 5 + 13
+        return min(260, max(50, max(left, right)) + 20)
+    }
+
+    /// 本轮耗时:从最近一次 UserPromptSubmit 起算,退化为最后活动时间
+    private func elapsedText(_ session: AgentSession, now: Date) -> String {
+        let start = session.recentEvents.last(where: { $0.name == "UserPromptSubmit" })?.timestamp
+            ?? session.lastActivity
+        let seconds = max(0, Int(now.timeIntervalSince(start)))
+        return seconds < 60 ? "\(seconds)s" : "\(seconds / 60)m \(seconds % 60)s"
     }
 
     private func measure(_ text: String, size: CGFloat, weight: NSFont.Weight) -> CGFloat {

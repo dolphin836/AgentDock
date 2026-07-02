@@ -58,13 +58,12 @@ struct SessionCardView: View {
                             .frame(width: 16, height: 16)
                     }
                 }
-                // 第二行:模型 / ctx% / 费用
-                if let m = session.metrics {
-                    HStack(spacing: 8) {
-                        if let model = m.model { metric(model) }
-                        if let pct = m.contextPct { metric("ctx \(pct)%") }
-                        if let cost = m.costUSD { metric(String(format: "$%.2f", cost)) }
-                    }
+                // 第二行:模型 / ctx / token 消耗 / 时间(缺失的字段用 -- 占位)
+                HStack(spacing: 8) {
+                    metric(session.metrics?.model ?? "--")
+                    metric("ctx \(session.metrics?.contextPct.map { "\($0)%" } ?? "--")")
+                    metric(tokensText)
+                    metric(relativeTime)
                 }
             }
             .padding(10)
@@ -91,6 +90,22 @@ struct SessionCardView: View {
 
     private var borderColor: Color {
         session.state == .waitingApproval ? .yellow.opacity(0.6) : .clear
+    }
+
+    private var tokensText: String {
+        guard let tokens = session.metrics?.totalTokens else { return "-- tokens" }
+        return tokens >= 1000 ? String(format: "%.1fk tokens", Double(tokens) / 1000)
+                              : "\(tokens) tokens"
+    }
+
+    /// 最后活动的相对时间:刚刚 / 5m / 1h 12m
+    private var relativeTime: String {
+        let seconds = max(0, Int(Date().timeIntervalSince(session.lastActivity)))
+        switch seconds {
+        case ..<60: return settings.t("now", "刚刚")
+        case ..<3600: return "\(seconds / 60)m"
+        default: return "\(seconds / 3600)h \(seconds % 3600 / 60)m"
+        }
     }
 
     private func metric(_ text: String) -> some View {

@@ -44,6 +44,23 @@ public final class SessionStore {
         }
     }
 
+    /// 回填磁盘扫描到的会话:不存在则插入;已存在但磁盘更新(transcript 有新写入)
+    /// 且当前没有更新的实时事件时,刷新活跃时间并把 disconnected 拉回 waitingInput。
+    public func backfill(_ scanned: [AgentSession]) {
+        for candidate in scanned {
+            if let i = sessions.firstIndex(where: { $0.id == candidate.id }) {
+                guard candidate.lastActivity > sessions[i].lastActivity else { continue }
+                sessions[i].lastActivity = candidate.lastActivity
+                if sessions[i].state == .disconnected {
+                    sessions[i].state = .waitingInput
+                }
+            } else {
+                sessions.append(candidate)
+            }
+        }
+        sessions.sort { $0.lastActivity > $1.lastActivity }
+    }
+
     public func prune(now: Date = Date()) {
         sessions.removeAll { now.timeIntervalSince($0.lastActivity) > removeAfter }
         for i in sessions.indices
