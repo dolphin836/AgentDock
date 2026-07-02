@@ -11,6 +11,7 @@ PAYLOAD=$(cat 2>/dev/null) || exit 0
 
 # statusline 模式:若备份了用户原 statusline 命令,先透传其输出
 if [ "$TYPE" = "statusline" ]; then
+  printf '%s' "$PAYLOAD" > "$HOME/.agentdock/last-statusline.json" 2>/dev/null || true
   ORIG="$HOME/.agentdock/original-statusline-command"
   if [ -s "$ORIG" ]; then
     printf '%s' "$PAYLOAD" | bash "$ORIG" 2>/dev/null || true

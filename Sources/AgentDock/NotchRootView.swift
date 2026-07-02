@@ -20,19 +20,16 @@ struct NotchRootView: View {
     }
 
     var body: some View {
-        // 翼宽按内容动态测量,收起/展开共用同一总宽度
-        let wing = NotchLayout.wingWidth(sessions: store.sessions, settings: settings)
         VStack(spacing: 0) {
             Group {
                 if expanded {
                     // 面板内容从顶栏下沿开始,避免被刘海/菜单栏遮挡
-                    PanelView(store: store, settings: settings,
-                              width: NotchLayout.totalWidth(wing: wing))
+                    PanelView(store: store, settings: settings, width: NotchLayout.totalWidth)
                         .padding(.top, topInset)
                         .background(NotchShape(topRadius: 8, bottomRadius: 18).fill(.black))
                 } else {
                     // 收起态贴着屏幕顶端,中段与(虚拟)刘海对齐
-                    CapsuleView(sessions: store.sessions, settings: settings, wing: wing)
+                    CapsuleView(sessions: store.sessions, settings: settings)
                 }
             }
             .onGeometryChange(for: CGSize.self, of: { $0.size }, action: { size in

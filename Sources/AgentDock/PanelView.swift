@@ -60,11 +60,15 @@ struct PanelView: View {
                 .tracking(0.5)
                 .foregroundStyle(.white.opacity(0.85))
             Spacer(minLength: 8)
-            if let limits = limitsText {
-                Text(limits)
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.6))
-                    .lineLimit(1)
+            if !limitsTexts.isEmpty {
+                // 一次只显示一个 agent 的限额,多个时每 3 秒轮播
+                TimelineView(.periodic(from: .now, by: 3)) { context in
+                    let index = Int(context.date.timeIntervalSinceReferenceDate / 3) % limitsTexts.count
+                    Text(limitsTexts[index])
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .lineLimit(1)
+                }
                 Spacer(minLength: 8)
             }
             Text(SessionStats(sessions: store.sessions, settings: settings).headerText)
@@ -92,19 +96,21 @@ struct PanelView: View {
         }
     }
 
-    /// 顶部中间的限额,全称不缩写:✳ 5-hour/7-day · ◆ 5-hour/weekly
-    private var limitsText: String? {
-        var parts: [String] = []
+    /// 限额文案,全称不用图标,每个 agent 一条(多条时轮播)
+    private var limitsTexts: [String] {
+        var texts: [String] = []
         if let l = store.claudeRateLimits {
             let fh = l.fiveHourPct.map { "\($0)%" } ?? "--"
             let sd = l.sevenDayPct.map { "\($0)%" } ?? "--"
-            parts.append("✳ " + settings.t("5-hour \(fh) · 7-day \(sd)", "5小时 \(fh) · 7天 \(sd)"))
+            texts.append(settings.t("Claude Code 5-hour \(fh) · 7-day \(sd)",
+                                    "Claude Code 5小时 \(fh) · 7天 \(sd)"))
         }
         if let l = store.codexRateLimits {
             let fh = l.fiveHourPct.map { "\($0)%" } ?? "--"
             let wk = l.sevenDayPct.map { "\($0)%" } ?? "--"
-            parts.append("◆ " + settings.t("5-hour \(fh) · weekly \(wk)", "5小时 \(fh) · 每周 \(wk)"))
+            texts.append(settings.t("Codex 5-hour \(fh) · weekly \(wk)",
+                                    "Codex 5小时 \(fh) · 每周 \(wk)"))
         }
-        return parts.isEmpty ? nil : parts.joined(separator: "   ")
+        return texts
     }
 }
