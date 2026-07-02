@@ -18,19 +18,20 @@ public enum EventIngestor {
               let payload = obj["payload"] as? [String: Any]
         else { return .ignored }
 
+        let appPath = (obj["app"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         switch (source, type) {
         case ("claude-code", "hook"):
-            return parseClaudeHook(payload)
+            return parseClaudeHook(payload, appPath: appPath)
         case ("claude-code", "statusline"):
             return parseClaudeStatusline(payload)
         case ("codex", "notify"):
-            return parseCodexNotify(payload)
+            return parseCodexNotify(payload, appPath: appPath)
         default:
             return .ignored
         }
     }
 
-    private static func parseClaudeHook(_ p: [String: Any]) -> IngestResult {
+    private static func parseClaudeHook(_ p: [String: Any], appPath: String?) -> IngestResult {
         guard let sessionId = p["session_id"] as? String,
               let name = p["hook_event_name"] as? String
         else { return .ignored }
@@ -42,7 +43,7 @@ public enum EventIngestor {
         }
         return .event(AgentEvent(
             sessionId: sessionId, kind: .claudeCode,
-            cwd: p["cwd"] as? String, name: name, detail: detail))
+            cwd: p["cwd"] as? String, name: name, detail: detail, appPath: appPath))
     }
 
     private static func parseClaudeStatusline(_ p: [String: Any]) -> IngestResult {
@@ -65,13 +66,13 @@ public enum EventIngestor {
         return .metrics(sessionId: sessionId, m)
     }
 
-    private static func parseCodexNotify(_ p: [String: Any]) -> IngestResult {
+    private static func parseCodexNotify(_ p: [String: Any], appPath: String?) -> IngestResult {
         guard let name = p["type"] as? String else { return .ignored }
         let sessionId = (p["thread-id"] as? String) ?? (p["turn-id"] as? String) ?? "codex"
         return .event(AgentEvent(
             sessionId: sessionId, kind: .codex,
             cwd: p["cwd"] as? String, name: name,
-            detail: p["last-assistant-message"] as? String))
+            detail: p["last-assistant-message"] as? String, appPath: appPath))
     }
 
     /// 解析 Codex rollout JSONL 的一行(由 CodexSessionTailer 提供 sessionId/cwd 上下文)。

@@ -31,6 +31,7 @@ public final class SessionStore {
                 session.cwd = cwd
                 session.projectName = Self.projectName(from: cwd)
             }
+            if let app = event.appPath { session.appPath = app }
             session.state = mapEventToState(event, current: session.state)
             session.recentEvents.append(event)
             if session.recentEvents.count > Self.maxRecentEvents {

@@ -2,24 +2,18 @@ import SwiftUI
 import AppKit
 import AgentDockCore
 
-/// 会话所属终端 App 的图标(尽力猜测:取正在运行的常见终端/编辑器)
+/// 会话宿主 App 图标:用发射脚本沿父进程链探测到的 .app 路径精确取图标,带缓存
 @MainActor
-enum TerminalAppIcon {
-    private static var cached: NSImage?
-    private static let bundleIds = [
-        "com.mitchellh.ghostty", "com.googlecode.iterm2",
-        "com.apple.Terminal", "com.microsoft.VSCode",
-    ]
+enum HostAppIcon {
+    private static var cache: [String: NSImage] = [:]
 
-    static var icon: NSImage? {
-        if let cached { return cached }
-        for id in bundleIds {
-            if let app = NSRunningApplication.runningApplications(withBundleIdentifier: id).first {
-                cached = app.icon
-                return cached
-            }
-        }
-        return nil
+    static func icon(forAppPath path: String?) -> NSImage? {
+        guard let path, !path.isEmpty else { return nil }
+        if let hit = cache[path] { return hit }
+        guard FileManager.default.fileExists(atPath: path) else { return nil }
+        let image = NSWorkspace.shared.icon(forFile: path)
+        cache[path] = image
+        return image
     }
 }
 
@@ -52,7 +46,7 @@ struct SessionCardView: View {
                         .font(.system(size: 11))
                         .foregroundStyle(session.state.dotColor)
                     StatusDot(state: session.state)
-                    if let appIcon = TerminalAppIcon.icon {
+                    if let appIcon = HostAppIcon.icon(forAppPath: session.appPath) {
                         Image(nsImage: appIcon)
                             .resizable()
                             .frame(width: 16, height: 16)

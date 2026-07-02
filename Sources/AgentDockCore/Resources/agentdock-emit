@@ -21,6 +21,20 @@ if [ "$TYPE" = "statusline" ]; then
 fi
 
 [ -S "$SOCK" ] || exit 0
-printf '{"source":"%s","type":"%s","payload":%s}\n' "$SOURCE" "$TYPE" "$PAYLOAD" \
+
+# 沿父进程链向上找宿主 App(PhpStorm/Ghostty/VS Code/Terminal...)
+APP=""
+pid=$PPID
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  [ -z "$pid" ] && break
+  [ "$pid" -le 1 ] && break
+  comm=$(ps -o comm= -p "$pid" 2>/dev/null)
+  case "$comm" in
+    *.app/*) APP="${comm%%.app/*}.app"; break ;;
+  esac
+  pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+done
+
+printf '{"source":"%s","type":"%s","app":"%s","payload":%s}\n' "$SOURCE" "$TYPE" "$APP" "$PAYLOAD" \
   | /usr/bin/nc -U -w 1 "$SOCK" >/dev/null 2>&1 || true
 exit 0

@@ -15,15 +15,19 @@ public struct AgentEvent: Sendable, Equatable {
     public let cwd: String?
     public let name: String
     public let detail: String?
+    /// 宿主 App 的 .app 路径(由发射脚本沿父进程链探测)
+    public let appPath: String?
     public let timestamp: Date
 
     public init(sessionId: String, kind: AgentKind, cwd: String? = nil,
-                name: String, detail: String? = nil, timestamp: Date = Date()) {
+                name: String, detail: String? = nil, appPath: String? = nil,
+                timestamp: Date = Date()) {
         self.sessionId = sessionId
         self.kind = kind
         self.cwd = cwd
         self.name = name
         self.detail = detail
+        self.appPath = appPath
         self.timestamp = timestamp
     }
 }
@@ -50,11 +54,13 @@ public struct AgentSession: Identifiable, Sendable {
     public var cwd: String
     public var state: SessionState
     public var metrics: Metrics?
+    /// 会话宿主 App 的 .app 路径
+    public var appPath: String?
     public var recentEvents: [AgentEvent]
     public var lastActivity: Date
 
     public init(id: String, kind: AgentKind, projectName: String, cwd: String,
-                state: SessionState, metrics: Metrics? = nil,
+                state: SessionState, metrics: Metrics? = nil, appPath: String? = nil,
                 recentEvents: [AgentEvent] = [], lastActivity: Date = Date()) {
         self.id = id
         self.kind = kind
@@ -62,6 +68,7 @@ public struct AgentSession: Identifiable, Sendable {
         self.cwd = cwd
         self.state = state
         self.metrics = metrics
+        self.appPath = appPath
         self.recentEvents = recentEvents
         self.lastActivity = lastActivity
     }
