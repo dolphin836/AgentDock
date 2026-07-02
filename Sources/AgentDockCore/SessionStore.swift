@@ -7,7 +7,7 @@ public final class SessionStore {
     public private(set) var sessions: [AgentSession] = []
 
     /// 无活动超过该时长 → disconnected
-    public var disconnectAfter: TimeInterval = 30 * 60
+    public var disconnectAfter: TimeInterval = 10 * 60
     /// 无活动超过该时长 → 从列表移除
     public var removeAfter: TimeInterval = 2 * 60 * 60
     /// 事件环形缓冲上限

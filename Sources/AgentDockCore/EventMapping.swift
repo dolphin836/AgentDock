@@ -9,7 +9,12 @@ public func mapEventToState(_ event: AgentEvent, current: SessionState) -> Sessi
         case "UserPromptSubmit": return .thinking
         case "PreToolUse": return .runningTool
         case "PostToolUse": return .thinking
-        case "Notification": return .waitingApproval
+        case "Notification":
+            // Claude Code 的 Notification 既用于权限审批,也用于「空闲 60s 等你输入」提示,后者不是审批
+            if let detail = event.detail?.lowercased(), detail.contains("waiting for your input") {
+                return .idle
+            }
+            return .waitingApproval
         case "Stop", "SessionEnd": return .done
         default: return current
         }

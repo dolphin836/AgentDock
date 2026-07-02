@@ -25,6 +25,15 @@ private func ev(_ name: String, _ kind: AgentKind = .claudeCode) -> AgentEvent {
         #expect(mapEventToState(ev("exec_approval_request", .codex), current: .runningTool) == .waitingApproval)
     }
 
+    @Test func idleNotificationIsNotApproval() {
+        let idle = AgentEvent(sessionId: "s1", kind: .claudeCode,
+                              name: "Notification", detail: "Claude is waiting for your input")
+        #expect(mapEventToState(idle, current: .thinking) == .idle)
+        let perm = AgentEvent(sessionId: "s1", kind: .claudeCode,
+                              name: "Notification", detail: "Claude needs your permission to use Bash")
+        #expect(mapEventToState(perm, current: .thinking) == .waitingApproval)
+    }
+
     @Test func unknownEventKeepsCurrent() {
         #expect(mapEventToState(ev("SomethingNew"), current: .runningTool) == .runningTool)
         #expect(mapEventToState(ev("mystery", .codex), current: .thinking) == .thinking)

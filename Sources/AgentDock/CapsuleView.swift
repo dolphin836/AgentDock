@@ -1,8 +1,11 @@
 import SwiftUI
+import AppKit
 import AgentDockCore
 
-/// 收起态:刘海下沿的活动摘要条。
-/// 有活跃会话时显示「文件/项目 · 状态 · 耗时」,其余会话折叠为状态点;无会话时完全隐形。
+/// 收起态:与系统刘海融为一体的"延伸翼"。
+/// 黑色区域 = 左翼 + 物理刘海 + 右翼,高度与刘海一致;
+/// 左翼显示活动摘要(最多两行),右翼显示耗时 + 各会话状态点。
+/// 多个活跃会话时每 3 秒轮播一个。无活跃会话时只剩状态点;完全无会话时隐形。
 struct CapsuleView: View {
     let sessions: [AgentSession]
     let settings: AppSettings
@@ -10,44 +13,83 @@ struct CapsuleView: View {
     private var visible: [AgentSession] {
         sessions.filter { $0.state != .disconnected }
     }
-    /// 最近有动静的活跃会话,作为摘要主体
-    private var primary: AgentSession? {
-        visible.first { $0.state.isActive } ?? visible.first
+    private var active: [AgentSession] {
+        visible.filter { $0.state.isActive }
+    }
+
+    private var notchScreen: NSScreen? {
+        NSScreen.screens.first { $0.safeAreaInsets.top > 0 }
+    }
+    private var notchHeight: CGFloat { notchScreen?.safeAreaInsets.top ?? 32 }
+    private var notchWidth: CGFloat {
+        guard let s = notchScreen,
+              let left = s.auxiliaryTopLeftArea, let right = s.auxiliaryTopRightArea
+        else { return 200 }
+        return s.frame.width - left.width - right.width
     }
 
     var body: some View {
-        if let primary {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                HStack(spacing: 6) {
-                    Image(systemName: primary.kind.symbolName)
-                        .font(.system(size: 9))
-                        .foregroundStyle(.white.opacity(0.8))
-                    Text(summaryText(primary, now: context.date))
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.9))
-                        .lineLimit(1)
-                    ForEach(visible.filter { $0.id != primary.id }) { session in
-                        StatusDot(state: session.state)
-                    }
-                    StatusDot(state: primary.state)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 5)
-                .background(Color.black, in: Capsule())
-            }
-        } else {
+        if visible.isEmpty {
             Color.clear.frame(width: 1, height: 1)
+        } else {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                let primary = rotatingPrimary(at: context.date)
+                HStack(spacing: 0) {
+                    // 左翼:摘要文字
+                    Group {
+                        if let primary {
+                            HStack(spacing: 5) {
+                                Image(systemName: primary.kind.symbolName)
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(.white.opacity(0.8))
+                                Text(summaryText(primary))
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(.white.opacity(0.9))
+                                    .lineLimit(2)
+                                    .multilineTextAlignment(.trailing)
+                                    .minimumScaleFactor(0.8)
+                            }
+                            .padding(.horizontal, 10)
+                        }
+                    }
+                    .frame(maxHeight: .infinity)
+                    // 物理刘海占位:什么都不画,反正被摄像头区域盖住
+                    Color.clear.frame(width: notchWidth)
+                    // 右翼:耗时 + 状态点
+                    HStack(spacing: 5) {
+                        if let primary, primary.state.isActive {
+                            Text(elapsedText(primary, now: context.date))
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.7))
+                                .monospacedDigit()
+                        }
+                        ForEach(visible) { session in
+                            StatusDot(state: session.state)
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(maxHeight: .infinity)
+                }
+                .frame(height: notchHeight)
+                .fixedSize(horizontal: true, vertical: false)
+                .background(
+                    UnevenRoundedRectangle(bottomLeadingRadius: 10, bottomTrailingRadius: 10)
+                        .fill(.black)
+                )
+            }
         }
     }
 
-    private func summaryText(_ session: AgentSession, now: Date) -> String {
-        // 最近一条带 detail 的事件(通常是正在操作的文件/工具)
+    /// 多个活跃会话每 3 秒轮播;没有活跃会话则不显示文字
+    private func rotatingPrimary(at date: Date) -> AgentSession? {
+        guard !active.isEmpty else { return nil }
+        let index = Int(date.timeIntervalSinceReferenceDate / 3) % active.count
+        return active[index]
+    }
+
+    private func summaryText(_ session: AgentSession) -> String {
         let detail = session.recentEvents.last(where: { $0.detail?.isEmpty == false })?.detail
-        var parts = [detail ?? session.projectName, settings.label(for: session.state)]
-        if session.state.isActive {
-            parts.append(elapsedText(session, now: now))
-        }
-        return parts.joined(separator: " · ")
+        return "\(detail ?? session.projectName) · \(settings.label(for: session.state))"
     }
 
     /// 本轮耗时:从最近一次 UserPromptSubmit 起算,退化为最后活动时间

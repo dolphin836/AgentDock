@@ -21,9 +21,5 @@ struct PanelView: View {
         }
         .padding(12)
         .frame(width: 380)
-        .background(
-            UnevenRoundedRectangle(bottomLeadingRadius: 18, bottomTrailingRadius: 18)
-                .fill(.black)
-        )
     }
 }
