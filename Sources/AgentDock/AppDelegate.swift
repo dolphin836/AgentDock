@@ -37,8 +37,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func backfillSessions() {
         let claudeRoot = Self.home + "/.claude/projects"
         let codexRoot = Self.home + "/.codex/sessions"
-        let scanned = SessionBackfillScanner.scanClaude(projectsRoot: claudeRoot)
+        var scanned = SessionBackfillScanner.scanClaude(projectsRoot: claudeRoot)
             + SessionBackfillScanner.scanCodex(root: codexRoot)
+        // 新版 Codex 的会话状态在 SQLite 里,JSONL 只是旧版遗留
+        if let db = CodexStateReader.findDatabase(codexRoot: Self.home + "/.codex") {
+            scanned += CodexStateReader.recentThreads(dbPath: db)
+                .filter { !SessionBackfillScanner.isHiddenPath($0.cwd) }
+        }
         store.backfill(scanned)
     }
 

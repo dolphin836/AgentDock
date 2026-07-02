@@ -45,7 +45,7 @@ public enum SessionBackfillScanner {
     }
 
     /// cwd 中任一路径组件以 "." 开头即视为隐藏目录(如 ~/.claude-mem/observer-sessions)
-    static func isHiddenPath(_ path: String) -> Bool {
+    public static func isHiddenPath(_ path: String) -> Bool {
         path.split(separator: "/").contains { $0.hasPrefix(".") }
     }
 
