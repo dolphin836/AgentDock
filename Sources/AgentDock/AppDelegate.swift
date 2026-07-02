@@ -15,7 +15,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static let socketPath = home + "/.agentdock/agentdock.sock"
     static let emitInstallPath = home + "/.agentdock/agentdock-emit"
 
+    private let claudeRegistry = ClaudeSessionRegistry(dir: home + "/.claude/sessions")
+    private var allowedClaudeIds: Set<String> = []
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        allowedClaudeIds = claudeRegistry.allowedSessionIds()
+        store.claudeSessionValidator = { [weak self] id in
+            guard let self else { return true }
+            if self.allowedClaudeIds.contains(id) { return true }
+            // 未知 id 可能是刚开的新会话:立刻重扫一次注册表再判
+            self.allowedClaudeIds = self.claudeRegistry.allowedSessionIds()
+            return self.allowedClaudeIds.contains(id)
+        }
         installEmitScript()
         startServer()
         startCodexTailer()
@@ -35,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// 扫描磁盘 transcript,补上「启动前就存在、还没发过事件」的会话(CLI/桌面端/插件)
     private func backfillSessions() {
+        allowedClaudeIds = claudeRegistry.allowedSessionIds()
         let claudeRoot = Self.home + "/.claude/projects"
         let codexRoot = Self.home + "/.codex/sessions"
         var scanned = SessionBackfillScanner.scanClaude(projectsRoot: claudeRoot)

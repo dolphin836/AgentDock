@@ -13,6 +13,9 @@ public final class SessionStore {
     /// 事件环形缓冲上限
     public static let maxRecentEvents = 20
 
+    /// Claude 会话准入校验(注册表过滤子 agent / 工具会话);nil = 不过滤
+    public var claudeSessionValidator: ((String) -> Bool)?
+
     public init() {}
 
     public func apply(_ result: IngestResult) {
@@ -22,6 +25,9 @@ public final class SessionStore {
         case .event(let event):
             // 隐藏目录下的后台工具会话(如 claude-mem observer)不展示
             if let cwd = event.cwd, SessionBackfillScanner.isHiddenPath(cwd) { return }
+            // 未注册的 claude 会话(后台子 agent)不展示
+            if event.kind == .claudeCode,
+               let validator = claudeSessionValidator, !validator(event.sessionId) { return }
             var session = sessions.first(where: { $0.id == event.sessionId })
                 ?? AgentSession(
                     id: event.sessionId, kind: event.kind,
@@ -50,7 +56,13 @@ public final class SessionStore {
     /// 回填磁盘扫描到的会话:不存在则插入;已存在但磁盘更新(transcript 有新写入)
     /// 且当前没有更新的实时事件时,刷新活跃时间并把 disconnected 拉回 waitingInput。
     public func backfill(_ scanned: [AgentSession]) {
+        // 注册表变化时(子 agent 结束、会话退出),清掉已不合法的 claude 会话
+        if let validator = claudeSessionValidator {
+            sessions.removeAll { $0.kind == .claudeCode && !validator($0.id) }
+        }
         for candidate in scanned {
+            if candidate.kind == .claudeCode,
+               let validator = claudeSessionValidator, !validator(candidate.id) { continue }
             if let i = sessions.firstIndex(where: { $0.id == candidate.id }) {
                 if candidate.lastActivity > sessions[i].lastActivity {
                     // 磁盘比内存新:会话在别处有了新动静,刷新活跃时间和指标
