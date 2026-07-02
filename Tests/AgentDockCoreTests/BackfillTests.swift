@@ -19,6 +19,11 @@ import Foundation
         let h = FileHandle(forWritingAtPath: root + "/proj-a/s-recent.jsonl")!
         try h.seekToEnd(); try h.write(contentsOf: Data(("\n" + usageLine + "\n").utf8)); try h.close()
 
+        // 隐藏目录(工具后台会话)应被过滤
+        try FileManager.default.createDirectory(atPath: root + "/mem", withIntermediateDirectories: true)
+        try #"{"cwd":"/Users/eric/.claude-mem/observer-sessions"}"#
+            .write(toFile: root + "/mem/s-observer.jsonl", atomically: true, encoding: .utf8)
+
         let sessions = SessionBackfillScanner.scanClaude(projectsRoot: root)
         #expect(sessions.count == 1)
         #expect(sessions[0].metrics?.model == "claude-opus-4-8")

@@ -20,6 +20,8 @@ public final class SessionStore {
         case .ignored:
             return
         case .event(let event):
+            // 隐藏目录下的后台工具会话(如 claude-mem observer)不展示
+            if let cwd = event.cwd, SessionBackfillScanner.isHiddenPath(cwd) { return }
             var session = sessions.first(where: { $0.id == event.sessionId })
                 ?? AgentSession(
                     id: event.sessionId, kind: event.kind,

@@ -31,6 +31,8 @@ public enum SessionBackfillScanner {
             else { continue }
             let id = ((rel as NSString).lastPathComponent as NSString).deletingPathExtension
             let cwd = extractCwd(path: path)
+            // 隐藏目录下的会话是工具自动起的后台进程(如 claude-mem 的 observer),不是用户会话
+            if let cwd, isHiddenPath(cwd) { continue }
             sessions.append(AgentSession(
                 id: id, kind: kind,
                 projectName: cwd.map { ($0 as NSString).lastPathComponent } ?? kind.rawValue,
@@ -40,6 +42,11 @@ public enum SessionBackfillScanner {
                 lastActivity: mtime))
         }
         return sessions
+    }
+
+    /// cwd 中任一路径组件以 "." 开头即视为隐藏目录(如 ~/.claude-mem/observer-sessions)
+    static func isHiddenPath(_ path: String) -> Bool {
+        path.split(separator: "/").contains { $0.hasPrefix(".") }
     }
 
     /// 从 transcript 尾部提取最近一条 assistant 消息的 usage/model,补齐离线会话的指标。
