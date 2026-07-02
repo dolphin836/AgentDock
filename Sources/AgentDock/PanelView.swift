@@ -30,7 +30,8 @@ struct PanelView: View {
                 }
             }
         }
-        .padding(12)
-        .frame(width: 380)
+        .padding(.horizontal, NotchLayout.edgePadding)
+        .padding(.vertical, 12)
+        .frame(width: NotchLayout.totalWidth)
     }
 }
