@@ -5,6 +5,7 @@ import AgentDockCore
 struct PanelView: View {
     let store: SessionStore
     let settings: AppSettings
+    let width: CGFloat
 
     var body: some View {
         VStack(spacing: 8) {
@@ -32,6 +33,6 @@ struct PanelView: View {
         }
         .padding(.horizontal, NotchLayout.edgePadding)
         .padding(.vertical, 12)
-        .frame(width: NotchLayout.totalWidth)
+        .frame(width: width)
     }
 }

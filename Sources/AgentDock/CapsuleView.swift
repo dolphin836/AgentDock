@@ -9,6 +9,7 @@ import AgentDockCore
 struct CapsuleView: View {
     let sessions: [AgentSession]
     let settings: AppSettings
+    let wing: CGFloat
 
     private var active: [AgentSession] {
         sessions.filter { $0.state.isActive }
@@ -69,7 +70,7 @@ struct CapsuleView: View {
         HStack(spacing: 0) {
             left
                 .padding(.leading, NotchLayout.edgePadding)
-                .frame(width: NotchLayout.wingWidth, alignment: .leading)
+                .frame(width: wing, alignment: .leading)
                 .frame(maxHeight: .infinity)
             Text(center)
                 .font(.system(size: 10))
@@ -81,10 +82,10 @@ struct CapsuleView: View {
                 .frame(maxHeight: .infinity)
             right
                 .padding(.trailing, NotchLayout.edgePadding)
-                .frame(width: NotchLayout.wingWidth, alignment: .trailing)
+                .frame(width: wing, alignment: .trailing)
                 .frame(maxHeight: .infinity)
         }
-        .frame(width: NotchLayout.totalWidth, height: NotchLayout.barHeight)
+        .frame(width: NotchLayout.totalWidth(wing: wing), height: NotchLayout.barHeight)
         .background(NotchShape().fill(.black))
     }
 
