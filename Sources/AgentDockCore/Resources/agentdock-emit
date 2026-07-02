@@ -1,0 +1,26 @@
+#!/bin/bash
+# agentdock-emit <source> <type>
+# 从 stdin 读取一个 JSON 对象,包上 source/type 后发到 AgentDock 的 Unix socket。
+# 硬约束:任何失败都必须 exit 0,绝不阻塞 Agent 本身。
+SOCK="$HOME/.agentdock/agentdock.sock"
+SOURCE="${1:-unknown}"
+TYPE="${2:-hook}"
+
+PAYLOAD=$(cat 2>/dev/null) || exit 0
+[ -z "$PAYLOAD" ] && PAYLOAD='{}'
+
+# statusline 模式:若备份了用户原 statusline 命令,先透传其输出
+if [ "$TYPE" = "statusline" ]; then
+  ORIG="$HOME/.agentdock/original-statusline-command"
+  if [ -s "$ORIG" ]; then
+    printf '%s' "$PAYLOAD" | bash "$ORIG" 2>/dev/null || true
+  else
+    MODEL=$(printf '%s' "$PAYLOAD" | /usr/bin/python3 -c 'import sys,json;print(json.load(sys.stdin).get("model",{}).get("display_name",""))' 2>/dev/null)
+    printf '[AgentDock] %s' "$MODEL"
+  fi
+fi
+
+[ -S "$SOCK" ] || exit 0
+printf '{"source":"%s","type":"%s","payload":%s}\n' "$SOURCE" "$TYPE" "$PAYLOAD" \
+  | /usr/bin/nc -U -w 1 "$SOCK" >/dev/null 2>&1 || true
+exit 0
