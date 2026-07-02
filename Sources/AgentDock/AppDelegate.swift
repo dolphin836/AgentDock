@@ -81,7 +81,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - 采集
 
     private func startServer() {
-        let server = SocketServer(path: Self.socketPath) { line in
+        let server = SocketServer(path: Self.socketPath) { line, respond in
+            // 权限审批请求需要应答;其余为单向事件流
+            if let approval = Self.parseApprovalRequest(line, respond: respond) {
+                Task { @MainActor [weak self] in self?.store.addApproval(approval) }
+                return
+            }
             let result = EventIngestor.parseLine(line)
             Task { @MainActor [weak self] in self?.store.apply(result) }
         }
@@ -102,6 +107,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         tailer.start()
         codexTailer = tailer
+    }
+
+    /// 解析权限审批请求行:{"source":"claude-code","type":"permission","payload":{...}}
+    nonisolated private static func parseApprovalRequest(
+        _ line: Data, respond: @escaping @Sendable (String) -> Void
+    ) -> SessionStore.PendingApproval? {
+        guard let obj = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any],
+              obj["type"] as? String == "permission",
+              let payload = obj["payload"] as? [String: Any],
+              let sessionId = payload["session_id"] as? String
+        else { return nil }
+        let toolName = payload["tool_name"] as? String
+        var detail: String?
+        if let input = payload["tool_input"] as? [String: Any] {
+            detail = (input["command"] as? String)
+                ?? (input["file_path"] as? String).map { ($0 as NSString).lastPathComponent }
+                ?? (input["url"] as? String)
+        }
+        return SessionStore.PendingApproval(sessionId: sessionId, toolName: toolName, detail: detail) { allow in
+            respond(allow ? "allow" : "deny")
+        }
     }
 
     /// 把 bundle 里的 agentdock-emit 复制到固定路径(hooks 配置引用它)

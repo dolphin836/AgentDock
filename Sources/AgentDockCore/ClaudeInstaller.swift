@@ -20,6 +20,7 @@ public struct ClaudeInstaller {
 
     private var hookCommand: String { "\"\(emitPath)\" claude-code hook" }
     private var statuslineCommand: String { "\"\(emitPath)\" claude-code statusline" }
+    private var permissionCommand: String { "\"\(emitPath)\" claude-code permission" }
 
     public var isInstalled: Bool {
         guard let settings = readSettings() else { return false }
@@ -41,6 +42,14 @@ public struct ClaudeInstaller {
             matchers.append(["hooks": [["type": "command", "command": hookCommand]]])
             hooks[event] = matchers
         }
+        // 权限审批:阻塞等待面板决策,55s 超时回落原生对话框
+        if !containsOurHook(hooks["PermissionRequest"]) {
+            var matchers = hooks["PermissionRequest"] as? [[String: Any]] ?? []
+            matchers.append(["hooks": [[
+                "type": "command", "command": permissionCommand, "timeout": 55,
+            ]]])
+            hooks["PermissionRequest"] = matchers
+        }
         settings["hooks"] = hooks
 
         // statusLine:备份用户原命令供 emit 脚本透传,再替换
@@ -59,7 +68,7 @@ public struct ClaudeInstaller {
     public func uninstall() throws {
         guard var settings = readSettings() else { return }
         if var hooks = settings["hooks"] as? [String: Any] {
-            for event in Self.hookEvents {
+            for event in Self.hookEvents + ["PermissionRequest"] {
                 guard var matchers = hooks[event] as? [[String: Any]] else { continue }
                 matchers.removeAll { isOurMatcher($0) }
                 hooks[event] = matchers.isEmpty ? nil : matchers

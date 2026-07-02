@@ -85,7 +85,9 @@ struct PanelView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 3)
             ForEach(sessions) { session in
-                SessionRowView(session: session, settings: settings, compact: compact)
+                SessionRowView(session: session, settings: settings, compact: compact,
+                               approval: store.approval(for: session.id),
+                               onDecision: { id, allow in store.resolveApproval(id: id, allow: allow) })
             }
         }
     }

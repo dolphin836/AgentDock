@@ -20,6 +20,52 @@ public final class SessionStore {
     public private(set) var claudeRateLimits: RateLimits?
     public var codexRateLimits: RateLimits?
 
+    /// 等待用户 Yes/No 的权限审批请求
+    public struct PendingApproval: Identifiable {
+        public let id: UUID
+        public let sessionId: String
+        public let toolName: String?
+        public let detail: String?
+        public let createdAt: Date
+        public let respond: @Sendable (Bool) -> Void
+
+        public init(sessionId: String, toolName: String?, detail: String?,
+                    createdAt: Date = Date(), respond: @escaping @Sendable (Bool) -> Void) {
+            self.id = UUID()
+            self.sessionId = sessionId
+            self.toolName = toolName
+            self.detail = detail
+            self.createdAt = createdAt
+            self.respond = respond
+        }
+    }
+
+    public private(set) var approvals: [PendingApproval] = []
+
+    public func addApproval(_ approval: PendingApproval) {
+        approvals.append(approval)
+        // 会话同步进入等待审批态
+        if let i = sessions.firstIndex(where: { $0.id == approval.sessionId }) {
+            sessions[i].state = .waitingApproval
+            sessions[i].lastActivity = approval.createdAt
+        }
+    }
+
+    public func approval(for sessionId: String) -> PendingApproval? {
+        approvals.first { $0.sessionId == sessionId }
+    }
+
+    public func resolveApproval(id: UUID, allow: Bool) {
+        guard let i = approvals.firstIndex(where: { $0.id == id }) else { return }
+        let approval = approvals.remove(at: i)
+        approval.respond(allow)
+        if let j = sessions.firstIndex(where: { $0.id == approval.sessionId }),
+           approvals.allSatisfy({ $0.sessionId != approval.sessionId }) {
+            sessions[j].state = .thinking
+            sessions[j].lastActivity = Date()
+        }
+    }
+
     public init() {}
 
     public func apply(_ result: IngestResult) {
@@ -88,6 +134,8 @@ public final class SessionStore {
     }
 
     public func prune(now: Date = Date()) {
+        // 客户端 50s 就放弃等待了,过期的审批请求按钮没有意义
+        approvals.removeAll { now.timeIntervalSince($0.createdAt) > 50 }
         sessions.removeAll { now.timeIntervalSince($0.lastActivity) > removeAfter }
         for i in sessions.indices
         where now.timeIntervalSince(sessions[i].lastActivity) > disconnectAfter {

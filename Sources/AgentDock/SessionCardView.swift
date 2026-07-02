@@ -26,6 +26,9 @@ struct SessionRowView: View {
     let session: AgentSession
     let settings: AppSettings
     let compact: Bool
+    /// 待审批请求(有则显示 Yes/No 按钮)及决策回调
+    var approval: SessionStore.PendingApproval?
+    var onDecision: ((UUID, Bool) -> Void)?
     @State private var hovered = false
 
     private var running: Bool {
@@ -74,6 +77,26 @@ struct SessionRowView: View {
                 .foregroundStyle(.white.opacity(0.4))
                 .lineLimit(1)
                 .padding(.leading, 21)  // 与名称对齐
+
+            // 待审批:请求内容 + Yes/No,点了直接回传 hook,无需切到终端
+            if let approval {
+                HStack(spacing: 8) {
+                    Text([approval.toolName, approval.detail].compactMap(\.self).joined(separator: ": "))
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(.yellow.opacity(0.85))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 6)
+                    approvalButton(settings.t("Allow", "允许"), color: .green) {
+                        onDecision?(approval.id, true)
+                    }
+                    approvalButton(settings.t("Deny", "拒绝"), color: .red) {
+                        onDecision?(approval.id, false)
+                    }
+                }
+                .padding(.leading, 21)
+                .padding(.top, 2)
+            }
         }
         .padding(.vertical, 7)
         .padding(.horizontal, 9)
@@ -114,6 +137,19 @@ struct SessionRowView: View {
     }
 
     // MARK: 组件
+
+    private func approvalButton(_ title: String, color: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(color)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 3)
+                .background(color.opacity(0.14), in: Capsule())
+                .overlay(Capsule().stroke(color.opacity(0.4), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
 
     /// 任务名字色:运行中 = 绿,等你 = 状态暖色(黄/橙),其余白
     private var nameColor: Color {

@@ -25,7 +25,10 @@ private func tempDir() -> String {
         let json = try JSONSerialization.jsonObject(
             with: Data(contentsOf: URL(fileURLWithPath: dir + "/settings.json"))) as! [String: Any]
         let hooks = json["hooks"] as! [String: Any]
-        #expect(hooks.count == 7)
+        #expect(hooks.count == 8)  // 7 个事件 hook + PermissionRequest 审批 hook
+        let perm = (hooks["PermissionRequest"] as! [[String: Any]])[0]["hooks"] as! [[String: Any]]
+        #expect((perm[0]["command"] as! String).contains("permission"))
+        #expect(perm[0]["timeout"] as? Int == 55)
         let sl = json["statusLine"] as! [String: Any]
         #expect((sl["command"] as! String).contains("agentdock-emit"))
     }

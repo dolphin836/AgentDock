@@ -37,6 +37,19 @@ for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
   pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
 done
 
+# permission 模式:发出请求后阻塞等待 AgentDock 的决策(用户点 Yes/No),
+# 拿到 allow/deny 就输出 PermissionRequest hook 决策 JSON;
+# 超时/无响应/App 未运行则静默 exit 0,回落到原生权限对话框。
+if [ "$TYPE" = "permission" ]; then
+  RESP=$(printf '{"source":"%s","type":"permission","app":"%s","payload":%s}\n' "$SOURCE" "$APP" "$PAYLOAD" \
+    | /usr/bin/nc -U -w 50 "$SOCK" 2>/dev/null | head -1 | tr -d '[:space:]')
+  case "$RESP" in
+    allow) printf '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}' ;;
+    deny)  printf '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny"}}}' ;;
+  esac
+  exit 0
+fi
+
 printf '{"source":"%s","type":"%s","app":"%s","payload":%s}\n' "$SOURCE" "$TYPE" "$APP" "$PAYLOAD" \
   | /usr/bin/nc -U -w 1 "$SOCK" >/dev/null 2>&1 || true
 exit 0
