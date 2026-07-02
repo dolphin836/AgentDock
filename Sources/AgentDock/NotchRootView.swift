@@ -25,10 +25,7 @@ struct NotchRootView: View {
                     // 面板内容从刘海下沿开始,避免被遮挡
                     PanelView(store: store, settings: settings)
                         .padding(.top, topInset)
-                        .background(
-                            UnevenRoundedRectangle(bottomLeadingRadius: 18, bottomTrailingRadius: 18)
-                                .fill(.black)
-                        )
+                        .background(NotchShape(topRadius: 8, bottomRadius: 18).fill(.black))
                 } else {
                     // 收起态贴着屏幕顶端,与物理刘海融为一体
                     CapsuleView(sessions: store.sessions, settings: settings)

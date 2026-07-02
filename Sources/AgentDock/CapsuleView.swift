@@ -34,8 +34,10 @@ struct CapsuleView: View {
         } else {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 let primary = rotatingPrimary(at: context.date)
+                // 左右翼等宽,保证整体居中后中间空位与物理刘海精确对齐,文字绝不滑入刘海底下
+                let wing: CGFloat = primary != nil ? 250 : 60
                 HStack(spacing: 0) {
-                    // 左翼:摘要文字
+                    // 左翼:摘要文字,靠刘海一侧对齐,超长截断
                     Group {
                         if let primary {
                             HStack(spacing: 5) {
@@ -48,14 +50,16 @@ struct CapsuleView: View {
                                     .lineLimit(2)
                                     .multilineTextAlignment(.trailing)
                                     .minimumScaleFactor(0.8)
+                                    .truncationMode(.middle)
                             }
-                            .padding(.horizontal, 10)
                         }
                     }
+                    .padding(.horizontal, 10)
+                    .frame(width: wing, alignment: .trailing)
                     .frame(maxHeight: .infinity)
                     // 物理刘海占位:什么都不画,反正被摄像头区域盖住
                     Color.clear.frame(width: notchWidth)
-                    // 右翼:耗时 + 状态点
+                    // 右翼:耗时 + 状态点,靠刘海一侧对齐
                     HStack(spacing: 5) {
                         if let primary, primary.state.isActive {
                             Text(elapsedText(primary, now: context.date))
@@ -68,14 +72,11 @@ struct CapsuleView: View {
                         }
                     }
                     .padding(.horizontal, 10)
+                    .frame(width: wing, alignment: .leading)
                     .frame(maxHeight: .infinity)
                 }
                 .frame(height: notchHeight)
-                .fixedSize(horizontal: true, vertical: false)
-                .background(
-                    UnevenRoundedRectangle(bottomLeadingRadius: 10, bottomTrailingRadius: 10)
-                        .fill(.black)
-                )
+                .background(NotchShape().fill(.black))
             }
         }
     }
