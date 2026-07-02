@@ -82,7 +82,7 @@ struct SessionCardView: View {
                         metric(session.metrics?.model ?? "--")
                         metric("ctx \(session.metrics?.contextPct.map { "\($0)%" } ?? "--")")
                         metric(tokensText)
-                        metric(relativeTime)
+                        metric(timeText)
                     }
                     .opacity(running || needsUser ? 1 : 0.55)
                 }
@@ -125,11 +125,12 @@ struct SessionCardView: View {
                               : "\(tokens) tokens"
     }
 
-    /// 最后活动的相对时间:刚刚 / 5m / 1h 12m
-    private var relativeTime: String {
+    /// 时间:运行中显示本轮执行耗时(与收起态一致);非运行显示距最后活动多久
+    private var timeText: String {
+        if session.state.isActive { return session.turnElapsedText() }
         let seconds = max(0, Int(Date().timeIntervalSince(session.lastActivity)))
         switch seconds {
-        case ..<60: return settings.t("now", "刚刚")
+        case ..<60: return settings.t("just now", "刚刚")
         case ..<3600: return "\(seconds / 60)m"
         default: return "\(seconds / 3600)h \(seconds % 3600 / 60)m"
         }

@@ -95,10 +95,16 @@ struct CapsuleView: View {
         return active[index]
     }
 
-    /// 本轮耗时:从最近一次 UserPromptSubmit 起算,退化为最后活动时间
     private func elapsedText(_ session: AgentSession, now: Date) -> String {
-        let start = session.recentEvents.last(where: { $0.name == "UserPromptSubmit" })?.timestamp
-            ?? session.lastActivity
+        session.turnElapsedText(now: now)
+    }
+}
+
+extension AgentSession {
+    /// 本轮耗时:从最近一次 UserPromptSubmit 起算,退化为最后活动时间
+    func turnElapsedText(now: Date = Date()) -> String {
+        let start = recentEvents.last(where: { $0.name == "UserPromptSubmit" })?.timestamp
+            ?? lastActivity
         let seconds = max(0, Int(now.timeIntervalSince(start)))
         return seconds < 60 ? "\(seconds)s" : "\(seconds / 60)m \(seconds % 60)s"
     }

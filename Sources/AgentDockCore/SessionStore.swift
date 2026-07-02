@@ -52,14 +52,16 @@ public final class SessionStore {
     public func backfill(_ scanned: [AgentSession]) {
         for candidate in scanned {
             if let i = sessions.firstIndex(where: { $0.id == candidate.id }) {
-                // 实时通道没给过指标时,用磁盘提取的补上
-                if sessions[i].metrics == nil, let m = candidate.metrics {
+                if candidate.lastActivity > sessions[i].lastActivity {
+                    // 磁盘比内存新:会话在别处有了新动静,刷新活跃时间和指标
+                    sessions[i].lastActivity = candidate.lastActivity
+                    if let m = candidate.metrics { sessions[i].metrics = m }
+                    if sessions[i].state == .disconnected {
+                        sessions[i].state = .waitingInput
+                    }
+                } else if sessions[i].metrics == nil, let m = candidate.metrics {
+                    // 内存较新但从没拿到过指标:用磁盘提取的补上
                     sessions[i].metrics = m
-                }
-                guard candidate.lastActivity > sessions[i].lastActivity else { continue }
-                sessions[i].lastActivity = candidate.lastActivity
-                if sessions[i].state == .disconnected {
-                    sessions[i].state = .waitingInput
                 }
             } else {
                 sessions.append(candidate)
