@@ -6,7 +6,7 @@ public enum AgentKind: String, Codable, Sendable {
 }
 
 public enum SessionState: String, Codable, Sendable {
-    case idle, thinking, runningTool, waitingApproval, done, disconnected
+    case idle, thinking, runningTool, waitingInput, waitingApproval, done, disconnected
 }
 
 public struct AgentEvent: Sendable, Equatable {

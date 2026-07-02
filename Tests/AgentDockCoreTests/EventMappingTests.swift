@@ -28,7 +28,7 @@ private func ev(_ name: String, _ kind: AgentKind = .claudeCode) -> AgentEvent {
     @Test func idleNotificationIsNotApproval() {
         let idle = AgentEvent(sessionId: "s1", kind: .claudeCode,
                               name: "Notification", detail: "Claude is waiting for your input")
-        #expect(mapEventToState(idle, current: .thinking) == .idle)
+        #expect(mapEventToState(idle, current: .thinking) == .waitingInput)
         let perm = AgentEvent(sessionId: "s1", kind: .claudeCode,
                               name: "Notification", detail: "Claude needs your permission to use Bash")
         #expect(mapEventToState(perm, current: .thinking) == .waitingApproval)

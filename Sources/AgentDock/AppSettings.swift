@@ -33,12 +33,14 @@ final class AppSettings {
         language == .english ? en : zh
     }
 
+    /// 与 CLI 用语一致的状态文案
     func label(for state: SessionState) -> String {
         switch state {
         case .idle: t("Idle", "空闲")
-        case .thinking: t("Thinking", "思考中")
-        case .runningTool: t("Running tool", "执行工具")
-        case .waitingApproval: t("Awaiting approval", "等待审批")
+        case .thinking: t("Thinking…", "思考中…")
+        case .runningTool: t("Running…", "执行中…")
+        case .waitingInput: t("Waiting for input", "等待输入")
+        case .waitingApproval: t("Needs approval", "需要审批")
         case .done: t("Done", "已完成")
         case .disconnected: t("Disconnected", "已断开")
         }
