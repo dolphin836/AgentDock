@@ -51,7 +51,7 @@ struct SessionRowView: View {
                     .frame(width: 14)
                 Text(session.projectName)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.95))
+                    .foregroundStyle(nameColor)
                     .lineLimit(1)
                 if let text = session.latestText {
                     Text(text)
@@ -114,6 +114,16 @@ struct SessionRowView: View {
     }
 
     // MARK: 组件
+
+    /// 任务名字色:运行中 = 绿,等你 = 状态暖色(黄/橙),其余白
+    private var nameColor: Color {
+        switch session.state {
+        case .thinking, .runningTool: .green.opacity(0.95)
+        case .waitingApproval: .yellow.opacity(0.95)
+        case .waitingInput: .orange.opacity(0.95)
+        default: .white.opacity(0.95)
+        }
+    }
 
     /// 等你的行有轻微暖色底;进行中靠动效与彩色状态字;hover 提亮
     private var rowBackground: Color {

@@ -35,16 +35,13 @@ struct PanelView: View {
                     .padding(.vertical, 24)
             } else {
                 if !running.isEmpty {
-                    section(settings.t("RUNNING", "进行中"), running, compact: false,
-                            tint: .green.opacity(0.75))
+                    section(settings.t("RUNNING", "进行中"), running, compact: false)
                 }
                 if !needsYou.isEmpty {
-                    section(settings.t("NEEDS YOU", "等你处理"), needsYou, compact: false,
-                            tint: .yellow.opacity(0.7))
+                    section(settings.t("NEEDS YOU", "等你处理"), needsYou, compact: false)
                 }
                 if !recent.isEmpty {
-                    section(settings.t("RECENT", "最近"), recent, compact: true,
-                            tint: .white.opacity(0.3))
+                    section(settings.t("RECENT", "最近"), recent, compact: true)
                 }
             }
         }
@@ -78,13 +75,12 @@ struct PanelView: View {
         .padding(.horizontal, 8)
     }
 
-    private func section(_ title: String, _ sessions: [AgentSession], compact: Bool,
-                         tint: Color) -> some View {
+    private func section(_ title: String, _ sessions: [AgentSession], compact: Bool) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(title)
                 .font(.system(size: 9, weight: .semibold))
                 .tracking(1.4)
-                .foregroundStyle(tint)
+                .foregroundStyle(.white.opacity(0.3))
                 .padding(.horizontal, 9)
                 .padding(.top, 8)
                 .padding(.bottom, 3)
