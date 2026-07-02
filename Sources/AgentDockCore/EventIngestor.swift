@@ -2,7 +2,7 @@ import Foundation
 
 public enum IngestResult: Sendable, Equatable {
     case event(AgentEvent)
-    case metrics(sessionId: String, Metrics)
+    case metrics(sessionId: String, Metrics, RateLimits?)
     case ignored
 }
 
@@ -56,14 +56,27 @@ public enum EventIngestor {
             m.costUSD = cost["total_cost_usd"] as? Double
         }
         if let ctx = p["context_window"] as? [String: Any] {
-            if let pct = ctx["used_percentage"] as? Double { m.contextPct = Int(pct) }
-            else if let pct = ctx["used_percentage"] as? Int { m.contextPct = pct }
+            if let pct = intValue(ctx["used_percentage"]) { m.contextPct = pct }
             // 当前 context 内的 input+output token 数(/compact 后会重置)
             let input = ctx["total_input_tokens"] as? Int ?? 0
             let output = ctx["total_output_tokens"] as? Int ?? 0
             if input + output > 0 { m.totalTokens = input + output }
         }
-        return .metrics(sessionId: sessionId, m)
+        // 账号级限额(Pro/Max 订阅时 statusline 会带)
+        var limits: RateLimits?
+        if let r = p["rate_limits"] as? [String: Any] {
+            var l = RateLimits()
+            if let w = r["five_hour"] as? [String: Any] { l.fiveHourPct = intValue(w["used_percentage"]) }
+            if let w = r["seven_day"] as? [String: Any] { l.sevenDayPct = intValue(w["used_percentage"]) }
+            if l.fiveHourPct != nil || l.sevenDayPct != nil { limits = l }
+        }
+        return .metrics(sessionId: sessionId, m, limits)
+    }
+
+    private static func intValue(_ any: Any?) -> Int? {
+        if let i = any as? Int { return i }
+        if let d = any as? Double { return Int(d) }
+        return nil
     }
 
     private static func parseCodexNotify(_ p: [String: Any], appPath: String?) -> IngestResult {

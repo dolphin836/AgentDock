@@ -24,12 +24,15 @@ import Foundation
 
     @Test func metricsAttachOnlyToExistingSession() {
         let store = SessionStore()
-        store.apply(.metrics(sessionId: "ghost", Metrics(model: "Opus")))
+        store.apply(.metrics(sessionId: "ghost", Metrics(model: "Opus"), nil))
         #expect(store.sessions.isEmpty)
 
         store.apply(hookEvent("SessionStart"))
-        store.apply(.metrics(sessionId: "s1", Metrics(model: "Opus", contextPct: 10)))
+        store.apply(.metrics(sessionId: "s1", Metrics(model: "Opus", contextPct: 10),
+                             RateLimits(fiveHourPct: 12, sevenDayPct: 34)))
         #expect(store.sessions[0].metrics?.model == "Opus")
+        #expect(store.claudeRateLimits?.fiveHourPct == 12)
+        #expect(store.claudeRateLimits?.sevenDayPct == 34)
     }
 
     @Test func recentEventsCappedAt20() {

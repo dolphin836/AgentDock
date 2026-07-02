@@ -16,6 +16,10 @@ public final class SessionStore {
     /// Claude 会话准入校验(注册表过滤子 agent / 工具会话);nil = 不过滤
     public var claudeSessionValidator: ((String) -> Bool)?
 
+    /// 账号级限额(展开面板顶部展示)
+    public private(set) var claudeRateLimits: RateLimits?
+    public var codexRateLimits: RateLimits?
+
     public init() {}
 
     public func apply(_ result: IngestResult) {
@@ -45,7 +49,8 @@ public final class SessionStore {
             }
             session.lastActivity = event.timestamp
             upsert(session)
-        case .metrics(let sessionId, let metrics):
+        case .metrics(let sessionId, let metrics, let limits):
+            if let limits { claudeRateLimits = limits }
             guard var session = sessions.first(where: { $0.id == sessionId }) else { return }
             session.metrics = metrics
             session.lastActivity = Date()

@@ -47,6 +47,19 @@ public struct Metrics: Sendable, Equatable {
     }
 }
 
+/// 账号级限额(5 小时 / 7 天窗口用量百分比)
+public struct RateLimits: Sendable, Equatable {
+    public var fiveHourPct: Int?
+    public var sevenDayPct: Int?
+    public var updatedAt: Date
+
+    public init(fiveHourPct: Int? = nil, sevenDayPct: Int? = nil, updatedAt: Date = Date()) {
+        self.fiveHourPct = fiveHourPct
+        self.sevenDayPct = sevenDayPct
+        self.updatedAt = updatedAt
+    }
+}
+
 public struct AgentSession: Identifiable, Sendable {
     public let id: String
     public let kind: AgentKind

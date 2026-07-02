@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var codexTailer: CodexSessionTailer?
     private var notchWindow: NotchWindow?
     private var pruneTimer: Timer?
+    private var codexLimitsTimer: Timer?
     private var statusItem: NSStatusItem?
 
     static let home = NSHomeDirectory()
@@ -41,6 +42,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.store.prune()
                 self?.backfillSessions()
             }
+        }
+        pollCodexRateLimits()
+        codexLimitsTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.pollCodexRateLimits() }
+        }
+    }
+
+    /// Codex 限额:后台起 app-server 查一次,5 分钟一轮
+    private func pollCodexRateLimits() {
+        Task.detached(priority: .utility) {
+            let limits = CodexRateLimitProber.fetch()
+            guard let limits else { return }
+            await MainActor.run { [weak self] in self?.store.codexRateLimits = limits }
         }
     }
 

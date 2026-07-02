@@ -9,15 +9,23 @@ struct PanelView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            // 顶部汇总
-            HStack {
-                Text("AgentDock")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.9))
-                Spacer()
-                Text(SessionStats(sessions: store.sessions, settings: settings).headerText)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.white.opacity(0.5))
+            // 顶部汇总:左标题 / 中限额 / 右统计
+            ZStack {
+                HStack {
+                    Text("AgentDock")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.9))
+                    Spacer()
+                    Text(SessionStats(sessions: store.sessions, settings: settings).headerText)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+                if let limits = limitsText {
+                    Text(limits)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.65))
+                        .monospacedDigit()
+                }
             }
             .padding(.horizontal, 2)
             if store.sessions.isEmpty {
@@ -34,5 +42,17 @@ struct PanelView: View {
         .padding(.horizontal, NotchLayout.edgePadding)
         .padding(.vertical, 12)
         .frame(width: width)
+    }
+
+    /// 顶部中间的限额文案:✳ Claude 5h/7d · ◆ Codex 5h/wk
+    private var limitsText: String? {
+        var parts: [String] = []
+        if let l = store.claudeRateLimits {
+            parts.append("✳ 5h \(l.fiveHourPct.map { "\($0)%" } ?? "--") · 7d \(l.sevenDayPct.map { "\($0)%" } ?? "--")")
+        }
+        if let l = store.codexRateLimits {
+            parts.append("◆ 5h \(l.fiveHourPct.map { "\($0)%" } ?? "--") · wk \(l.sevenDayPct.map { "\($0)%" } ?? "--")")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: "   ")
     }
 }
