@@ -34,7 +34,7 @@ struct SessionRowView: View {
 
     var body: some View {
         Button {
-            TerminalJumper.jump(toCwd: session.cwd)
+            TerminalJumper.jump(toCwd: session.cwd, appPath: session.appPath)
         } label: {
             if compact { compactRow } else { fullRow }
         }
