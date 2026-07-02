@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 import AgentDockCore
 
 /// 会话宿主 App 图标:用发射脚本沿父进程链探测到的 .app 路径精确取图标,带缓存
@@ -7,10 +8,13 @@ import AgentDockCore
 enum HostAppIcon {
     private static var cache: [String: NSImage] = [:]
 
-    static func icon(forAppPath path: String?) -> NSImage? {
-        guard let path, !path.isEmpty else { return nil }
+    /// 兜底:系统默认的 CLI(unix 可执行文件)图标
+    private static let fallback = NSWorkspace.shared.icon(for: .unixExecutable)
+
+    static func icon(forAppPath path: String?) -> NSImage {
+        guard let path, !path.isEmpty else { return fallback }
         if let hit = cache[path] { return hit }
-        guard FileManager.default.fileExists(atPath: path) else { return nil }
+        guard FileManager.default.fileExists(atPath: path) else { return fallback }
         let image = NSWorkspace.shared.icon(forFile: path)
         cache[path] = image
         return image
@@ -67,13 +71,11 @@ struct SessionCardView: View {
                                 .opacity(running || needsUser ? 1 : 0.6))
                         StatusDot(state: session.state)
                             .opacity(running || needsUser ? 1 : 0.5)
-                        if let appIcon = HostAppIcon.icon(forAppPath: session.appPath) {
-                            Image(nsImage: appIcon)
-                                .resizable()
-                                .frame(width: 16, height: 16)
-                                .opacity(primaryOpacity)
-                                .grayscale(running || needsUser ? 0 : 0.8)
-                        }
+                        Image(nsImage: HostAppIcon.icon(forAppPath: session.appPath))
+                            .resizable()
+                            .frame(width: 16, height: 16)
+                            .opacity(primaryOpacity)
+                            .grayscale(running || needsUser ? 0 : 0.8)
                     }
                     // 第二行:模型 / ctx / token 消耗 / 时间(缺失的字段用 -- 占位)
                     HStack(spacing: 8) {
