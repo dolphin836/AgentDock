@@ -53,22 +53,24 @@ struct PanelView: View {
     // MARK: 顶部:左标题 / 中限额 / 右统计
 
     private var header: some View {
-        ZStack {
-            HStack {
-                Text("AgentDock")
-                    .font(.system(size: 11, weight: .bold))
-                    .tracking(0.5)
-                    .foregroundStyle(.white.opacity(0.85))
-                Spacer()
-                Text(SessionStats(sessions: store.sessions, settings: settings).headerText)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.white.opacity(0.4))
-            }
+        // 单行三段:标题 / 限额 / 统计,用 Spacer 分隔避免重叠
+        HStack(spacing: 12) {
+            Text("AgentDock")
+                .font(.system(size: 11, weight: .bold))
+                .tracking(0.5)
+                .foregroundStyle(.white.opacity(0.85))
+            Spacer(minLength: 8)
             if let limits = limitsText {
                 Text(limits)
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.6))
+                    .lineLimit(1)
+                Spacer(minLength: 8)
             }
+            Text(SessionStats(sessions: store.sessions, settings: settings).headerText)
+                .font(.system(size: 10))
+                .foregroundStyle(.white.opacity(0.4))
+                .lineLimit(1)
         }
         .padding(.horizontal, 8)
     }
@@ -88,15 +90,19 @@ struct PanelView: View {
         }
     }
 
-    /// 顶部中间的限额:✳ Claude 5h/7d · ◆ Codex 5h/wk
+    /// 顶部中间的限额,全称不缩写:✳ 5-hour/7-day · ◆ 5-hour/weekly
     private var limitsText: String? {
         var parts: [String] = []
         if let l = store.claudeRateLimits {
-            parts.append("✳ 5h \(l.fiveHourPct.map { "\($0)%" } ?? "--") 7d \(l.sevenDayPct.map { "\($0)%" } ?? "--")")
+            let fh = l.fiveHourPct.map { "\($0)%" } ?? "--"
+            let sd = l.sevenDayPct.map { "\($0)%" } ?? "--"
+            parts.append("✳ " + settings.t("5-hour \(fh) · 7-day \(sd)", "5小时 \(fh) · 7天 \(sd)"))
         }
         if let l = store.codexRateLimits {
-            parts.append("◆ 5h \(l.fiveHourPct.map { "\($0)%" } ?? "--") wk \(l.sevenDayPct.map { "\($0)%" } ?? "--")")
+            let fh = l.fiveHourPct.map { "\($0)%" } ?? "--"
+            let wk = l.sevenDayPct.map { "\($0)%" } ?? "--"
+            parts.append("◆ " + settings.t("5-hour \(fh) · weekly \(wk)", "5小时 \(fh) · 每周 \(wk)"))
         }
-        return parts.isEmpty ? nil : parts.joined(separator: "  ")
+        return parts.isEmpty ? nil : parts.joined(separator: "   ")
     }
 }

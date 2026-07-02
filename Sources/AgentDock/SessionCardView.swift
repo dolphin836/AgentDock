@@ -129,9 +129,9 @@ struct SessionRowView: View {
     private var metricsLine: String {
         var parts: [String] = []
         if let model = session.metrics?.model { parts.append(model) }
-        if let pct = session.metrics?.contextPct { parts.append("ctx \(pct)%") }
+        if let pct = session.metrics?.contextPct { parts.append("context \(pct)%") }
         if let tokens = session.metrics?.totalTokens {
-            parts.append(tokens >= 1000 ? String(format: "%.1fk tok", Double(tokens) / 1000) : "\(tokens) tok")
+            parts.append(tokens >= 1000 ? String(format: "%.1fk tokens", Double(tokens) / 1000) : "\(tokens) tokens")
         }
         if let cost = session.metrics?.costUSD { parts.append(String(format: "$%.2f", cost)) }
         parts.append(timeText)
