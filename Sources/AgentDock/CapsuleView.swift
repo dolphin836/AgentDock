@@ -30,10 +30,8 @@ struct CapsuleView: View {
 
     var body: some View {
         if active.isEmpty {
-            // 没有进行中的任务:保留刘海大小的透明悬停区,便于展开查看其他会话
-            Color.clear
-                .frame(width: centerWidth + 20, height: barHeight)
-                .contentShape(Rectangle())
+            // 没有进行中的任务:显示汇总信息(session 总数 + agent 数)
+            summaryBar
         } else {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 let primary = rotatingPrimary(at: context.date)
@@ -83,6 +81,35 @@ struct CapsuleView: View {
         }
     }
 
+    /// 无运行任务时的汇总条:左翼 session 总数,右翼 agent 数
+    private var summaryBar: some View {
+        let stats = SessionStats(sessions: sessions, settings: settings)
+        let wing = max(60, max(measure(stats.sessionsText, size: 11, weight: .medium),
+                               measure(stats.agentsText, size: 11, weight: .medium)) + 34)
+        return HStack(spacing: 0) {
+            HStack(spacing: 5) {
+                Image(systemName: "asterisk")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.5))
+                Text(stats.sessionsText)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+            .padding(.horizontal, 10)
+            .frame(width: wing, alignment: .leading)
+            .frame(maxHeight: .infinity)
+            Color.clear.frame(width: centerWidth)
+            Text(stats.agentsText)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.white.opacity(0.7))
+                .padding(.horizontal, 10)
+                .frame(width: wing, alignment: .trailing)
+                .frame(maxHeight: .infinity)
+        }
+        .frame(height: barHeight)
+        .background(NotchShape().fill(.black))
+    }
+
     /// 进行中任务每 3 秒轮播
     private func rotatingPrimary(at date: Date) -> AgentSession {
         let index = Int(date.timeIntervalSinceReferenceDate / 3) % active.count
@@ -108,6 +135,28 @@ struct CapsuleView: View {
     private func measure(_ text: String, size: CGFloat, weight: NSFont.Weight) -> CGFloat {
         let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: size, weight: weight)]
         return ceil((text as NSString).size(withAttributes: attrs).width)
+    }
+}
+
+/// 汇总统计:session 总数 + agent 种类数(claude code 和 codex 算 2 个)
+@MainActor
+struct SessionStats {
+    let sessions: [AgentSession]
+    let settings: AppSettings
+
+    var sessionCount: Int { sessions.count }
+    var agentCount: Int { Set(sessions.map(\.kind)).count }
+    var runningCount: Int { sessions.filter { $0.state.isActive }.count }
+
+    var sessionsText: String {
+        settings.t("\(sessionCount) sessions", "\(sessionCount) 个会话")
+    }
+    var agentsText: String {
+        settings.t("\(agentCount) agents", "\(agentCount) 个 Agent")
+    }
+    var headerText: String {
+        settings.t("\(sessionCount) sessions · \(agentCount) agents · \(runningCount) running",
+                   "\(sessionCount) 个会话 · \(agentCount) 个 Agent · \(runningCount) 个运行中")
     }
 }
 

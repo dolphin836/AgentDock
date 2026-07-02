@@ -36,9 +36,40 @@ public enum SessionBackfillScanner {
                 projectName: cwd.map { ($0 as NSString).lastPathComponent } ?? kind.rawValue,
                 cwd: cwd ?? "",
                 state: .waitingInput,
+                metrics: kind == .claudeCode ? extractMetrics(path: path) : nil,
                 lastActivity: mtime))
         }
         return sessions
+    }
+
+    /// 从 transcript 尾部提取最近一条 assistant 消息的 usage/model,补齐离线会话的指标。
+    /// (格式属 Claude Code 内部实现,解析失败一律返回 nil,不影响会话本身)
+    static func extractMetrics(path: String) -> Metrics? {
+        guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+        defer { try? handle.close() }
+        guard let size = try? handle.seekToEnd(), size > 0 else { return nil }
+        let readLen = min(size, 256 * 1024)
+        try? handle.seek(toOffset: size - readLen)
+        guard let data = try? handle.readToEnd() else { return nil }
+
+        for lineData in data.split(separator: UInt8(ascii: "\n")).reversed() {
+            guard let obj = (try? JSONSerialization.jsonObject(with: Data(lineData))) as? [String: Any],
+                  let message = obj["message"] as? [String: Any],
+                  let usage = message["usage"] as? [String: Any]
+            else { continue }
+            let input = usage["input_tokens"] as? Int ?? 0
+            let cacheRead = usage["cache_read_input_tokens"] as? Int ?? 0
+            let cacheWrite = usage["cache_creation_input_tokens"] as? Int ?? 0
+            let output = usage["output_tokens"] as? Int ?? 0
+            guard input + cacheRead + cacheWrite + output > 0 else { continue }
+            var m = Metrics()
+            m.model = message["model"] as? String
+            m.totalTokens = input + cacheRead + cacheWrite + output
+            // 近似 ctx 占比:按 200k 窗口估算(离线拿不到真实窗口大小)
+            m.contextPct = min(100, (input + cacheRead + cacheWrite) * 100 / 200_000)
+            return m
+        }
+        return nil
     }
 
     /// transcript 头部一般带 "cwd":"..." 字段,取前 16KB 正则提取

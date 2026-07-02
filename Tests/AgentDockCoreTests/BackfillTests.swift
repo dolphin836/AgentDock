@@ -14,8 +14,16 @@ import Foundation
         try FileManager.default.setAttributes(
             [.modificationDate: Date().addingTimeInterval(-3 * 3600)], ofItemAtPath: oldPath)
 
+        // 带 usage 的 assistant 行,应被提取为离线指标
+        let usageLine = #"{"type":"assistant","message":{"model":"claude-opus-4-8","usage":{"input_tokens":100,"cache_read_input_tokens":50000,"cache_creation_input_tokens":900,"output_tokens":400}}}"#
+        let h = FileHandle(forWritingAtPath: root + "/proj-a/s-recent.jsonl")!
+        try h.seekToEnd(); try h.write(contentsOf: Data(("\n" + usageLine + "\n").utf8)); try h.close()
+
         let sessions = SessionBackfillScanner.scanClaude(projectsRoot: root)
         #expect(sessions.count == 1)
+        #expect(sessions[0].metrics?.model == "claude-opus-4-8")
+        #expect(sessions[0].metrics?.totalTokens == 51400)
+        #expect(sessions[0].metrics?.contextPct == 25)  // 51000/200000
         #expect(sessions[0].id == "s-recent")
         #expect(sessions[0].cwd == "/Users/eric/Work/proj-a")
         #expect(sessions[0].projectName == "proj-a")

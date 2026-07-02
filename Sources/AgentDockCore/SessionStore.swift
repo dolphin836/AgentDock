@@ -49,6 +49,10 @@ public final class SessionStore {
     public func backfill(_ scanned: [AgentSession]) {
         for candidate in scanned {
             if let i = sessions.firstIndex(where: { $0.id == candidate.id }) {
+                // 实时通道没给过指标时,用磁盘提取的补上
+                if sessions[i].metrics == nil, let m = candidate.metrics {
+                    sessions[i].metrics = m
+                }
                 guard candidate.lastActivity > sessions[i].lastActivity else { continue }
                 sessions[i].lastActivity = candidate.lastActivity
                 if sessions[i].state == .disconnected {
