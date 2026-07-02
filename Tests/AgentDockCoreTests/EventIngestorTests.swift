@@ -18,7 +18,7 @@ private func data(_ s: String) -> Data { Data(s.utf8) }
     }
 
     @Test func claudeStatuslineLine() {
-        let line = data(#"{"source":"claude-code","type":"statusline","payload":{"session_id":"abc","model":{"display_name":"Opus"},"cost":{"total_cost_usd":1.25},"context_window":{"used_percentage":42,"total_tokens":84000}}}"#)
+        let line = data(#"{"source":"claude-code","type":"statusline","payload":{"session_id":"abc","model":{"display_name":"Opus"},"cost":{"total_cost_usd":1.25},"context_window":{"used_percentage":42,"total_input_tokens":80000,"total_output_tokens":4000}}}"#)
         guard case .metrics(let sid, let m) = EventIngestor.parseLine(line) else {
             Issue.record("expected .metrics"); return
         }

@@ -57,7 +57,10 @@ public enum EventIngestor {
         if let ctx = p["context_window"] as? [String: Any] {
             if let pct = ctx["used_percentage"] as? Double { m.contextPct = Int(pct) }
             else if let pct = ctx["used_percentage"] as? Int { m.contextPct = pct }
-            if let tokens = ctx["total_tokens"] as? Int { m.totalTokens = tokens }
+            // 当前 context 内的 input+output token 数(/compact 后会重置)
+            let input = ctx["total_input_tokens"] as? Int ?? 0
+            let output = ctx["total_output_tokens"] as? Int ?? 0
+            if input + output > 0 { m.totalTokens = input + output }
         }
         return .metrics(sessionId: sessionId, m)
     }
