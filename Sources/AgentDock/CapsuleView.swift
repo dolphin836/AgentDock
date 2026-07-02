@@ -34,8 +34,9 @@ struct CapsuleView: View {
         } else {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 let primary = rotatingPrimary(at: context.date)
-                // 左右翼等宽,保证整体居中后中间空位与物理刘海精确对齐,文字绝不滑入刘海底下
-                let wing: CGFloat = primary != nil ? 250 : 60
+                // 左右翼等宽(取两侧内容较宽者,再设上限),保证整体居中后中间空位
+                // 与物理刘海精确对齐,文字绝不滑入刘海底下,同时短文字不会撑出大黑条
+                let wing: CGFloat = wingWidth(primary: primary, now: context.date)
                 HStack(spacing: 0) {
                     // 左翼:摘要文字,靠刘海一侧对齐,超长截断
                     Group {
@@ -79,6 +80,25 @@ struct CapsuleView: View {
                 .background(NotchShape().fill(.black))
             }
         }
+    }
+
+    /// 按两侧实际内容测量翼宽:等宽对称,上限 250pt(超出交给两行/截断)
+    private func wingWidth(primary: AgentSession?, now: Date) -> CGFloat {
+        let padding: CGFloat = 20  // 两侧 horizontal padding
+        var left: CGFloat = 0
+        var right: CGFloat = CGFloat(visible.count) * 13  // 状态点
+        if let primary {
+            left = 14 + 5 + measure(summaryText(primary), size: 10, weight: .medium)
+            if primary.state.isActive {
+                right += measure(elapsedText(primary, now: now), size: 10, weight: .medium) + 5
+            }
+        }
+        return min(250, max(30, max(left, right)) + padding)
+    }
+
+    private func measure(_ text: String, size: CGFloat, weight: NSFont.Weight) -> CGFloat {
+        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: size, weight: weight)]
+        return ceil((text as NSString).size(withAttributes: attrs).width)
     }
 
     /// 多个活跃会话每 3 秒轮播;没有活跃会话则不显示文字
