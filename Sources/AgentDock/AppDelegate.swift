@@ -21,7 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startCodexTailer()
         setupStatusItem()
 
-        notchWindow = NotchWindow(store: store, settings: AppSettings.shared)
+        notchWindow = NotchWindow(store: store, settings: AppSettings.shared)  // hover 由窗口层监听驱动
         notchWindow?.show()
 
         backfillSessions()

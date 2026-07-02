@@ -6,10 +6,10 @@ import AgentDockCore
 struct NotchRootView: View {
     let store: SessionStore
     let settings: AppSettings
-    @State private var hovering = false
+    let hoverState: HoverState
 
     /// 有会话需要用户审批时保持展开提示,直到用户处理完
-    private var expanded: Bool { hovering || !waitingIds.isEmpty }
+    private var expanded: Bool { hoverState.hovering || !waitingIds.isEmpty }
 
     /// 顶栏高度:主屏有刘海用刘海高度,否则用菜单栏高度
     private var topInset: CGFloat {
@@ -35,7 +35,9 @@ struct NotchRootView: View {
                     CapsuleView(sessions: store.sessions, settings: settings, wing: wing)
                 }
             }
-            .onHover { hovering = $0 }
+            .onGeometryChange(for: CGSize.self, of: { $0.size }, action: { size in
+                hoverState.contentSize = size
+            })
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity)
