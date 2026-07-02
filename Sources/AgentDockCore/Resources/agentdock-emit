@@ -22,15 +22,17 @@ fi
 
 [ -S "$SOCK" ] || exit 0
 
-# 沿父进程链向上找宿主 App(PhpStorm/Ghostty/VS Code/Terminal...)
+# 沿父进程链向上找宿主 App(PhpStorm/Ghostty/VS Code/Claude 桌面端...)。
+# 取链上"最顶层"的 .app:CLI 自身可能打包成内部 bundle(如 Claude 桌面端里的
+# claude.app),真正的 GUI 宿主在链条更上方,所以不 break,一路爬到顶。
 APP=""
 pid=$PPID
-for _ in 1 2 3 4 5 6 7 8 9 10; do
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
   [ -z "$pid" ] && break
   [ "$pid" -le 1 ] && break
   comm=$(ps -o comm= -p "$pid" 2>/dev/null)
   case "$comm" in
-    *.app/*) APP="${comm%%.app/*}.app"; break ;;
+    *.app/*) APP="${comm%%.app/*}.app" ;;
   esac
   pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
 done
