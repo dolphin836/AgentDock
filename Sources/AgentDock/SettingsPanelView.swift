@@ -14,7 +14,12 @@ struct SettingsPanelView: View {
     @Bindable var settings: AppSettings
     @State private var integrationsRefresh = 0
     @State private var permissionsRefresh = 0
-    @State private var updateMessage: String?
+    @State private var updateStatus: UpdateStatus = .idle
+
+    enum UpdateStatus: Equatable {
+        case idle, checking, upToDate, failed
+        case available(UpdateInfo)
+    }
     /// 设置页可见期间周期性复查权限/集成状态(用户可能刚在系统设置里授权完回来)
     private let statusPoll = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
 
@@ -66,14 +71,34 @@ struct SettingsPanelView: View {
                     .font(Theme.mono(10, .semibold))
                     .foregroundStyle(Theme.text1)
                 Spacer()
-                if let message = updateMessage {
-                    Text(message)
+                switch updateStatus {
+                case .idle:
+                    EmptyView()
+                case .checking:
+                    Text(settings.t("checking…", "检查中…"))
                         .font(Theme.mono(9))
                         .foregroundStyle(Theme.text3)
+                case .upToDate:
+                    Text(settings.t("up to date", "已是最新版本"))
+                        .font(Theme.mono(9))
+                        .foregroundStyle(Theme.text3)
+                case .failed:
+                    Text(settings.t("check failed", "检查失败"))
+                        .font(Theme.mono(9))
+                        .foregroundStyle(Theme.text4)
+                case .available(let info):
+                    Text(settings.t("new version v\(info.version)", "发现新版本 v\(info.version)"))
+                        .font(Theme.mono(9, .semibold))
+                        .foregroundStyle(Theme.amber)
                 }
-                TermButton(title: settings.t("CHECK UPDATES", "检查更新"), color: Theme.phosphor.opacity(0.85)) {
-                    // 尚无分发渠道,先做本地提示;接入更新源后替换实现
-                    updateMessage = settings.t("up to date", "已是最新版本")
+                if case .available(let info) = updateStatus {
+                    TermButton(title: settings.t("UPDATE", "立即更新"), color: Theme.amber.opacity(0.9)) {
+                        if let url = URL(string: info.download) { NSWorkspace.shared.open(url) }
+                    }
+                } else {
+                    TermButton(title: settings.t("CHECK UPDATES", "检查更新"), color: Theme.phosphor.opacity(0.85)) {
+                        checkForUpdates()
+                    }
                 }
             }
             .padding(.horizontal, 9)
@@ -100,10 +125,28 @@ struct SettingsPanelView: View {
             permissionsRefresh += 1
             integrationsRefresh += 1
             launchAtLogin = LaunchAtLogin.isEnabled
+            checkForUpdates()
         }
         .onReceive(statusPoll) { _ in
             permissionsRefresh += 1
             integrationsRefresh += 1
+        }
+    }
+
+    // MARK: 检查更新
+
+    /// 拉官网 version.json 与当前版本比较;已发现新版后不再重复检查(避免覆盖提示)
+    private func checkForUpdates() {
+        if case .available = updateStatus { return }
+        updateStatus = .checking
+        Task {
+            do {
+                let info = try await UpdateChecker.fetchLatest()
+                updateStatus = UpdateChecker.isNewer(info.version, than: AppInfo.version)
+                    ? .available(info) : .upToDate
+            } catch {
+                updateStatus = .failed
+            }
         }
     }
 

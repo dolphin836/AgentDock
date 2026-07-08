@@ -129,7 +129,17 @@ ln -s /Applications "$STAGING/Applications"
 hdiutil create -volname "AgentDock" -srcfolder "$STAGING" -ov -format UDZO "$DMG" >/dev/null
 rm -rf "$STAGING"
 
+echo "[7/7] 发布到 site/(pkg + version.json 更新源)…"
+cp "$PKG" site/
+cat > site/version.json <<JSON
+{
+  "version": "$VERSION",
+  "download": "https://www.agentdockstatus.app/AgentDock-$VERSION.pkg"
+}
+JSON
+
 echo
 echo "✓ 完成:"
 ls -lh "$PKG" "$DMG" | awk '{print "  " $9 " (" $5 ")"}'
 echo "  推荐分发 pkg:双击 → 分步安装向导 → 自动启动"
+echo "  site/ 已更新(pkg + version.json),推送后官网即生效"
