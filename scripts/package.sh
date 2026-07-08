@@ -5,12 +5,13 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VERSION="0.1.0"
-BIN=".build/arm64-apple-macosx/release"
+# 通用二进制:Intel 机器上纯 arm64 的 App 能安装但无法启动(无提示),必须双架构
+BIN=".build/apple/Products/Release"
 APP="dist/AgentDock.app"
 DMG="dist/AgentDock-$VERSION.dmg"
 
-echo "[1/5] 构建 release…"
-swift build -c release >/dev/null
+echo "[1/5] 构建 release(universal: arm64 + x86_64)…"
+swift build -c release --arch arm64 --arch x86_64 >/dev/null
 
 echo "[2/5] 组装 AgentDock.app…"
 rm -rf dist

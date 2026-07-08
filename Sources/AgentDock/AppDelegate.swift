@@ -391,6 +391,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// 无 Dock 图标、无主窗口:用户在启动台/访达再次点击 App 图标时系统发 reopen,
+    /// 不处理就毫无反应(看起来像"点不开")——展开刘海面板作为可见反馈
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        notchWindow?.hoverState.pinnedOpen = true
+        return false
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         server?.stop()
         codexTailer?.stop()
