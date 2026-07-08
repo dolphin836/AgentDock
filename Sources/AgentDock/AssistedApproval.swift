@@ -15,16 +15,12 @@ enum AssistedApproval {
     static func respond(session: AgentSession, allow: Bool) {
         // 首次使用触发系统授权引导;未授权时只聚焦不按键(聚焦本身也有价值)
         let trusted = PermissionGuide.accessibilityGranted(promptIfNeeded: true)
-        let appPath = session.appPath ?? session.kind.fallbackAppPath
-        if let appPath, FileManager.default.fileExists(atPath: appPath) {
-            let config = NSWorkspace.OpenConfiguration()
-            config.activates = true
-            NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: appPath),
-                                               configuration: config)
-        }
+        // 必须聚焦到该会话所在的项目窗口,不能只激活 App:
+        // 多窗口时按键会打进错误的窗口,看起来就是「点了没反应」
+        TerminalJumper.jump(toCwd: session.cwd, appPath: session.appPath, kind: session.kind)
         guard trusted else { return }
-        // 等待目标 App 拿到焦点再按键
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+        // 等待目标窗口拿到焦点再按键(窗口切换比 App 激活慢)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             sendKeys(kind: session.kind, allow: allow)
         }
     }

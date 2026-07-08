@@ -2,6 +2,7 @@ import Foundation
 
 /// 通过 `codex app-server` 的 JSON-RPC 查询账号限额(account/rateLimits/read)。
 /// 阻塞式,调用方应放到后台线程;失败一律返回 nil。
+/// 失败后进入冷却期(默认 30 分钟),避免后台轮询反复拉起注定失败的子进程。
 public enum CodexRateLimitProber {
     public static let binaryCandidates = [
         "/opt/homebrew/bin/codex",
@@ -13,7 +14,41 @@ public enum CodexRateLimitProber {
         binaryCandidates.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
+    // MARK: 启动冷却门
+
+    public static let failureCooldown: TimeInterval = 1800
+
+    private static let gateLock = NSLock()
+    private nonisolated(unsafe) static var lastFailureAt: Date?
+
+    static func gateAllowsLaunch(now: Date = Date()) -> Bool {
+        gateLock.lock()
+        defer { gateLock.unlock() }
+        guard let failedAt = lastFailureAt else { return true }
+        return now.timeIntervalSince(failedAt) >= failureCooldown
+    }
+
+    static func recordOutcome(success: Bool, now: Date = Date()) {
+        gateLock.lock()
+        defer { gateLock.unlock() }
+        lastFailureAt = success ? nil : now
+    }
+
+    /// 测试用:清空冷却状态
+    static func resetGate() {
+        gateLock.lock()
+        defer { gateLock.unlock() }
+        lastFailureAt = nil
+    }
+
     public static func fetch(binary: String? = nil, timeout: TimeInterval = 8) -> RateLimits? {
+        guard gateAllowsLaunch() else { return nil }
+        let limits = launchAndFetch(binary: binary, timeout: timeout)
+        recordOutcome(success: limits != nil)
+        return limits
+    }
+
+    private static func launchAndFetch(binary: String?, timeout: TimeInterval) -> RateLimits? {
         guard let bin = binary ?? findBinary() else { return nil }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: bin)
@@ -30,7 +65,7 @@ public enum CodexRateLimitProber {
         func send(_ json: String) {
             stdin.fileHandleForWriting.write(Data((json + "\n").utf8))
         }
-        send(#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"agentdock","title":"AgentDock","version":"0.1.0"}}}"#)
+        send(#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"agentdock","title":"AgentDock","version":"0.2.0"}}}"#)
         send(#"{"jsonrpc":"2.0","method":"initialized"}"#)
         Thread.sleep(forTimeInterval: 0.8)  // handshake 后需等片刻,否则返回空
         send(#"{"jsonrpc":"2.0","id":2,"method":"account/rateLimits/read","params":{}}"#)

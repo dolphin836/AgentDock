@@ -33,6 +33,7 @@ struct SettingsPanelView: View {
             sectionRule(settings.t("GENERAL", "通用"))
             languageRow
             launchAtLoginRow
+            keepAwakeRow
             displayRow
 
             sectionRule(settings.t("SHORTCUTS", "快捷键"))
@@ -183,6 +184,21 @@ struct SettingsPanelView: View {
                     NSApp.activate(ignoringOtherApps: true)
                     NSAlert(error: error).runModal()
                 }
+            }
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 4)
+    }
+
+    private var keepAwakeRow: some View {
+        HStack(spacing: 8) {
+            Text(settings.t("keep awake while agents run", "任务进行中阻止休眠"))
+                .font(Theme.mono(10))
+                .foregroundStyle(Theme.text2)
+            Spacer()
+            selectable(settings.keepAwakeWhileRunning ? settings.t("on", "开启") : settings.t("off", "关闭"),
+                       active: settings.keepAwakeWhileRunning) {
+                settings.keepAwakeWhileRunning.toggle()
             }
         }
         .padding(.horizontal, 9)

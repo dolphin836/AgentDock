@@ -30,6 +30,7 @@ extension Notification.Name {
     static let agentDockOpenSettings = Notification.Name("AgentDockOpenSettings")
     static let agentDockDisplayChanged = Notification.Name("AgentDockDisplayChanged")
     static let agentDockHotkeysChanged = Notification.Name("AgentDockHotkeysChanged")
+    static let agentDockKeepAwakeChanged = Notification.Name("AgentDockKeepAwakeChanged")
 }
 
 @MainActor
@@ -46,6 +47,14 @@ final class AppSettings {
         didSet {
             UserDefaults.standard.set(displayID ?? 0, forKey: "AgentDockDisplayID")
             NotificationCenter.default.post(name: .agentDockDisplayChanged, object: nil)
+        }
+    }
+
+    /// Agent 任务进行中阻止 Mac 闲置休眠(默认开)
+    var keepAwakeWhileRunning: Bool {
+        didSet {
+            UserDefaults.standard.set(keepAwakeWhileRunning, forKey: "AgentDockKeepAwake")
+            NotificationCenter.default.post(name: .agentDockKeepAwakeChanged, object: nil)
         }
     }
 
@@ -68,6 +77,7 @@ final class AppSettings {
         language = AppLanguage(rawValue: defaults.string(forKey: "AgentDockLanguage") ?? "") ?? .english
         let storedDisplay = defaults.integer(forKey: "AgentDockDisplayID")
         displayID = storedDisplay == 0 ? nil : storedDisplay
+        keepAwakeWhileRunning = defaults.object(forKey: "AgentDockKeepAwake") as? Bool ?? true
         toggleHotkey = Self.load(key: "AgentDockHotkeyToggle") ?? Self.defaultToggle
         allowHotkey = Self.load(key: "AgentDockHotkeyAllow") ?? Self.defaultAllow
         denyHotkey = Self.load(key: "AgentDockHotkeyDeny") ?? Self.defaultDeny

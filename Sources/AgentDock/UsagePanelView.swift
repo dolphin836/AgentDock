@@ -17,7 +17,8 @@ struct UsagePanelView: View {
         VStack(alignment: .leading, spacing: 1) {
             refreshRow
 
-            if store.claudeRateLimits == nil && store.codexRateLimits == nil {
+            if store.claudeRateLimits == nil && store.codexRateLimits == nil
+                && store.cursorUsage == nil {
                 Text(settings.t("no usage data yet — use an agent once",
                                 "暂无用量数据——任一 agent 活动后即出现"))
                     .font(Theme.mono(10))
@@ -29,16 +30,19 @@ struct UsagePanelView: View {
             if let l = store.claudeRateLimits {
                 agentGroup(
                     name: "CLAUDE CODE",
-                    windows: [(settings.t("5-hour", "5小时"), l.fiveHourPct),
-                              (settings.t("7-day", "7天"), l.sevenDayPct)],
+                    windows: [(settings.t("5-hour", "5小时"), l.fiveHourPct, l.fiveHourResetAt),
+                              (settings.t("7-day", "7天"), l.sevenDayPct, l.sevenDayResetAt)],
                     updatedAt: l.updatedAt)
             }
             if let l = store.codexRateLimits {
                 agentGroup(
                     name: "CODEX",
-                    windows: [(settings.t("5-hour", "5小时"), l.fiveHourPct),
-                              (settings.t("weekly", "每周"), l.sevenDayPct)],
+                    windows: [(settings.t("5-hour", "5小时"), l.fiveHourPct, l.fiveHourResetAt),
+                              (settings.t("weekly", "每周"), l.sevenDayPct, l.sevenDayResetAt)],
                     updatedAt: l.updatedAt)
+            }
+            if let u = store.cursorUsage {
+                cursorGroup(u)
             }
 
             statsSection
@@ -165,41 +169,99 @@ struct UsagePanelView: View {
 
     // MARK: 每个 agent 一组
 
-    private func agentGroup(name: String, windows: [(String, Int?)], updatedAt: Date) -> some View {
+    private func agentGroup(name: String, windows: [(String, Int?, Date?)],
+                            updatedAt: Date) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Rectangle()
-                    .fill(Theme.phosphor.opacity(0.35))
-                    .frame(width: 12, height: 1)
-                Text(name)
-                    .font(Theme.mono(10, .semibold))
-                    .tracking(1.6)
-                    .foregroundStyle(Theme.text1)
-                Rectangle()
-                    .fill(Theme.text4.opacity(0.6))
-                    .frame(height: 1)
-                Text(freshness(updatedAt))
-                    .font(Theme.mono(9))
-                    .foregroundStyle(Theme.text3)
-            }
-            .padding(.top, 10)
-            .padding(.bottom, 2)
-
+            groupHeader(name: name, note: freshness(updatedAt))
             ForEach(windows.filter { $0.1 != nil }, id: \.0) { window in
-                usageLine(label: window.0, pct: window.1 ?? 0)
+                usageLine(label: window.0, pct: window.1 ?? 0, resetAt: window.2)
             }
         }
         .padding(.horizontal, 14)
         .padding(.bottom, 4)
     }
 
-    /// 单个限额窗口:标签 / 长刻度条 / 百分比(右对齐,与组头新鲜度同列同字号)
-    private func usageLine(label: String, pct: Int) -> some View {
+    /// Cursor 组:套餐用量刻度条 + 计划内/按需花费(美元,来自 usage-summary)
+    private func cursorGroup(_ usage: AgentDockCore.CursorUsage) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            groupHeader(name: "CURSOR", note: freshness(usage.updatedAt))
+            if let pct = usage.planPct {
+                usageLine(label: settings.t("plan", "套餐"), pct: pct,
+                          resetAt: usage.billingCycleEnd)
+            }
+            if let spend = spendText(usage) {
+                HStack(spacing: 10) {
+                    Text(settings.t("spend", "花费"))
+                        .font(Theme.mono(11))
+                        .foregroundStyle(Theme.text2)
+                        .frame(width: 64, alignment: .leading)
+                    Text(spend)
+                        .font(Theme.mono(10))
+                        .foregroundStyle(Theme.text2)
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, 3)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.bottom, 4)
+    }
+
+    private func spendText(_ usage: AgentDockCore.CursorUsage) -> String? {
+        var parts: [String] = []
+        if let used = usage.planUsedUSD, let limit = usage.planLimitUSD {
+            parts.append(settings.t("plan $\(money(used)) / $\(money(limit))",
+                                    "计划内 $\(money(used)) / $\(money(limit))"))
+        }
+        if let personal = usage.personalUsedUSD {
+            parts.append(settings.t("you $\(money(personal))", "本人 $\(money(personal))"))
+        }
+        if let used = usage.onDemandUsedUSD, used > 0 || usage.onDemandLimitUSD != nil {
+            let limit = usage.onDemandLimitUSD.map { " / $\(money($0))" } ?? ""
+            parts.append(settings.t("on-demand $\(money(used))\(limit)",
+                                    "按需 $\(money(used))\(limit)"))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private func money(_ value: Double) -> String {
+        value == value.rounded() ? String(format: "%.0f", value) : String(format: "%.2f", value)
+    }
+
+    private func groupHeader(name: String, note: String) -> some View {
+        HStack(spacing: 6) {
+            Rectangle()
+                .fill(Theme.phosphor.opacity(0.35))
+                .frame(width: 12, height: 1)
+            Text(name)
+                .font(Theme.mono(10, .semibold))
+                .tracking(1.6)
+                .foregroundStyle(Theme.text1)
+            Rectangle()
+                .fill(Theme.text4.opacity(0.6))
+                .frame(height: 1)
+            Text(note)
+                .font(Theme.mono(9))
+                .foregroundStyle(Theme.text3)
+        }
+        .padding(.top, 10)
+        .padding(.bottom, 2)
+    }
+
+    /// 单个限额窗口:标签(下附重置时间)/ 长刻度条 / 百分比(右对齐)
+    private func usageLine(label: String, pct: Int, resetAt: Date? = nil) -> some View {
         HStack(spacing: 12) {
-            Text(label)
-                .font(Theme.mono(11))
-                .foregroundStyle(Theme.text2)
-                .frame(width: 64, alignment: .leading)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label)
+                    .font(Theme.mono(11))
+                    .foregroundStyle(Theme.text2)
+                if let resetAt, resetAt > Date() {
+                    Text("↻ \(resetText(resetAt))")
+                        .font(Theme.mono(8))
+                        .foregroundStyle(Theme.text4)
+                }
+            }
+            .frame(width: 64, alignment: .leading)
             TickBar(pct: pct, ticks: 66, tickWidth: 3, tickHeight: 14, spacing: 2.5)
             Spacer(minLength: 8)
             Text(String(format: "%3d%%", pct))
@@ -210,6 +272,20 @@ struct UsagePanelView: View {
                 .frame(minWidth: 34, alignment: .trailing)
         }
         .padding(.vertical, 4)
+    }
+
+    /// 重置时间:24 小时内显示时刻,更远显示「周几 时刻」或日期
+    private func resetText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        let interval = date.timeIntervalSinceNow
+        if interval < 24 * 3600 {
+            formatter.dateFormat = "HH:mm"
+        } else if interval < 7 * 24 * 3600 {
+            formatter.dateFormat = "E HH:mm"
+        } else {
+            formatter.dateFormat = "M/d"
+        }
+        return formatter.string(from: date)
     }
 
     private func pctColor(_ pct: Int) -> Color {

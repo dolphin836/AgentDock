@@ -114,17 +114,18 @@ body {
 .dock-panel .p-body::-webkit-scrollbar { display: none; }
 /* 收起时与菜单栏完全重合:同高 30px,底部凸圆角 13px(同 App NotchShape),无投影 */
 .dock-panel.collapsed { padding: 0 18px; height: 30px; border-radius: 0 0 13px 13px; box-shadow: none; }
-/* 顶角外扩凹弧(同 App NotchShape topRadius=8):与屏幕顶边圆滑衔接 */
-.dock-panel.collapsed::before {
-  content: ""; position: absolute; top: 0; left: -8px;
-  width: 8px; height: 8px; border-radius: 0;
-  transform: none;
+/* 收起时隐藏展开态的刘海凸起与摄像头圆点 */
+.dock-panel.collapsed::before, .dock-panel.collapsed::after { display: none; }
+/* 顶角外扩凹弧(同 App NotchShape topRadius=8):收起/展开都与屏幕顶边圆滑衔接 */
+.dock-panel .flare {
+  position: absolute; top: 0; width: 8px; height: 8px; z-index: 1;
+}
+.dock-panel .flare.l {
+  left: -8px;
   background: radial-gradient(circle 8px at 0 8px, transparent 0 7.5px, var(--panel) 8px);
 }
-.dock-panel.collapsed::after {
-  content: ""; position: absolute; top: 0; right: -8px; left: auto;
-  width: 8px; height: 8px; border-radius: 0; box-shadow: none;
-  transform: none;
+.dock-panel .flare.r {
+  right: -8px;
   background: radial-gradient(circle 8px at 8px 8px, transparent 0 7.5px, var(--panel) 8px);
 }
 .dock-panel.collapsed .p-body, .dock-panel.collapsed .p-head { display: none; }
@@ -285,6 +286,7 @@ body {
 
   <!-- AgentDock panel: collapsed by default, hover to expand -->
   <div class="dock-panel collapsed" id="panel">
+    <i class="flare l"></i><i class="flare r"></i>
     <div class="capsule">
       <div class="side">
         <span class="glyph-spin" id="capGlyph" style="color:var(--phosphor);font-size:10px">✳</span>
@@ -377,7 +379,7 @@ body {
         <div class="set-row"><span class="lbl">automation · Terminal</span><span class="status-ok">granted</span></div>
         <div class="set-row"><span class="lbl">accessibility</span><span class="status-ok">granted</span></div>
         <div class="rule rec"><span class="lead"></span><span class="label">ABOUT</span><span class="line"></span></div>
-        <div class="set-row"><span class="lbl">version</span><span style="color:var(--text1)">v0.1.0</span>
+        <div class="set-row"><span class="lbl">version</span><span style="color:var(--text1)">v0.2.0</span>
           <span class="right"><span class="term-btn green">CHECK UPDATES</span></span></div>
         <div class="set-row"><span class="lbl">website</span>
           <span class="right"><span class="link">agentdockstatus.app</span></span></div>
@@ -400,7 +402,7 @@ body {
     </h1>
     <p class="tagline">AI agent status in your notch: who's working, who needs you, how much quota is left.</p>
     <p class="agents">Supports <b>Claude Code</b> ✳ · <b>Codex</b> ◆ · <b>Cursor</b> ⬢</p>
-    <a class="download" href="AgentDock-0.1.0.pkg" download>DOWNLOAD AGENTDOCK</a>
+    <a class="download" href="AgentDock-0.2.0.pkg" download>DOWNLOAD AGENTDOCK</a>
   </div>
 </div>
 

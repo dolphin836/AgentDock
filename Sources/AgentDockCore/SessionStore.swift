@@ -63,6 +63,7 @@ public final class SessionStore {
     /// 账号级限额(展开面板顶部展示)
     public var claudeRateLimits: RateLimits?
     public var codexRateLimits: RateLimits?
+    public var cursorUsage: CursorUsage?
 
     /// 等待用户 Yes/No 的权限审批请求
     public struct PendingApproval: Identifiable {
@@ -152,8 +153,8 @@ public final class SessionStore {
         case .metrics(let sessionId, let kind, let metrics, let limits):
             if let limits {
                 switch kind {
-                case .claudeCode: claudeRateLimits = limits
-                case .codex: codexRateLimits = limits
+                case .claudeCode: claudeRateLimits = (claudeRateLimits ?? limits).merging(limits)
+                case .codex: codexRateLimits = (codexRateLimits ?? limits).merging(limits)
                 case .cursor: break
                 }
             }

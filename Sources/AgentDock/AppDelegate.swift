@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let hotkeys = HotkeyManager()
     private var toggleHotkeyId: UInt32 = 0
     private var approvalHotkeyIds: [UInt32] = []
+    private let keepAwake = KeepAwake()
 
     static let home = NSHomeDirectory()
     static let socketPath = home + "/.agentdock/agentdock.sock"
@@ -37,6 +38,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 挂起中的交互卡片(bubbleId → 会话与类型):由高频监视器秒级检测处理结果
     private var watchedInteractions: [String: (sessionId: String, kind: CursorStateReader.PendingInteractionKind)] = [:]
     private var interactionWatchTimer: Timer?
+    /// 新卡片的快速探测(2s):等 10s 回填才发现「需要你审批」体感太慢
+    private var fastInteractionTimer: Timer?
+    private var fastProbeInFlight = false
 
     // MARK: 通道优先级(三家同一套机制:主通道健康则次级让位,过期自动降级)
     //
@@ -105,7 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         notchWindow = NotchWindow(store: store, settings: AppSettings.shared)  // hover 由窗口层监听驱动
         // 展开面板 = 用户正在看数据:限额若不够新鲜(>30s)立刻补一次探测,
         // 覆盖「客户端重置额度后没有任务在跑」这类两次轮询间隙里的变化
-        notchWindow?.onHoverBegan = { [weak self] in self?.pollCodexRateLimits(minInterval: 30) }
+        notchWindow?.onHoverBegan = { [weak self] in self?.pollAccountUsage(minInterval: 30) }
         notchWindow?.show()
         setupHotkeys()
         NotificationCenter.default.addObserver(
@@ -120,6 +124,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forName: .agentDockHotkeysChanged, object: nil, queue: .main) { _ in
             Task { @MainActor [weak self] in self?.reloadHotkeys() }
         }
+        NotificationCenter.default.addObserver(
+            forName: .agentDockKeepAwakeChanged, object: nil, queue: .main) { _ in
+            Task { @MainActor [weak self] in self?.syncKeepAwake() }
+        }
+        observeKeepAwake()
+        syncKeepAwake()
         // 快捷键录制期间暂停全局热键(否则按下的组合会被热键吞掉),并给面板键盘焦点
         NotificationCenter.default.addObserver(
             forName: .agentDockHotkeyRecordingBegan, object: nil, queue: .main) { _ in
@@ -135,11 +145,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forName: .agentDockHotkeyRecordingEnded, object: nil, queue: .main) { _ in
             Task { @MainActor [weak self] in self?.reloadHotkeys() }
         }
-        // 用量页手动刷新:立即探测 codex 限额 + 跑一轮回填(cursor/claude 指标)
+        // 用量页手动刷新:立即探测三家账号用量 + 跑一轮回填(cursor/claude 指标)
         NotificationCenter.default.addObserver(
             forName: .agentDockRefreshUsage, object: nil, queue: .main) { _ in
             Task { @MainActor [weak self] in
-                self?.pollCodexRateLimits()
+                self?.pollAccountUsage()
                 self?.backfillSessions()
             }
         }
@@ -153,9 +163,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.backfillSessions()
             }
         }
-        pollCodexRateLimits()
+        fastInteractionTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.fastProbePendingInteractions() }
+        }
+        pollAccountUsage()
         codexLimitsTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.pollCodexRateLimits() }
+            Task { @MainActor in self?.pollAccountUsage() }
         }
         // 首次启动(pkg 安装后自动拉起):弹出分步安装设置向导
         SetupWizard.showIfNeeded()
@@ -242,6 +255,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - 防休眠(agent 任务进行中保持清醒)
+
+    /// 持续观察「是否有进行中的任务」,变化时同步电源断言
+    private func observeKeepAwake() {
+        withObservationTracking {
+            _ = store.sessions.filter { $0.state.isActive }.count
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.syncKeepAwake()
+                self?.observeKeepAwake()
+            }
+        }
+    }
+
+    private func syncKeepAwake() {
+        let hasActive = store.sessions.contains { $0.state.isActive }
+        keepAwake.setActive(AppSettings.shared.keepAwakeWhileRunning && hasActive)
+    }
+
     private func respondFirstApproval(allow: Bool) {
         // Claude 的 hook 阻塞代答优先;其次 Codex/Cursor 辅助代答
         if let approval = store.approvals.first {
@@ -256,6 +288,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // 提问/审批卡片被用户处理后没有任何即时信号(应答不产生 hook 事件,
     // transcript 延迟落盘),10s 回填粒度太粗。有卡片挂起时启动 1s 定时器,
     // 只对挂起的 bubble 做主键点查(毫秒级),处理完立即解除等待态并停表。
+
+    /// 新发现的提问/审批卡片:注入事件让会话进入等待态,并交给秒级监视器盯处理结果
+    private func handlePendingInteractions(_ interactions: [CursorStateReader.PendingInteraction]) {
+        for interaction in interactions {
+            switch interaction.kind {
+            case .question:
+                guard !seenQuestionBubbles.contains(interaction.bubbleId) else { continue }
+                seenQuestionBubbles.insert(interaction.bubbleId)
+                store.apply(.event(AgentEvent(
+                    sessionId: interaction.sessionId, kind: .cursor,
+                    name: "preToolUse", detail: "AskQuestion", tool: "AskQuestion")))
+                watchInteraction(interaction)
+            case .approval:
+                guard watchedInteractions[interaction.bubbleId] == nil else { continue }
+                store.apply(.event(AgentEvent(
+                    sessionId: interaction.sessionId, kind: .cursor,
+                    name: "approvalRequest", detail: interaction.detail)))
+                watchInteraction(interaction)
+            }
+        }
+    }
+
+    /// 快速探测(2s):只对「进行中的 Cursor 会话」做挂起卡片点查,
+    /// 把「需要你审批」的发现延迟从 10s 回填压到 2s 内。查询本身是毫秒级主键范围扫描。
+    private func fastProbePendingInteractions() {
+        guard !fastProbeInFlight else { return }
+        let activeIds = store.sessions
+            .filter { $0.kind == .cursor && $0.state.isActive }
+            .map(\.id)
+        guard !activeIds.isEmpty else { return }
+        fastProbeInFlight = true
+        Task.detached(priority: .utility) { [weak self] in
+            let interactions = CursorStateReader.pendingInteractions(
+                dbPath: CursorStateReader.defaultDatabasePath(), conversationIds: activeIds)
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.fastProbeInFlight = false
+                self.handlePendingInteractions(interactions)
+            }
+        }
+    }
 
     private func watchInteraction(_ interaction: CursorStateReader.PendingInteraction) {
         watchedInteractions[interaction.bubbleId] = (interaction.sessionId, interaction.kind)
@@ -293,15 +366,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Codex 限额:后台起 app-server 查询。启动 + 5 分钟定时 + 悬停按需,
-    /// minInterval 防止频繁悬停反复拉起子进程。
-    private func pollCodexRateLimits(minInterval: TimeInterval = 0) {
+    /// 三家账号用量:启动 + 5 分钟定时 + 悬停按需,minInterval 防止频繁悬停反复探测。
+    /// 主通道都是各家自己的 OAuth 凭证 + 官方端点(结构化、带重置时间);
+    /// Codex 的 app-server 子进程退为 OAuth 不可用时的 fallback(带失败冷却)。
+    private func pollAccountUsage(minInterval: TimeInterval = 0) {
         guard Date().timeIntervalSince(lastCodexLimitsFetchAt) >= minInterval else { return }
         lastCodexLimitsFetchAt = Date()
-        Task.detached(priority: .utility) {
-            let limits = CodexRateLimitProber.fetch()
+        Task.detached(priority: .utility) { [weak self] in
+            var limits = await CodexUsageProber.fetch()
+            if limits == nil { limits = CodexRateLimitProber.fetch() }
             guard let limits else { return }
-            await MainActor.run { [weak self] in self?.store.codexRateLimits = limits }
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.store.codexRateLimits = (self.store.codexRateLimits ?? limits).merging(limits)
+            }
+        }
+        Task.detached(priority: .utility) { [weak self] in
+            guard let limits = await ClaudeUsageProber.fetch() else { return }
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.store.claudeRateLimits = (self.store.claudeRateLimits ?? limits).merging(limits)
+            }
+        }
+        Task.detached(priority: .utility) { [weak self] in
+            guard let usage = await CursorUsageProber.fetch() else { return }
+            await MainActor.run { [weak self] in self?.store.cursorUsage = usage }
         }
     }
 
@@ -362,23 +451,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.codexLiveHosts = codexHosts
                 self.cursorSubagentIds.formUnion(cursorSnapshot.subagentIds)
                 self.store.backfill(resolved)
-                for interaction in interactions {
-                    switch interaction.kind {
-                    case .question:
-                        guard !self.seenQuestionBubbles.contains(interaction.bubbleId) else { continue }
-                        self.seenQuestionBubbles.insert(interaction.bubbleId)
-                        self.store.apply(.event(AgentEvent(
-                            sessionId: interaction.sessionId, kind: .cursor,
-                            name: "preToolUse", detail: "AskQuestion", tool: "AskQuestion")))
-                        self.watchInteraction(interaction)
-                    case .approval:
-                        guard self.watchedInteractions[interaction.bubbleId] == nil else { continue }
-                        self.store.apply(.event(AgentEvent(
-                            sessionId: interaction.sessionId, kind: .cursor,
-                            name: "approvalRequest", detail: interaction.detail)))
-                        self.watchInteraction(interaction)
-                    }
-                }
+                self.handlePendingInteractions(interactions)
                 if useClaudeRegistryStatus {
                     for entry in registryEntries {
                         if let state = entry.sessionState {

@@ -54,15 +54,61 @@ public struct Metrics: Sendable, Equatable {
     }
 }
 
-/// 账号级限额(5 小时 / 7 天窗口用量百分比)
+/// 账号级限额(5 小时 / 7 天窗口用量百分比,可带窗口重置时间)
 public struct RateLimits: Sendable, Equatable {
     public var fiveHourPct: Int?
     public var sevenDayPct: Int?
+    public var fiveHourResetAt: Date?
+    public var sevenDayResetAt: Date?
     public var updatedAt: Date
 
-    public init(fiveHourPct: Int? = nil, sevenDayPct: Int? = nil, updatedAt: Date = Date()) {
+    public init(fiveHourPct: Int? = nil, sevenDayPct: Int? = nil,
+                fiveHourResetAt: Date? = nil, sevenDayResetAt: Date? = nil,
+                updatedAt: Date = Date()) {
         self.fiveHourPct = fiveHourPct
         self.sevenDayPct = sevenDayPct
+        self.fiveHourResetAt = fiveHourResetAt
+        self.sevenDayResetAt = sevenDayResetAt
+        self.updatedAt = updatedAt
+    }
+
+    /// 合并新读数:百分比取新值,重置时间在新值缺失时保留旧值
+    /// (statusline 等旁路来源只带百分比,不应抹掉 OAuth 拿到的重置时间)
+    public func merging(_ incoming: RateLimits) -> RateLimits {
+        RateLimits(fiveHourPct: incoming.fiveHourPct ?? fiveHourPct,
+                   sevenDayPct: incoming.sevenDayPct ?? sevenDayPct,
+                   fiveHourResetAt: incoming.fiveHourResetAt ?? fiveHourResetAt,
+                   sevenDayResetAt: incoming.sevenDayResetAt ?? sevenDayResetAt,
+                   updatedAt: incoming.updatedAt)
+    }
+}
+
+/// Cursor 账号用量(usage-summary):套餐/团队池用量百分比 + 花费(美元)。
+/// 个人版数据在 individualUsage.plan;企业/团队版在 teamUsage.pooled(共享池)
+/// + individualUsage.overall(个人花费),统一映射到同一组字段。
+public struct CursorUsage: Sendable, Equatable {
+    public var planPct: Int?
+    public var planUsedUSD: Double?
+    public var planLimitUSD: Double?
+    public var onDemandUsedUSD: Double?
+    public var onDemandLimitUSD: Double?
+    /// 企业/团队版:本人在共享池里的花费
+    public var personalUsedUSD: Double?
+    public var billingCycleEnd: Date?
+    public var updatedAt: Date
+
+    public init(planPct: Int? = nil,
+                planUsedUSD: Double? = nil, planLimitUSD: Double? = nil,
+                onDemandUsedUSD: Double? = nil, onDemandLimitUSD: Double? = nil,
+                personalUsedUSD: Double? = nil,
+                billingCycleEnd: Date? = nil, updatedAt: Date = Date()) {
+        self.planPct = planPct
+        self.planUsedUSD = planUsedUSD
+        self.planLimitUSD = planLimitUSD
+        self.onDemandUsedUSD = onDemandUsedUSD
+        self.onDemandLimitUSD = onDemandLimitUSD
+        self.personalUsedUSD = personalUsedUSD
+        self.billingCycleEnd = billingCycleEnd
         self.updatedAt = updatedAt
     }
 }

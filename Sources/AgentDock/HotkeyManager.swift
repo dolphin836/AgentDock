@@ -2,7 +2,7 @@ import AppKit
 import Carbon.HIToolbox
 
 enum AppInfo {
-    static let version = "0.1.0"
+    static let version = "0.2.0"
 }
 
 /// 全局快捷键(Carbon RegisterEventHotKey,无需辅助功能授权)。

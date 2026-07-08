@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VERSION="0.1.0"
+VERSION="0.2.0"
 # 通用二进制:Intel 机器上纯 arm64 的 App 能安装但无法启动(无提示),必须双架构
 BIN=".build/apple/Products/Release"
 APP="dist/AgentDock.app"
@@ -130,8 +130,10 @@ ln -s /Applications "$STAGING/Applications"
 hdiutil create -volname "AgentDock" -srcfolder "$STAGING" -ov -format UDZO "$DMG" >/dev/null
 rm -rf "$STAGING"
 
-echo "[7/7] 发布到 site/(pkg + version.json 更新源)…"
+echo "[7/7] 发布到 site/(pkg + version.json 更新源 + 下载链接)…"
+rm -f site/AgentDock-*.pkg
 cp "$PKG" site/
+sed -i '' -E "s/AgentDock-[0-9.]+\.pkg/AgentDock-$VERSION.pkg/g; s/>v[0-9]+\.[0-9]+\.[0-9]+</>v$VERSION</g" site/index.html
 cat > site/version.json <<JSON
 {
   "version": "$VERSION",

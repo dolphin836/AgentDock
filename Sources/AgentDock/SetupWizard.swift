@@ -45,11 +45,12 @@ struct SetupWizardView: View {
 
     private static let home = NSHomeDirectory()
     private static let emitPath = home + "/.agentdock/agentdock-emit"
-    private let totalSteps = 4
+    private let totalSteps = 5
 
     private var stepTitles: [String] {
         [settings.t("Language", "语言"),
          settings.t("Launch at Login", "开机自启"),
+         settings.t("Keep Awake", "防休眠"),
          settings.t("Integrations", "Agent 集成"),
          settings.t("Permissions", "系统权限")]
     }
@@ -63,7 +64,8 @@ struct SetupWizardView: View {
                 switch step {
                 case 0: languageStep
                 case 1: autostartStep
-                case 2: integrationsStep
+                case 2: keepAwakeStep
+                case 3: integrationsStep
                 default: permissionsStep
                 }
             }
@@ -134,11 +136,33 @@ struct SetupWizardView: View {
         }
     }
 
-    // MARK: 步骤 3:集成
+    // MARK: 步骤 3:防休眠
+
+    private var keepAwakeStep: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            stepHeading(stepTitles[2],
+                        settings.t("Prevent your Mac from idle-sleeping while an agent task is running, so long tasks don't get suspended midway.",
+                                   "Agent 任务进行中阻止 Mac 闲置休眠,长任务不会跑到一半被挂起。"))
+            bigOption(settings.t("Enable (recommended)", "开启(推荐)"),
+                      active: settings.keepAwakeWhileRunning) {
+                settings.keepAwakeWhileRunning = true
+            }
+            bigOption(settings.t("Not now", "暂不开启"),
+                      active: !settings.keepAwakeWhileRunning) {
+                settings.keepAwakeWhileRunning = false
+            }
+            Text(settings.t("Only active while a task is running; released the moment all agents go idle. Does not affect lid-close sleep.",
+                            "仅在有任务运行时生效,全部空闲立即释放;不影响合盖休眠。"))
+                .font(Theme.mono(9))
+                .foregroundStyle(Theme.text4)
+        }
+    }
+
+    // MARK: 步骤 4:集成
 
     private var integrationsStep: some View {
         VStack(alignment: .leading, spacing: 10) {
-            stepHeading(stepTitles[2],
+            stepHeading(stepTitles[3],
                         settings.t("Register the event emitter into each agent for sub-second status and in-panel approvals.",
                                    "把事件发射器注册进各 agent,获得亚秒级状态与面板内审批。"))
             Group {
@@ -185,12 +209,12 @@ struct SetupWizardView: View {
         .padding(.vertical, 5)
     }
 
-    // MARK: 步骤 4:权限
+    // MARK: 步骤 5:权限
 
     private var permissionsStep: some View {
         let granted = PermissionGuide.accessibilityGranted()
         return VStack(alignment: .leading, spacing: 14) {
-            stepHeading(stepTitles[3],
+            stepHeading(stepTitles[4],
                         settings.t("Optional system permissions.", "可选的系统权限,跳过不影响核心功能。"))
             HStack(spacing: 10) {
                 Text(settings.t("Accessibility", "辅助功能"))
