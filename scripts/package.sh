@@ -94,12 +94,22 @@ h2 { font-size: 15px; }
 </body></html>
 HTML
 
-pkgbuild --component "$APP" \
-         --install-location /Applications \
+# 必须关闭 bundle relocation:默认 true 时,若目标机上存在同 bundle ID 的旧拷贝
+# (开发机的 dist/、用户从 DMG 拖过的副本…),安装器会把安装目标改到那份拷贝,
+# /Applications 里就"找不到 App",postinstall 的自动启动也会失败
+PKGFILES="dist/pkgroot"
+mkdir -p "$PKGFILES/Applications"
+cp -R "$APP" "$PKGFILES/Applications/"
+pkgbuild --analyze --root "$PKGFILES" "$PKGROOT/component.plist" >/dev/null
+/usr/libexec/PlistBuddy -c "Set :0:BundleIsRelocatable false" "$PKGROOT/component.plist"
+pkgbuild --root "$PKGFILES" \
+         --component-plist "$PKGROOT/component.plist" \
+         --install-location / \
          --scripts "$PKGROOT/scripts" \
          --identifier dev.agentdock.AgentDock \
          --version "$VERSION" \
          "dist/AgentDock-component.pkg" >/dev/null
+rm -rf "$PKGFILES"
 
 cat > "$PKGROOT/distribution.xml" <<DIST
 <?xml version="1.0" encoding="utf-8"?>
