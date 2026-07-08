@@ -24,15 +24,32 @@ import Foundation
 
     @Test func metricsAttachOnlyToExistingSession() {
         let store = SessionStore()
-        store.apply(.metrics(sessionId: "ghost", Metrics(model: "Opus"), nil))
+        store.apply(.metrics(sessionId: "ghost", kind: .claudeCode, Metrics(model: "Opus"), nil))
         #expect(store.sessions.isEmpty)
 
         store.apply(hookEvent("SessionStart"))
-        store.apply(.metrics(sessionId: "s1", Metrics(model: "Opus", contextPct: 10),
+        store.apply(.metrics(sessionId: "s1", kind: .claudeCode, Metrics(model: "Opus", contextPct: 10),
                              RateLimits(fiveHourPct: 12, sevenDayPct: 34)))
         #expect(store.sessions[0].metrics?.model == "Opus")
         #expect(store.claudeRateLimits?.fiveHourPct == 12)
         #expect(store.claudeRateLimits?.sevenDayPct == 34)
+    }
+
+    @Test func codexTokenCountMetricsMergeAndSetCodexLimits() {
+        let store = SessionStore()
+        store.apply(.event(AgentEvent(sessionId: "t1", kind: .codex, cwd: "/x/p",
+                                      name: "task_started")))
+        // sqlite 回填带来的模型名
+        store.apply(.metrics(sessionId: "t1", kind: .codex, Metrics(model: "gpt-5.5"), nil))
+        // token_count 只带 ctx/tokens:按字段合并,模型名不能被抹掉
+        store.apply(.metrics(sessionId: "t1", kind: .codex,
+                             Metrics(contextPct: 9, totalTokens: 24057),
+                             RateLimits(fiveHourPct: 1, sevenDayPct: 98)))
+        #expect(store.sessions[0].metrics?.model == "gpt-5.5")
+        #expect(store.sessions[0].metrics?.contextPct == 9)
+        #expect(store.sessions[0].metrics?.totalTokens == 24057)
+        #expect(store.codexRateLimits?.sevenDayPct == 98)
+        #expect(store.claudeRateLimits == nil)  // codex 限额不能串到 claude
     }
 
     @Test func recentEventsCappedAt20() {

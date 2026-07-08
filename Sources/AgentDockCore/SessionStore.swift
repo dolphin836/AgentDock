@@ -16,8 +16,52 @@ public final class SessionStore {
     /// Claude 会话准入校验(注册表过滤子 agent / 工具会话);nil = 不过滤
     public var claudeSessionValidator: ((String) -> Bool)?
 
+    /// Codex 会话存活判定(按 cwd 匹配活进程);nil = 不判定。
+    /// CLI 退出后 SQLite/rollout 都不会记录死亡,只能靠进程表反查。
+    public var codexLivenessCheck: ((AgentSession) -> Bool)?
+
+    /// Cursor 会话准入校验(过滤 Task/best-of-N 派生的子 agent);nil = 不过滤
+    public var cursorSessionValidator: ((String) -> Bool)?
+
+    /// 状态转换观察者(历史记录用):newState = nil 表示会话被移除
+    public var transitionObserver: ((_ sessionId: String, _ kind: AgentKind, _ project: String,
+                                     _ newState: SessionState?) -> Void)?
+    /// token 变化观察者(历史记录用)
+    public var tokenObserver: ((_ sessionId: String, _ kind: AgentKind, _ tokens: Int) -> Void)?
+    private var observedStates: [String: SessionState] = [:]
+    private var observedTokens: [String: Int] = [:]
+    private var observedMeta: [String: (kind: AgentKind, project: String)] = [:]
+
+    /// 对比上次快照,把状态/token 变化通知观察者。
+    /// 集中做 diff 而不是在每个修改点埋回调:mutation 入口多(事件/回填/清理/审批),
+    /// 漏一个就丢数据,快照对比天然全覆盖。
+    private func notifyChanges() {
+        guard transitionObserver != nil || tokenObserver != nil else { return }
+        var alive = Set<String>()
+        for session in sessions {
+            alive.insert(session.id)
+            observedMeta[session.id] = (session.kind, session.projectName)
+            if observedStates[session.id] != session.state {
+                observedStates[session.id] = session.state
+                transitionObserver?(session.id, session.kind, session.projectName, session.state)
+            }
+            if let tokens = session.metrics?.totalTokens, observedTokens[session.id] != tokens {
+                observedTokens[session.id] = tokens
+                tokenObserver?(session.id, session.kind, tokens)
+            }
+        }
+        for (id, _) in observedStates where !alive.contains(id) {
+            if let meta = observedMeta[id] {
+                transitionObserver?(id, meta.kind, meta.project, nil)
+            }
+            observedStates[id] = nil
+            observedTokens[id] = nil
+            observedMeta[id] = nil
+        }
+    }
+
     /// 账号级限额(展开面板顶部展示)
-    public private(set) var claudeRateLimits: RateLimits?
+    public var claudeRateLimits: RateLimits?
     public var codexRateLimits: RateLimits?
 
     /// 等待用户 Yes/No 的权限审批请求
@@ -49,6 +93,7 @@ public final class SessionStore {
             sessions[i].state = .waitingApproval
             sessions[i].lastActivity = approval.createdAt
         }
+        notifyChanges()
     }
 
     public func approval(for sessionId: String) -> PendingApproval? {
@@ -64,6 +109,7 @@ public final class SessionStore {
             sessions[j].state = .thinking
             sessions[j].lastActivity = Date()
         }
+        notifyChanges()
     }
 
     public init() {}
@@ -78,6 +124,9 @@ public final class SessionStore {
             // 未注册的 claude 会话(后台子 agent)不展示
             if event.kind == .claudeCode,
                let validator = claudeSessionValidator, !validator(event.sessionId) { return }
+            // Cursor 子 agent 会话不展示
+            if event.kind == .cursor,
+               let validator = cursorSessionValidator, !validator(event.sessionId) { return }
             var session = sessions.first(where: { $0.id == event.sessionId })
                 ?? AgentSession(
                     id: event.sessionId, kind: event.kind,
@@ -88,6 +137,11 @@ public final class SessionStore {
                 session.projectName = Self.projectName(from: cwd)
             }
             if let app = event.appPath { session.appPath = app }
+            if let model = event.model {
+                var m = session.metrics ?? Metrics()
+                m.model = model
+                session.metrics = m
+            }
             session.state = mapEventToState(event, current: session.state)
             session.recentEvents.append(event)
             if session.recentEvents.count > Self.maxRecentEvents {
@@ -95,42 +149,106 @@ public final class SessionStore {
             }
             session.lastActivity = event.timestamp
             upsert(session)
-        case .metrics(let sessionId, let metrics, let limits):
-            if let limits { claudeRateLimits = limits }
+        case .metrics(let sessionId, let kind, let metrics, let limits):
+            if let limits {
+                switch kind {
+                case .claudeCode: claudeRateLimits = limits
+                case .codex: codexRateLimits = limits
+                case .cursor: break
+                }
+            }
             guard var session = sessions.first(where: { $0.id == sessionId }) else { return }
-            session.metrics = metrics
+            // 按字段合并:各来源只带部分字段(codex token_count 无 model,cursor hook 只有 model)
+            var merged = session.metrics ?? Metrics()
+            if let v = metrics.model { merged.model = v }
+            if let v = metrics.contextPct { merged.contextPct = v }
+            if let v = metrics.totalTokens { merged.totalTokens = v }
+            if let v = metrics.costUSD { merged.costUSD = v }
+            session.metrics = merged
             session.lastActivity = Date()
             upsert(session)
         }
+        notifyChanges()
     }
 
     /// 回填磁盘扫描到的会话:不存在则插入;已存在但磁盘更新(transcript 有新写入)
-    /// 且当前没有更新的实时事件时,刷新活跃时间并把 disconnected 拉回 waitingInput。
-    public func backfill(_ scanned: [AgentSession]) {
+    /// 时刷新活跃时间/指标。明确的 done/approval 可修正旧状态,普通 waiting 不覆盖实时运行态。
+    public func backfill(_ scanned: [AgentSession], now: Date = Date()) {
         // 注册表变化时(子 agent 结束、会话退出),清掉已不合法的 claude 会话
         if let validator = claudeSessionValidator {
             sessions.removeAll { $0.kind == .claudeCode && !validator($0.id) }
         }
+        if let validator = cursorSessionValidator {
+            sessions.removeAll { $0.kind == .cursor && !validator($0.id) }
+        }
         for candidate in scanned {
             if candidate.kind == .claudeCode,
                let validator = claudeSessionValidator, !validator(candidate.id) { continue }
+            if candidate.kind == .cursor,
+               let validator = cursorSessionValidator, !validator(candidate.id) { continue }
             if let i = sessions.firstIndex(where: { $0.id == candidate.id }) {
+                if sessions[i].appPath == nil, let app = candidate.appPath {
+                    sessions[i].appPath = app
+                }
+                // tailer 只有文件名没有 cwd,由磁盘扫描/SQLite 的候选补上
+                if sessions[i].cwd.isEmpty, !candidate.cwd.isEmpty {
+                    sessions[i].cwd = candidate.cwd
+                    sessions[i].projectName = candidate.projectName
+                }
                 if candidate.lastActivity > sessions[i].lastActivity {
                     // 磁盘比内存新:会话在别处有了新动静,刷新活跃时间和指标
                     sessions[i].lastActivity = candidate.lastActivity
                     if let m = candidate.metrics { sessions[i].metrics = m }
-                    if sessions[i].state == .disconnected {
-                        sessions[i].state = .waitingInput
+                    if shouldAdoptBackfillState(current: sessions[i].state, candidate: candidate.state) {
+                        sessions[i].state = candidate.state
                     }
-                } else if sessions[i].metrics == nil, let m = candidate.metrics {
-                    // 内存较新但从没拿到过指标:用磁盘提取的补上
+                } else if let cm = candidate.metrics {
+                    // 内存较新:不整体覆盖,只补上事件流拿不到的缺失字段
+                    // (如 Cursor hook 只带模型名,ctx%/tokens 只在磁盘状态库里)
+                    var m = sessions[i].metrics ?? Metrics()
+                    if m.model == nil { m.model = cm.model }
+                    if m.contextPct == nil { m.contextPct = cm.contextPct }
+                    if m.totalTokens == nil { m.totalTokens = cm.totalTokens }
+                    if m.costUSD == nil { m.costUSD = cm.costUSD }
                     sessions[i].metrics = m
                 }
+                // 磁盘无新动静时只允许终态修正(done/审批)。活跃态不采纳,
+                // 否则被 prune 判为 disconnected 的僵尸会话会被每轮回填复活成 thinking。
+                if candidate.lastActivity == sessions[i].lastActivity,
+                   candidate.state == .done || candidate.state == .waitingApproval {
+                    sessions[i].state = candidate.state
+                }
             } else {
-                sessions.append(candidate)
+                var fresh = candidate
+                // 插入即适用断连规则,避免长时间没动静的会话以 thinking 挂在「进行中」
+                if now.timeIntervalSince(fresh.lastActivity) > disconnectAfter {
+                    fresh.state = .disconnected
+                }
+                sessions.append(fresh)
+            }
+        }
+        // CLI 已退出的 codex 会话不能继续标「等你」:SQLite/rollout 都不记录进程死亡,
+        // 只能靠进程表反查。只收敛等待类状态;活跃态有实时事件兜着,避免与桌面端线程互相打架。
+        if let isAlive = codexLivenessCheck {
+            for i in sessions.indices where sessions[i].kind == .codex {
+                switch sessions[i].state {
+                case .idle, .waitingInput, .waitingApproval:
+                    if !isAlive(sessions[i]) { sessions[i].state = .done }
+                default:
+                    break
+                }
             }
         }
         sessions.sort { $0.lastActivity > $1.lastActivity }
+        notifyChanges()
+    }
+
+    /// 权威状态覆盖:来源比事件流更可信时使用(如 Claude 注册表的实时 status,
+    /// 在 hooks 不可用时它是 Claude Code 自己上报的唯一真状态)。不影响活跃时间。
+    public func applyAuthoritativeState(id: String, state: SessionState) {
+        guard let i = sessions.firstIndex(where: { $0.id == id }) else { return }
+        sessions[i].state = state
+        notifyChanges()
     }
 
     public func prune(now: Date = Date()) {
@@ -141,6 +259,7 @@ public final class SessionStore {
         where now.timeIntervalSince(sessions[i].lastActivity) > disconnectAfter {
             sessions[i].state = .disconnected
         }
+        notifyChanges()
     }
 
     private func upsert(_ session: AgentSession) {
@@ -150,6 +269,19 @@ public final class SessionStore {
             sessions.append(session)
         }
         sessions.sort { $0.lastActivity > $1.lastActivity }
+    }
+
+    private func shouldAdoptBackfillState(current: SessionState, candidate: SessionState) -> Bool {
+        switch candidate {
+        case .done, .waitingApproval:
+            return true
+        case .thinking, .runningTool:
+            return current == .idle || current == .waitingInput || current == .disconnected
+        case .waitingInput:
+            return current == .disconnected
+        case .idle, .disconnected:
+            return false
+        }
     }
 
     static func projectName(from cwd: String?) -> String {

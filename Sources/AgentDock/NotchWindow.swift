@@ -3,12 +3,26 @@ import SwiftUI
 import AgentDockCore
 
 /// 悬停状态:由窗口层的全局鼠标监听驱动,视图层只读
+/// 展开面板的页面
+enum PanelTab {
+    case sessions, usage, settings
+}
+
 @MainActor
 @Observable
 final class HoverState {
     var hovering = false
+    /// 快捷键固定展开:与悬停互相独立,再按一次取消
+    var pinnedOpen = false
+    /// 展开面板当前页
+    var activeTab: PanelTab = .sessions
     /// 当前实际渲染的内容尺寸(由视图上报),用于精确判定悬停区域
     var contentSize: CGSize = .zero
+}
+
+/// 无边框面板默认不能成为 key window;快捷键录制需要接收键盘事件
+final class KeyablePanel: NSPanel {
+    override var canBecomeKey: Bool { true }
 }
 
 /// 悬浮在刘海周围的无边框面板。收起态只显示状态条,悬停/告警时展开。
@@ -18,10 +32,12 @@ final class NotchWindow {
     private let store: SessionStore
     let hoverState = HoverState()
     private var monitors: [Any] = []
+    /// 悬停展开的回调(用于按需刷新限额等「用户正在看」才需要新鲜的数据)
+    var onHoverBegan: (() -> Void)?
 
     init(store: SessionStore, settings: AppSettings) {
         self.store = store
-        panel = NSPanel(
+        panel = KeyablePanel(
             contentRect: .zero,
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered, defer: false)
@@ -63,8 +79,19 @@ final class NotchWindow {
         } as Any)
     }
 
+    /// 设置里切换了展示屏幕:立即重挂
+    func reposition() {
+        position()
+    }
+
+    /// 快捷键录制期间需要键盘焦点
+    func makeKeyForTyping() {
+        NSApp.activate(ignoringOtherApps: true)
+        panel.makeKey()
+    }
+
     private func updateHover() {
-        guard let screen = NSScreen.screens.first else { return }
+        guard let screen = AppSettings.shared.targetScreen else { return }
         let size = hoverState.contentSize
         guard size.width > 1, size.height > 1 else {
             hoverState.hovering = false
@@ -77,13 +104,13 @@ final class NotchWindow {
         let point = NSEvent.mouseLocation
         if hoverState.hovering != rect.contains(point) {
             hoverState.hovering = rect.contains(point)
+            if hoverState.hovering { onHoverBegan?() }
         }
     }
 
     private func position() {
-        // 始终挂在主屏(系统设置里带菜单栏的那块,screens.first);
-        // 主屏没有物理刘海时,三段式布局的中段充当"虚拟刘海"
-        guard let screen = NSScreen.screens.first else { return }
+        // 挂靠屏幕跟随设置(默认主屏);无物理刘海时中段充当"虚拟刘海"
+        guard let screen = AppSettings.shared.targetScreen else { return }
         let width: CGFloat = 900
         let height: CGFloat = 600  // 面板最大展开高度,空白区不影响悬停判定
         let x = screen.frame.midX - width / 2

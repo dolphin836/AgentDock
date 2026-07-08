@@ -28,6 +28,40 @@ import Darwin
         }
         let ids = ClaudeSessionRegistry(dir: dir).allowedSessionIds()
         #expect(ids == ["s-user", "s-desktop"])
+
+        // entries 带注册进程 pid,供宿主 App 解析用
+        let allowed = ClaudeSessionRegistry(dir: dir).allowedEntries()
+        #expect(Set(allowed.map(\.sessionId)) == ["s-user", "s-desktop"])
+        #expect(allowed.allSatisfy { $0.pid == Int32(alive) })
+    }
+
+    @Test func registryStatusMapsToSessionState() {
+        func entry(_ status: String?, _ waitingFor: String? = nil) -> ClaudeSessionRegistry.Entry {
+            ClaudeSessionRegistry.Entry(sessionId: "s", pid: 1, status: status, waitingFor: waitingFor)
+        }
+        #expect(entry("running").sessionState == .thinking)
+        #expect(entry("idle").sessionState == .waitingInput)
+        #expect(entry("waiting", "permission prompt").sessionState == .waitingApproval)
+        #expect(entry("waiting").sessionState == .waitingInput)
+        #expect(entry(nil).sessionState == nil)
+        #expect(entry("unknown-future-status").sessionState == nil)
+    }
+}
+
+@Suite struct HostAppResolverTests {
+    @Test func readsProcessInfoOfSelf() {
+        let pid = getpid()
+        let exe = HostAppResolver.executablePath(of: pid)
+        #expect(exe?.isEmpty == false)
+        #expect(HostAppResolver.parentPid(of: pid) == getppid())
+        let cwd = HostAppResolver.currentWorkingDirectory(of: pid)
+        #expect(cwd?.hasPrefix("/") == true)
+    }
+
+    @Test func appPathWalksParentChainWithoutCrashing() {
+        // 结果取决于测试运行环境(终端/IDE),只验证不崩溃且返回 .app 结尾或 nil
+        let app = HostAppResolver.appPath(forPid: getpid())
+        if let app { #expect(app.hasSuffix(".app")) }
     }
 }
 

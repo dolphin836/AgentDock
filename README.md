@@ -7,15 +7,18 @@ macOS 刘海扩展应用:实时显示本机 AI Agent(Claude Code / Codex CLI)的
 - Agent 等待审批时面板自动展开 4 秒提醒
 - 点击卡片跳转到对应的 iTerm2 / Terminal / VS Code 窗口
 
-## 运行
+## 安装
 
 ```bash
-swift run AgentDock
+./scripts/install.sh
 ```
+
+交互式完成:语言 / 开机自启 / 三家 Agent 集成 / 系统权限授权,并以 launchd 启动。
+开发调试直接 `swift run AgentDock`;无头配置模式 `AgentDock --setup key=value ...`。
 
 ## 接入 Agent
 
-菜单栏 `cpu` 图标 → 「安装 Claude Code 集成」/「安装 Codex 集成」。
+安装脚本已含;也可在展开面板 → 设置 tab → 「集成」逐个安装/卸载。
 
 - Claude Code:向 `~/.claude/settings.json` 注册 7 个 hooks + statusLine(原 statusline 输出会被透传;安装前自动备份为 `settings.json.agentdock-backup`,可一键卸载还原)
 - Codex:向 `~/.codex/config.toml` 追加 `notify` 行,并后台 tail `~/.codex/sessions` 的 rollout JSONL 推断中间状态

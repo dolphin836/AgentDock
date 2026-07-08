@@ -25,7 +25,8 @@ private func tempDir() -> String {
         let json = try JSONSerialization.jsonObject(
             with: Data(contentsOf: URL(fileURLWithPath: dir + "/settings.json"))) as! [String: Any]
         let hooks = json["hooks"] as! [String: Any]
-        #expect(hooks.count == 8)  // 7 个事件 hook + PermissionRequest 审批 hook
+        // 全部事件 hook + PermissionRequest 审批 hook
+        #expect(hooks.count == ClaudeInstaller.hookEvents.count + 1)
         let perm = (hooks["PermissionRequest"] as! [[String: Any]])[0]["hooks"] as! [[String: Any]]
         #expect((perm[0]["command"] as! String).contains("permission"))
         #expect(perm[0]["timeout"] as? Int == 55)
@@ -104,11 +105,37 @@ private func tempDir() -> String {
         #expect(after.components(separatedBy: "# agentdock").count == 2)
     }
 
-    @Test func installRefusesWhenNotifyExists() throws {
+    @Test func installChainsWhenNotifyExists() throws {
         let dir = tempDir()
-        try "notify = [\"other\"]\n".write(toFile: dir + "/config.toml", atomically: true, encoding: .utf8)
-        let installer = CodexInstaller(configPath: dir + "/config.toml", emitPath: "/x/agentdock-emit")
-        #expect(throws: (any Error).self) { try installer.install() }
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        try "notify = [\"/Apps/Other Notifier\", \"turn-ended\"]\nmodel = \"gpt-5\"\n"
+            .write(toFile: dir + "/config.toml", atomically: true, encoding: .utf8)
+        let installer = CodexInstaller(configPath: dir + "/config.toml",
+                                       emitPath: dir + "/agentdock-emit")
+        try installer.install()
+        #expect(installer.isInstalled)
+
+        let text = try String(contentsOfFile: dir + "/config.toml", encoding: .utf8)
+        // 原 notify 被注释保存,新 notify 指向链式脚本
+        #expect(text.contains("# notify = [\"/Apps/Other Notifier\", \"turn-ended\"] # agentdock-preserved"))
+        #expect(text.contains(#"notify = ["\#(dir)/codex-notify-chain"] # agentdock"#))
+        // 链式脚本先转发原程序,再发 AgentDock
+        let script = try String(contentsOfFile: installer.chainScriptPath, encoding: .utf8)
+        #expect(script.contains("'/Apps/Other Notifier' 'turn-ended' \"$@\""))
+        #expect(script.contains("agentdock-emit\" codex notify"))
+
+        // 卸载:还原原 notify 行,删除链式脚本
+        try installer.uninstall()
+        let restored = try String(contentsOfFile: dir + "/config.toml", encoding: .utf8)
+        #expect(restored.contains("notify = [\"/Apps/Other Notifier\", \"turn-ended\"]"))
+        #expect(!restored.contains("agentdock"))
+        #expect(!FileManager.default.fileExists(atPath: installer.chainScriptPath))
+    }
+
+    @Test func parseNotifyArgs() {
+        #expect(CodexInstaller.parseNotifyArgs(#"notify = ["/a b/c", "x"]"#) == ["/a b/c", "x"])
+        #expect(CodexInstaller.parseNotifyArgs(#"notify = []"#) == nil)
+        #expect(CodexInstaller.parseNotifyArgs("nonsense") == nil)
     }
 
     @Test func uninstallRemovesOnlyOurLine() throws {
@@ -123,14 +150,60 @@ private func tempDir() -> String {
     }
 }
 
+@Suite struct CursorInstallerTests {
+    private func makeInstaller() -> (CursorInstaller, String) {
+        let dir = tempDir()
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let path = dir + "/hooks.json"
+        return (CursorInstaller(hooksPath: path, emitPath: "/x/agentdock-emit"), path)
+    }
+
+    @Test func installIntoMissingFile() throws {
+        let (installer, path) = makeInstaller()
+        try installer.install()
+        #expect(installer.isInstalled)
+        let obj = try JSONSerialization.jsonObject(
+            with: FileManager.default.contents(atPath: path)!) as! [String: Any]
+        #expect(obj["version"] as? Int == 1)
+        let hooks = obj["hooks"] as! [String: Any]
+        for event in CursorInstaller.hookEvents {
+            let entries = hooks[event] as! [[String: Any]]
+            #expect(entries.contains { ($0["command"] as! String).contains("agentdock-emit") })
+        }
+    }
+
+    @Test func installPreservesUserHooksAndIsIdempotent() throws {
+        let (installer, path) = makeInstaller()
+        let existing = #"{"version":1,"hooks":{"preToolUse":[{"command":"my-hook.sh"}]}}"#
+        try existing.write(toFile: path, atomically: true, encoding: .utf8)
+
+        try installer.install()
+        try installer.install()  // 幂等
+
+        let obj = try JSONSerialization.jsonObject(
+            with: FileManager.default.contents(atPath: path)!) as! [String: Any]
+        let pre = (obj["hooks"] as! [String: Any])["preToolUse"] as! [[String: Any]]
+        #expect(pre.count == 2)  // 用户的 + 我们的,不重复追加
+        #expect(pre.contains { $0["command"] as? String == "my-hook.sh" })
+
+        try installer.uninstall()
+        #expect(!installer.isInstalled)
+        let after = try JSONSerialization.jsonObject(
+            with: FileManager.default.contents(atPath: path)!) as! [String: Any]
+        let afterPre = (after["hooks"] as! [String: Any])["preToolUse"] as! [[String: Any]]
+        #expect(afterPre.map { $0["command"] as? String } == ["my-hook.sh"])
+        #expect((after["hooks"] as! [String: Any])["stop"] == nil)
+    }
+}
+
 @Suite struct CodexSessionTailerTests {
     @Test func tailsAppendedLines() async throws {
         let dir = tempDir()
-        let file = dir + "/rollout-2026-07-02-abc.jsonl"
+        let file = dir + "/rollout-2026-07-02T10-00-00-abc.jsonl"
         try "old line\n".write(toFile: file, atomically: true, encoding: .utf8)
 
         let received = Mutex<[(String, String)]>([])
-        let tailer = CodexSessionTailer(root: dir) { sid, line in
+        let tailer = CodexSessionTailer(root: dir) { _, sid, line in
             received.withLock { $0.append((sid, String(decoding: line, as: UTF8.self))) }
         }
         tailer.start()
@@ -145,6 +218,6 @@ private func tempDir() -> String {
         try await Task.sleep(for: .milliseconds(1500))
         let lines = received.withLock { $0 }
         #expect(lines.map(\.1) == ["new line 1", "new line 2"])  // 旧内容不重放
-        #expect(lines.allSatisfy { $0.0 == "rollout-2026-07-02-abc" })
+        #expect(lines.allSatisfy { $0.0 == "abc" })  // sessionId 是文件名中的线程 id
     }
 }

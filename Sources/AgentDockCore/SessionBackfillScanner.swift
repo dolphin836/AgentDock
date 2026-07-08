@@ -29,24 +29,132 @@ public enum SessionBackfillScanner {
                   let mtime = attrs[.modificationDate] as? Date,
                   now.timeIntervalSince(mtime) < maxAge
             else { continue }
-            let id = ((rel as NSString).lastPathComponent as NSString).deletingPathExtension
+            var id = ((rel as NSString).lastPathComponent as NSString).deletingPathExtension
+            if kind == .codex { id = codexThreadId(fromRolloutName: id) }
             let cwd = extractCwd(path: path)
             // 隐藏目录下的会话是工具自动起的后台进程(如 claude-mem 的 observer),不是用户会话
             if let cwd, isHiddenPath(cwd) { continue }
+            var state = SessionState.waitingInput
+            var metrics: Metrics?
+            switch kind {
+            case .codex:
+                let snapshot = codexTailSnapshot(path: path)
+                state = snapshot.state ?? .waitingInput
+                metrics = snapshot.metrics
+            case .claudeCode:
+                metrics = extractMetrics(path: path)
+            case .cursor:
+                break
+            }
             sessions.append(AgentSession(
                 id: id, kind: kind,
                 projectName: cwd.map { ($0 as NSString).lastPathComponent } ?? kind.rawValue,
                 cwd: cwd ?? "",
-                state: .waitingInput,
-                metrics: kind == .claudeCode ? extractMetrics(path: path) : nil,
+                state: state,
+                metrics: metrics,
                 lastActivity: mtime))
         }
         return sessions
     }
 
+    /// ~/.cursor/projects/<项目slug>/agent-transcripts/**/<会话uuid>.jsonl
+    /// slug 是把路径分隔符换成 "-" 的有损编码,需回猜真实 cwd;猜不出的(临时目录、
+    /// empty-window 等)不是用户项目会话,跳过。
+    public static func scanCursor(projectsRoot: String,
+                                  now: Date = Date(),
+                                  maxAge: TimeInterval = 2 * 60 * 60,
+                                  excludedCwdPrefixes: [String] = ["/var/folders/", "/tmp/", "/private/"])
+    -> [AgentSession] {
+        guard let slugs = try? FileManager.default.contentsOfDirectory(atPath: projectsRoot) else { return [] }
+        var sessions: [AgentSession] = []
+        for slug in slugs {
+            guard let cwd = resolvePathSlug(slug), !isHiddenPath(cwd),
+                  !excludedCwdPrefixes.contains(where: { cwd.hasPrefix($0) })
+            else { continue }
+            let dir = (projectsRoot as NSString).appendingPathComponent(slug + "/agent-transcripts")
+            guard let enumerator = FileManager.default.enumerator(atPath: dir) else { continue }
+            // <会话>/subagents/ 下是 Task 派生的子 agent transcript,不是用户会话
+            for case let rel as String in enumerator
+            where rel.hasSuffix(".jsonl") && !rel.contains("subagents/") {
+                let path = (dir as NSString).appendingPathComponent(rel)
+                guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+                      let mtime = attrs[.modificationDate] as? Date,
+                      now.timeIntervalSince(mtime) < maxAge
+                else { continue }
+                let id = ((rel as NSString).lastPathComponent as NSString).deletingPathExtension
+                // 无法判断聊天窗口是否还开着,默认 done 进「最近」;实时 hook 会纠正活跃态
+                sessions.append(AgentSession(
+                    id: id, kind: .cursor,
+                    projectName: (cwd as NSString).lastPathComponent,
+                    cwd: cwd,
+                    state: inferCursorState(path: path) ?? .done,
+                    lastActivity: mtime))
+            }
+        }
+        return sessions
+    }
+
+    /// "Users-eric-Work-Code-platform-debit-card" → "/Users/eric/Work/Code/platform-debit-card"。
+    /// "-" 既可能是路径分隔也可能是目录名的一部分,按文件系统实际存在的目录回溯猜解。
+    public static func resolvePathSlug(
+        _ slug: String,
+        directoryExists: (String) -> Bool = { path in
+            var isDir: ObjCBool = false
+            return FileManager.default.fileExists(atPath: path, isDirectory: &isDir) && isDir.boolValue
+        }
+    ) -> String? {
+        let parts = slug.split(separator: "-", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count > 1, !parts[0].isEmpty else { return nil }
+        func search(_ index: Int, _ current: String) -> String? {
+            if index == parts.count {
+                return directoryExists(current) ? current : nil
+            }
+            // 优先当作更深一层目录;当前前缀必须真实存在才值得下钻
+            if directoryExists(current),
+               let hit = search(index + 1, current + "/" + parts[index]) { return hit }
+            // 否则视为目录名内的连字符
+            return search(index + 1, current + "-" + parts[index])
+        }
+        return search(1, "/" + parts[0])
+    }
+
+    /// 从 Cursor transcript 尾部倒推状态:turn_ended → done;
+    /// assistant 带 tool_use → runningTool;user/assistant 纯文本 → thinking(回合进行中)。
+    public static func inferCursorState(path: String) -> SessionState? {
+        guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+        defer { try? handle.close() }
+        guard let size = try? handle.seekToEnd(), size > 0 else { return nil }
+        let readLen = min(size, 256 * 1024)
+        try? handle.seek(toOffset: size - readLen)
+        guard let data = try? handle.readToEnd(), !data.isEmpty else { return nil }
+
+        for lineData in data.split(separator: UInt8(ascii: "\n")).reversed() {
+            guard let obj = (try? JSONSerialization.jsonObject(with: Data(lineData))) as? [String: Any]
+            else { continue }
+            if obj["type"] as? String == "turn_ended" { return .done }
+            guard let role = obj["role"] as? String else { continue }
+            if role == "user" { return .thinking }
+            if role == "assistant" {
+                let content = (obj["message"] as? [String: Any])?["content"] as? [[String: Any]] ?? []
+                let hasToolUse = content.contains { $0["type"] as? String == "tool_use" }
+                return hasToolUse ? .runningTool : .thinking
+            }
+        }
+        return nil
+    }
+
     /// cwd 中任一路径组件以 "." 开头即视为隐藏目录(如 ~/.claude-mem/observer-sessions)
     public static func isHiddenPath(_ path: String) -> Bool {
         path.split(separator: "/").contains { $0.hasPrefix(".") }
+    }
+
+    /// rollout 文件名形如 rollout-<YYYY-MM-DDTHH-mm-ss>-<thread-uuid>,提取 uuid 作为
+    /// sessionId,与 SQLite threads.id / notify 的 thread-id 对齐——否则同一会话
+    /// 会以两种 id 出现两条。不匹配该格式时原样返回。
+    public static func codexThreadId(fromRolloutName name: String) -> String {
+        let prefix = #"^rollout-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-"#
+        let stripped = name.replacingOccurrences(of: prefix, with: "", options: .regularExpression)
+        return stripped.isEmpty ? name : stripped
     }
 
     /// 从 transcript 尾部提取最近一条 assistant 消息的 usage/model,补齐离线会话的指标。
@@ -77,6 +185,41 @@ public enum SessionBackfillScanner {
             return m
         }
         return nil
+    }
+
+    /// 从 Codex rollout 尾部重放:状态事件推断当前状态(避免已完成的历史线程被
+    /// 误判成 waitingInput),token_count 事件提取 ctx/tokens 指标。
+    public static func codexTailSnapshot(path: String) -> (state: SessionState?, metrics: Metrics?) {
+        guard let handle = FileHandle(forReadingAtPath: path) else { return (nil, nil) }
+        defer { try? handle.close() }
+        guard let size = try? handle.seekToEnd(), size > 0 else { return (nil, nil) }
+        let readLen = min(size, 256 * 1024)
+        try? handle.seek(toOffset: size - readLen)
+        guard let data = try? handle.readToEnd(), !data.isEmpty else { return (nil, nil) }
+
+        var state = SessionState.waitingInput
+        var sawStateEvent = false
+        var metrics: Metrics?
+        for lineData in data.split(separator: UInt8(ascii: "\n")) where !lineData.isEmpty {
+            switch EventIngestor.parseCodexRolloutLine(
+                sessionId: "codex-backfill", cwd: nil, line: Data(lineData)) {
+            case .event(let event):
+                let next = mapEventToState(event, current: state)
+                if next != state {
+                    sawStateEvent = true
+                    state = next
+                }
+            case .metrics(_, _, let m, _):
+                metrics = m  // 取最后一条 token_count
+            case .ignored:
+                continue
+            }
+        }
+        return (sawStateEvent ? state : nil, metrics)
+    }
+
+    public static func inferCodexState(path: String) -> SessionState? {
+        codexTailSnapshot(path: path).state
     }
 
     /// transcript 头部一般带 "cwd":"..." 字段,取前 16KB 正则提取

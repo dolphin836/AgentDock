@@ -1,8 +1,8 @@
 import Foundation
 import SQLite3
 
-/// 新版 Codex(Desktop 0.138+)不再写 rollout JSONL,会话状态存于 ~/.codex/state_*.sqlite。
-/// 只读查询 threads 表,把近期活跃的线程映射为会话。
+/// 新版 Codex 的 thread 索引存于 ~/.codex/state_*.sqlite。
+/// 只读查询 threads 表,并借 rollout_path 回看尾部事件推断当前状态。
 public enum CodexStateReader {
 
     /// 在 ~/.codex 下找最新的 state_*.sqlite
@@ -32,7 +32,7 @@ public enum CodexStateReader {
 
         let cutoffMs = Int64((now.timeIntervalSince1970 - maxAge) * 1000)
         let sql = """
-        SELECT id, cwd, model, recency_at_ms FROM threads
+        SELECT id, cwd, model, rollout_path, recency_at_ms FROM threads
         WHERE archived = 0 AND recency_at_ms > ? ORDER BY recency_at_ms DESC LIMIT 50
         """
         var stmt: OpaquePointer?
@@ -46,13 +46,18 @@ public enum CodexStateReader {
                   let cwdC = sqlite3_column_text(stmt, 1) else { continue }
             let cwd = String(cString: cwdC)
             let model = sqlite3_column_text(stmt, 2).map { String(cString: $0) }
-            let recencyMs = sqlite3_column_int64(stmt, 3)
+            let rolloutPath = sqlite3_column_text(stmt, 3).map { String(cString: $0) }
+            let recencyMs = sqlite3_column_int64(stmt, 4)
+            // 状态与 ctx/tokens 都从 rollout 尾部拿(token_count 事件);模型名来自表
+            let snapshot = rolloutPath.map { SessionBackfillScanner.codexTailSnapshot(path: $0) }
+            var metrics = snapshot?.metrics ?? Metrics()
+            if metrics.model == nil { metrics.model = model }
             sessions.append(AgentSession(
                 id: String(cString: idC), kind: .codex,
                 projectName: (cwd as NSString).lastPathComponent,
                 cwd: cwd,
-                state: .waitingInput,
-                metrics: model.map { Metrics(model: $0) },
+                state: snapshot?.state ?? .waitingInput,
+                metrics: metrics,
                 lastActivity: Date(timeIntervalSince1970: Double(recencyMs) / 1000)))
         }
         return sessions

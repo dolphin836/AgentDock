@@ -1,8 +1,9 @@
 import Foundation
 
-public enum AgentKind: String, Codable, Sendable {
+public enum AgentKind: String, Codable, Sendable, CaseIterable {
     case claudeCode = "claude-code"
     case codex
+    case cursor
 }
 
 public enum SessionState: String, Codable, Sendable {
@@ -15,19 +16,25 @@ public struct AgentEvent: Sendable, Equatable {
     public let cwd: String?
     public let name: String
     public let detail: String?
+    /// 工具调用事件的工具名(detail 可能被文件名/命令覆盖,这里始终是工具本名)
+    public let tool: String?
     /// 宿主 App 的 .app 路径(由发射脚本沿父进程链探测)
     public let appPath: String?
+    /// 事件自带的模型名(Cursor hook 每个事件都带;其他 agent 走 statusline/SQLite)
+    public let model: String?
     public let timestamp: Date
 
     public init(sessionId: String, kind: AgentKind, cwd: String? = nil,
-                name: String, detail: String? = nil, appPath: String? = nil,
-                timestamp: Date = Date()) {
+                name: String, detail: String? = nil, tool: String? = nil,
+                appPath: String? = nil, model: String? = nil, timestamp: Date = Date()) {
         self.sessionId = sessionId
         self.kind = kind
         self.cwd = cwd
         self.name = name
         self.detail = detail
+        self.tool = tool
         self.appPath = appPath
+        self.model = model
         self.timestamp = timestamp
     }
 }

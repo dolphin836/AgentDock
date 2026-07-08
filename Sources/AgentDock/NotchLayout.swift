@@ -4,7 +4,8 @@ import AgentDockCore
 /// 收起态与展开态共用的布局尺寸:固定翼宽,总宽度恒定,任务轮播时不跳动
 @MainActor
 enum NotchLayout {
-    static var mainScreen: NSScreen? { NSScreen.screens.first }
+    /// 挂靠屏幕:跟随设置(默认主屏)
+    static var mainScreen: NSScreen? { AppSettings.shared.targetScreen }
 
     static var barHeight: CGFloat {
         guard let s = mainScreen else { return 32 }

@@ -24,59 +24,80 @@ struct CapsuleView: View {
                     left: AnyView(HStack(spacing: 5) {
                         AgentIcon(kind: primary.kind, spinning: true)
                         Text(primary.projectName)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.95))
+                            .font(Theme.mono(11, .semibold))
+                            .foregroundStyle(Theme.text1)
                             .lineLimit(1)
                             .truncationMode(.tail)
                     }),
-                    center: primary.latestText ?? "",
+                    center: AnyView(dotRow),
                     right: AnyView(HStack(spacing: 5) {
                         Text(elapsedText(primary, now: context.date))
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.6))
-                            .monospacedDigit()
-                        Text(settings.label(for: primary.state))
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(primary.state.dotColor)
-                            .lineLimit(1)
-                        StatusDot(state: primary.state)
+                            .font(Theme.mono(10, .medium))
+                            .foregroundStyle(Theme.text2)
+                        HStack(spacing: 5) {
+                            Text(primary.activityLabel(settings: settings))
+                                .font(Theme.mono(10, .medium))
+                                .foregroundStyle(primary.state.dotColor)
+                                .lineLimit(1)
+                            StatusGlyph(state: primary.state, size: 9)
+                        }
+                        .breathing(primary.state == .thinking || primary.state == .runningTool)
                     })
                 )
             }
         }
     }
 
-    /// 无运行任务时的汇总条:左翼 session 总数,右翼 agent 数
+    /// 无运行任务时的汇总条:左翼 ❯ + session 总数,中段状态点,右翼 agent 数
     private var summaryBar: some View {
         let stats = SessionStats(sessions: sessions, settings: settings)
         return bar(
             left: AnyView(HStack(spacing: 5) {
-                Image(systemName: "asterisk")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.5))
+                Text("❯")
+                    .font(Theme.mono(10, .bold))
+                    .foregroundStyle(Theme.phosphor.opacity(0.7))
                 Text(stats.sessionsText)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .font(Theme.mono(10, .medium))
+                    .foregroundStyle(Theme.text2)
             }),
-            center: "",
+            center: AnyView(dotRow),
             right: AnyView(Text(stats.agentsText)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white.opacity(0.7)))
+                .font(Theme.mono(10, .medium))
+                .foregroundStyle(Theme.text2))
         )
     }
 
+    /// 一排状态点:每个会话一个点,颜色即状态,一眼看出「几个在跑、几个在等我」。
+    /// 排序:等你处理 > 进行中 > 其他,重要的排前面(空间不够时先看到要紧的)
+    private var dotRow: some View {
+        let ordered = sessions.sorted { rank($0.state) < rank($1.state) }
+        return HStack(spacing: 4.5) {
+            ForEach(ordered.prefix(18)) { session in
+                Circle()
+                    .fill(session.state.dotColor)
+                    .frame(width: 5, height: 5)
+            }
+        }
+    }
+
+    private func rank(_ state: SessionState) -> Int {
+        switch state {
+        case .waitingApproval: 0
+        case .waitingInput: 1
+        case .thinking, .runningTool: 2
+        case .done, .idle: 3
+        case .disconnected: 4
+        }
+    }
+
     /// 统一的三段条骨架:左右翼固定宽、内容与边缘留 edgePadding,总宽与展开态一致
-    private func bar(left: AnyView, center: String, right: AnyView) -> some View {
+    private func bar(left: AnyView, center: AnyView, right: AnyView) -> some View {
         HStack(spacing: 0) {
             left
                 .padding(.leading, NotchLayout.edgePadding)
                 .frame(width: NotchLayout.wingWidth, alignment: .leading)
                 .frame(maxHeight: .infinity)
-            Text(center)
-                .font(.system(size: 10))
-                .foregroundStyle(.white.opacity(0.45))
-                .lineLimit(1)
-                .truncationMode(.tail)
+            center
                 .padding(.horizontal, 6)
                 .frame(width: NotchLayout.centerWidth)
                 .frame(maxHeight: .infinity)
@@ -101,9 +122,10 @@ struct CapsuleView: View {
 }
 
 extension AgentSession {
-    /// 本轮耗时:从最近一次 UserPromptSubmit 起算,退化为最后活动时间
+    /// 本轮耗时:从最近一次用户提交起算,退化为最后活动时间
     func turnElapsedText(now: Date = Date()) -> String {
-        let start = recentEvents.last(where: { $0.name == "UserPromptSubmit" })?.timestamp
+        let promptEvents: Set<String> = ["UserPromptSubmit", "beforeSubmitPrompt", "task_started"]
+        let start = recentEvents.last(where: { promptEvents.contains($0.name) })?.timestamp
             ?? lastActivity
         let seconds = max(0, Int(now.timeIntervalSince(start)))
         return seconds < 60 ? "\(seconds)s" : "\(seconds / 60)m \(seconds % 60)s"
@@ -132,27 +154,3 @@ struct SessionStats {
     }
 }
 
-extension AgentSession {
-    /// 最新一条有内容的动态文本(中段展示用)
-    var latestText: String? {
-        recentEvents.last(where: { $0.detail?.isEmpty == false })?.detail
-    }
-}
-
-/// 单个状态点;需要审批时脉冲闪烁
-struct StatusDot: View {
-    let state: SessionState
-    @State private var pulsing = false
-
-    var body: some View {
-        Circle()
-            .fill(state.dotColor)
-            .frame(width: 8, height: 8)
-            .opacity(state == .waitingApproval && pulsing ? 0.25 : 1)
-            .animation(state == .waitingApproval
-                       ? .easeInOut(duration: 0.6).repeatForever(autoreverses: true)
-                       : .default,
-                       value: pulsing)
-            .onAppear { pulsing = true }
-    }
-}

@@ -6,7 +6,11 @@ SOCK="$HOME/.agentdock/agentdock.sock"
 SOURCE="${1:-unknown}"
 TYPE="${2:-hook}"
 
-PAYLOAD=$(cat 2>/dev/null) || exit 0
+# notify 模式下 Codex 把 JSON 作为命令行参数传入($3),hooks 模式走 stdin
+PAYLOAD="${3:-}"
+if [ -z "$PAYLOAD" ]; then
+  PAYLOAD=$(cat 2>/dev/null) || exit 0
+fi
 [ -z "$PAYLOAD" ] && PAYLOAD='{}'
 
 # statusline 模式:若备份了用户原 statusline 命令,先透传其输出

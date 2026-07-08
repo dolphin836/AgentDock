@@ -23,6 +23,44 @@ private func ev(_ name: String, _ kind: AgentKind = .claudeCode) -> AgentEvent {
         #expect(mapEventToState(ev("exec_command_begin", .codex), current: .thinking) == .runningTool)
         #expect(mapEventToState(ev("exec_command_end", .codex), current: .runningTool) == .thinking)
         #expect(mapEventToState(ev("exec_approval_request", .codex), current: .runningTool) == .waitingApproval)
+        // 新版 rollout 的 response_item 系列
+        #expect(mapEventToState(ev("function_call", .codex), current: .thinking) == .runningTool)
+        #expect(mapEventToState(ev("function_call_output", .codex), current: .runningTool) == .thinking)
+        #expect(mapEventToState(ev("turn_aborted", .codex), current: .runningTool) == .done)
+        #expect(mapEventToState(ev("user_message", .codex), current: .done) == .thinking)
+    }
+
+    @Test func claudeExtendedHookMapping() {
+        #expect(mapEventToState(ev("SubagentStart"), current: .thinking) == .runningTool)
+        #expect(mapEventToState(ev("SubagentStop"), current: .runningTool) == .thinking)
+        #expect(mapEventToState(ev("Elicitation"), current: .runningTool) == .waitingInput)
+        #expect(mapEventToState(ev("ElicitationResult"), current: .waitingInput) == .thinking)
+    }
+
+    @Test func userFacingToolsMapToWaitingInput() {
+        let ask = AgentEvent(sessionId: "s1", kind: .cursor, name: "preToolUse",
+                             detail: "AskQuestion", tool: "AskQuestion")
+        #expect(mapEventToState(ask, current: .runningTool) == .waitingInput)
+        let switchMode = AgentEvent(sessionId: "s1", kind: .cursor, name: "preToolUse",
+                                    detail: "SwitchMode", tool: "SwitchMode")
+        #expect(mapEventToState(switchMode, current: .thinking) == .waitingInput)
+        let claudeAsk = AgentEvent(sessionId: "s1", kind: .claudeCode, name: "PreToolUse",
+                                   detail: "AskUserQuestion", tool: "AskUserQuestion")
+        #expect(mapEventToState(claudeAsk, current: .thinking) == .waitingInput)
+        // 普通工具仍是执行中
+        let shell = AgentEvent(sessionId: "s1", kind: .cursor, name: "preToolUse",
+                               detail: "Shell", tool: "Shell")
+        #expect(mapEventToState(shell, current: .thinking) == .runningTool)
+    }
+
+    @Test func cursorMapping() {
+        #expect(mapEventToState(ev("sessionStart", .cursor), current: .done) == .idle)
+        #expect(mapEventToState(ev("beforeSubmitPrompt", .cursor), current: .idle) == .thinking)
+        #expect(mapEventToState(ev("preToolUse", .cursor), current: .thinking) == .runningTool)
+        #expect(mapEventToState(ev("postToolUse", .cursor), current: .runningTool) == .thinking)
+        #expect(mapEventToState(ev("stop", .cursor), current: .runningTool) == .done)
+        #expect(mapEventToState(ev("sessionEnd", .cursor), current: .thinking) == .done)
+        #expect(mapEventToState(ev("unknownEvent", .cursor), current: .runningTool) == .runningTool)
     }
 
     @Test func idleNotificationIsNotApproval() {

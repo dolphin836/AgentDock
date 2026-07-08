@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentDock — AI agent status in your notch</title>
+<meta name="description" content="macOS notch companion: live session status, usage and pending approvals for Claude Code / Codex / Cursor.">
+<style>
+:root {
+  --panel: #09090b;
+  --text1: rgba(250,250,252,.92);
+  --text2: rgba(250,250,252,.58);
+  --text3: rgba(250,250,252,.36);
+  --text4: rgba(250,250,252,.20);
+  --phosphor: #52ff8a;
+  --cyan: #61e8f5;
+  --amber: #ffba54;
+  --yellow: #ffe35c;
+  --red: #ff6b62;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  font-family: var(--mono);
+  background: #7a4fd0;  /* 壁纸主色兜底 */
+  color: var(--text1);
+  overflow: hidden;  /* 单屏桌面形态 */
+  user-select: none;
+}
+.wallpaper { position: fixed; inset: 0; width: 100vw; height: 100vh;
+  object-fit: cover; z-index: 0; pointer-events: none; }
+
+/* ── 菜单栏(自绘,毛玻璃) ── */
+.menubar {
+  position: fixed; top: 0; left: 0; right: 0; height: 30px;
+  display: flex; align-items: center;
+  padding: 0 16px;
+  /* 彩色壁纸下的 macOS 菜单栏:毛玻璃半透明,浅色图文 */
+  background: rgba(28,20,54,.22);
+  backdrop-filter: blur(28px) saturate(1.5);
+  -webkit-backdrop-filter: blur(28px) saturate(1.5);
+  font-size: 12.5px;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  color: rgba(255,255,255,.92);
+  z-index: 30;
+}
+.menubar .spacer { flex: 1; }
+.menubar .status { display: flex; align-items: center; gap: 14px; opacity: .85; }
+.menubar svg { display: block; }
+/* 菜单栏里的 AgentDock 图标:同 App 模板图,深色壁纸下白身镂空眼 */
+.menubar .robot .head, .menubar .robot .ant, .menubar .robot .ear { background: rgba(255,255,255,.92); }
+.menubar .robot .eye { background: rgba(60,25,45,.85); animation: none; }
+
+.desktop-center {
+  position: absolute; left: 0; right: 0; bottom: 90px; top: 0;  /* 从屏幕顶端开始:胶囊像真刘海一样嵌进菜单栏 */
+  pointer-events: none;
+  z-index: 35;  /* 高于菜单栏(30),notch 不被遮挡 */
+}
+.desktop-center > * { pointer-events: auto; }
+/* 面板是悬浮层:展开只覆盖桌面,绝不推动页面其他内容 */
+.dock-panel { position: absolute; top: 0; left: 50%; transform: translateX(-50%); z-index: 10; }
+.hint { position: absolute; top: 42px; left: 0; right: 0; z-index: 2; pointer-events: none; }
+.hero { position: absolute; top: 50%; left: 0; right: 0; transform: translateY(-50%); z-index: 1; }
+
+/* ── Dock(自绘:深色毛玻璃 + 宽度驱动放大,邻居让位) ── */
+.mac-dock {
+  position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);
+  z-index: 20;
+  display: flex; align-items: flex-end; gap: 10px;
+  height: 66px; padding: 8px 12px;
+  background: rgba(26,28,40,.55);
+  backdrop-filter: blur(28px) saturate(1.4);
+  -webkit-backdrop-filter: blur(28px) saturate(1.4);
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 21px;
+  box-shadow: 0 10px 40px rgba(0,0,0,.35);
+  overflow: visible;
+}
+.mac-dock img {
+  width: 48px; height: auto; aspect-ratio: 1; display: block;
+  transition: width .12s cubic-bezier(0, .55, .45, 1);
+  will-change: width;
+}
+
+/* ── AgentDock panel:收起/展开同宽(与真实 App 一致:190 中段 + 185×2 翼 = 560,含两侧 8px 外扩弧) ── */
+.dock-panel {
+  width: 544px; max-width: calc(100vw - 32px);
+  background: var(--panel);
+  border-radius: 0 0 18px 18px;
+  padding: 40px 22px 12px;
+  box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 4px 18px rgba(0,0,0,.4);
+  font-family: var(--mono);
+}
+.dock-panel::before {
+  content: "";
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: 196px; height: 34px;
+  background: var(--panel);
+  border-radius: 0 0 14px 14px;
+  z-index: 0;
+}
+.dock-panel::after {
+  content: "";
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #17181d; box-shadow: inset 0 0 2px 1px #000;
+}
+.dock-panel .capsule, .dock-panel .p-head, .dock-panel .p-body { position: relative; z-index: 1; }
+/* 小窗口下内容区内部滚动,不撑破视口 */
+.dock-panel .p-body { max-height: calc(100vh - 230px); overflow-y: auto; scrollbar-width: none; }
+.dock-panel .p-body::-webkit-scrollbar { display: none; }
+/* 收起时与菜单栏完全重合:同高 30px,底部凸圆角 13px(同 App NotchShape),无投影 */
+.dock-panel.collapsed { padding: 0 18px; height: 30px; border-radius: 0 0 13px 13px; box-shadow: none; }
+/* 顶角外扩凹弧(同 App NotchShape topRadius=8):与屏幕顶边圆滑衔接 */
+.dock-panel.collapsed::before {
+  content: ""; position: absolute; top: 0; left: -8px;
+  width: 8px; height: 8px; border-radius: 0;
+  transform: none;
+  background: radial-gradient(circle 8px at 0 8px, transparent 0 7.5px, var(--panel) 8px);
+}
+.dock-panel.collapsed::after {
+  content: ""; position: absolute; top: 0; right: -8px; left: auto;
+  width: 8px; height: 8px; border-radius: 0; box-shadow: none;
+  transform: none;
+  background: radial-gradient(circle 8px at 8px 8px, transparent 0 7.5px, var(--panel) 8px);
+}
+.dock-panel.collapsed .p-body, .dock-panel.collapsed .p-head { display: none; }
+.capsule { display: none; }
+.dock-panel.collapsed .capsule { display: flex; align-items: center; height: 30px; gap: 8px; }
+.capsule .side { display: flex; align-items: center; gap: 6px; width: 180px; }
+.capsule .side.r { justify-content: flex-end; }
+.capsule .mid { flex: 1; display: flex; justify-content: center; gap: 5px; }
+.capsule .mid i { width: 5px; height: 5px; border-radius: 50%; }
+.capsule .name { font-size: 10.5px; font-weight: 600; color: var(--text1);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.capsule .st { font-size: 9.5px; white-space: nowrap; }
+.capsule .elapsed { font-size: 9px; color: var(--text2); }
+.glyph-spin { display: inline-block; animation: spin 2.4s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.hint { text-align: center; font-size: 10px; color: rgba(255,255,255,.65);
+  padding-top: 8px; letter-spacing: 1px; font-family: var(--mono);
+  text-shadow: 0 1px 6px rgba(40,20,90,.5); }
+
+.p-head { display: flex; align-items: center; gap: 8px; padding: 0 8px 9px; }
+.p-title { font-size: 11.5px; font-weight: 700; letter-spacing: 2.5px; color: var(--text1); }
+.p-stats { position: absolute; left: 0; right: 0; text-align: center; font-size: 9px; color: var(--text3); pointer-events: none; }
+.p-tabs { margin-left: auto; display: flex; gap: 9px; }
+.p-tab {
+  width: 25px; height: 25px; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.16);
+  display: grid; place-items: center;
+  color: var(--text3); font-size: 12px; cursor: pointer;
+  transition: color .2s, border-color .2s, background .2s;
+}
+.p-tab svg { fill: currentColor; display: block; }
+.p-tab.active { border-color: rgba(82,255,138,.55); color: var(--phosphor); background: rgba(82,255,138,.09); }
+.page { display: none; }
+.page.active { display: block; }
+
+.robot { position: relative; width: 16px; height: 16px; flex: none; }
+.robot .head { position: absolute; left: 2.8px; top: 4.3px; width: 10.4px; height: 9.4px; border-radius: 2.5px; background: var(--text1); }
+.robot .ant  { position: absolute; left: 7.2px; top: 1.9px; width: 1.6px; height: 3px; border-radius: 1px; background: var(--text1); }
+.robot .ear  { position: absolute; top: 7px; width: 1.5px; height: 4px; border-radius: 1px; background: var(--text1); }
+.robot .ear.l { left: .9px; } .robot .ear.r { right: .9px; }
+.robot .eye { position: absolute; top: 7.3px; width: 2.8px; height: 2.8px; border-radius: 50%; background: var(--panel);
+  animation: glance 2.8s ease-in-out infinite; }
+.robot .eye.l { left: 4.6px; } .robot .eye.r { left: 8.9px; }
+@keyframes glance { 0%,100% { transform: translateX(-.6px);} 50% { transform: translateX(.6px);} }
+
+.rule { display: flex; align-items: center; gap: 6px; padding: 8px 9px 3px; }
+.rule .lead { width: 12px; height: 1px; }
+.rule .label { font-size: 8.5px; font-weight: 600; letter-spacing: 1.8px; }
+.rule .line { flex: 1; height: 1px; }
+.rule .side-note { font-size: 8.5px; color: var(--text3); }
+.rule.run  .lead { background: rgba(82,255,138,.35);} .rule.run .label { color: rgba(82,255,138,.85);} .rule.run .line { background: rgba(82,255,138,.16);}
+.rule.need .lead { background: rgba(255,186,84,.4);} .rule.need .label { color: rgba(255,186,84,.9);} .rule.need .line { background: rgba(255,186,84,.18);}
+.rule.rec  .lead { background: rgba(255,255,255,.2);} .rule.rec .label { color: var(--text3);} .rule.rec .line { background: rgba(255,255,255,.09);}
+.rule.stat .lead { background: rgba(97,232,245,.35);} .rule.stat .label { color: var(--text1);} .rule.stat .line { background: rgba(255,255,255,.09);}
+
+.row { padding: 6px 9px; border-radius: 6px; position: relative; font-family: var(--mono); }
+.row.need-bg { background: rgba(255,186,84,.05); }
+.row .top { display: flex; align-items: center; gap: 7px; }
+.row .glyph { width: 14px; text-align: center; font-size: 10.5px; flex: none; }
+.row .name { font-size: 12px; font-weight: 600; }
+.row .state { margin-left: auto; font-size: 9.5px; display: flex; align-items: center; gap: 5px; }
+.row .metrics { font-size: 9px; color: var(--text3); padding: 3px 0 0 21px; }
+.row .appicon { width: 13px; height: 13px; border-radius: 3px; flex: none; opacity: .9; }
+.breath { animation: breath 1.6s ease-in-out infinite alternate; }
+@keyframes breath { from { opacity: 1; } to { opacity: .35; } }
+.pulse { animation: pulse .6s ease-in-out infinite alternate; }
+@keyframes pulse { from { opacity: 1; } to { opacity: .25; } }
+
+.approval { display: flex; align-items: center; gap: 8px; padding: 4px 0 0 21px; }
+.approval .cmd { font-size: 9px; color: rgba(255,227,92,.9); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.approval .btn { font-size: 8.5px; font-weight: 700; letter-spacing: .5px; padding: 2px 9px; border-radius: 3px; flex: none; cursor: default; }
+.approval .ok  { color: var(--phosphor); background: rgba(82,255,138,.12); border: 1px solid rgba(82,255,138,.45); margin-left: auto; }
+.approval .no  { color: var(--red); background: rgba(255,107,98,.12); border: 1px solid rgba(255,107,98,.45); }
+
+.row.compact { padding: 3.5px 9px; display: flex; align-items: center; gap: 7px; }
+.row.compact .name { font-size: 10.5px; font-weight: 400; color: var(--text2); }
+.row.compact .model { font-size: 9px; color: var(--text4); }
+.row.compact .right { margin-left: auto; display: flex; gap: 8px; font-size: 9px; }
+
+.ticks { display: flex; gap: 2.5px; }
+.ticks i { width: 3px; height: 12px; border-radius: .5px; background: var(--text4); }
+.ticks i.on { background: rgba(82,255,138,.8); }
+.ticks i.warn { background: var(--amber); }
+.ticks i.hot { background: var(--red); }
+.usage-line { display: flex; align-items: center; gap: 12px; padding: 3.5px 9px; font-family: var(--mono); }
+.usage-line .win { width: 52px; font-size: 10px; color: var(--text2); }
+.usage-line .pct { margin-left: auto; font-size: 9px; font-weight: 600; }
+.stat-line { display: flex; align-items: center; gap: 9px; padding: 3.5px 9px; font-size: 9.5px; font-family: var(--mono); }
+.stat-line .lbl { width: 52px; color: var(--text2); }
+.refresh-row { display: flex; justify-content: flex-end; padding: 3px 9px 0; }
+
+.set-row { display: flex; align-items: center; gap: 10px; padding: 3.5px 9px; font-size: 9.5px; font-family: var(--mono); }
+.set-row .lbl { color: var(--text2); }
+.set-row .right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+.opt { display: inline-flex; gap: 5px; align-items: center; color: var(--text3); }
+.opt.on { color: var(--text1); }
+.opt .dot-o { font-size: 7.5px; }
+.opt.on .dot-o { color: var(--phosphor); }
+.term-btn { font-size: 8.5px; font-weight: 700; letter-spacing: .5px; padding: 2px 8px; border-radius: 3px; cursor: default; font-family: var(--mono); }
+.term-btn.green { color: var(--phosphor); background: rgba(82,255,138,.1); border: 1px solid rgba(82,255,138,.42); }
+.term-btn.red { color: var(--red); background: rgba(255,107,98,.1); border: 1px solid rgba(255,107,98,.42); }
+.status-ok { color: rgba(82,255,138,.8); font-size: 8.5px; }
+.link { color: var(--cyan); border-bottom: 1px solid rgba(97,232,245,.35); font-size: 9.5px; }
+
+.p-foot { border-top: 1px solid rgba(255,255,255,.12); margin-top: 8px; padding-top: 7px;
+  display: flex; justify-content: center; gap: 10px; align-items: center; font-size: 8.5px; color: var(--text2); font-family: var(--mono); }
+.key { display: inline-block; min-width: 11px; text-align: center; font-size: 8px; font-weight: 600; color: var(--text1);
+  padding: 1px 3px; border-radius: 3px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.18); }
+.p-foot .dot { color: var(--text4); }
+
+/* ── Hero(彩色壁纸上白字) ── */
+.hero { text-align: center; font-family: var(--mono); }
+.hero h1 { font-size: 34px; letter-spacing: 6px; font-weight: 700; color: var(--text1);
+  display: flex; align-items: center; justify-content: center; gap: 20px;
+  text-shadow: 0 2px 24px rgba(40,20,90,.55); }
+.hero h1 .robot { transform: scale(2); transform-origin: center; }
+.hero h1 .robot .eye { background: #8a4bd0; }
+.hero .tagline { margin-top: 14px; font-size: 13.5px; color: rgba(255,255,255,.9); letter-spacing: 1px;
+  text-shadow: 0 1px 12px rgba(40,20,90,.55); }
+.hero .agents { margin-top: 10px; font-size: 11px; color: rgba(255,255,255,.72); letter-spacing: 1px;
+  text-shadow: 0 1px 10px rgba(40,20,90,.5); }
+.hero .agents b { color: rgba(255,255,255,.95); font-weight: 600; }
+.download { display: inline-block; margin-top: 24px;
+  font-family: var(--mono); font-size: 14px; font-weight: 700; letter-spacing: 2px;
+  color: #08130b; text-decoration: none; background: var(--phosphor);
+  padding: 13px 40px; border-radius: 8px;
+  box-shadow: 0 8px 40px rgba(82,255,138,.45), 0 2px 10px rgba(0,0,0,.15);
+  transition: transform .18s cubic-bezier(.22,1,.36,1), box-shadow .18s cubic-bezier(.22,1,.36,1); }
+.download:hover { transform: translateY(-2px); box-shadow: 0 14px 52px rgba(82,255,138,.55), 0 4px 14px rgba(0,0,0,.15); }
+
+</style>
+</head>
+<body>
+
+<!-- 壁纸 -->
+<img class="wallpaper" src="./macos/background/wallpaper.png" alt="">
+
+<!-- ── 菜单栏(自绘) ── -->
+<div class="menubar">
+  <svg width="14" height="16" viewBox="0 0 24 28" fill="rgba(255,255,255,.92)" aria-label="Apple">
+    <path d="M12.152 10.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.03 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 7.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.56-1.702"/>
+  </svg>
+  <span class="spacer"></span>
+  <span class="status">
+    <span class="robot" title="AgentDock">
+      <span class="ant"></span><span class="head"></span>
+      <span class="ear l"></span><span class="ear r"></span>
+      <span class="eye l"></span><span class="eye r"></span>
+    </span>
+    <svg width="15" height="11" viewBox="0 0 15 11" fill="rgba(255,255,255,.88)"><path d="M7.5 8.6a1.4 1.4 0 1 0 0 2.4 1.4 1.4 0 0 0 0-2.4zM3.9 6.7l1.3 1.3a3.3 3.3 0 0 1 4.6 0l1.3-1.3a5.2 5.2 0 0 0-7.2 0zM1.3 4.1l1.3 1.3a7 7 0 0 1 9.8 0l1.3-1.3a8.9 8.9 0 0 0-12.4 0z"/></svg>
+    <svg width="22" height="11" viewBox="0 0 22 11"><rect x=".5" y=".5" width="18" height="10" rx="2.5" fill="none" stroke="rgba(255,255,255,.5)"/><rect x="2" y="2" width="12" height="7" rx="1.2" fill="rgba(255,255,255,.88)"/><rect x="19.5" y="3.5" width="2" height="4" rx="1" fill="rgba(255,255,255,.5)"/></svg>
+    <span id="clock"></span>
+  </span>
+</div>
+
+<!-- ── Desktop center: AgentDock mock + download ── -->
+<div class="desktop-center" id="desktopCenter">
+
+  <!-- AgentDock panel: collapsed by default, hover to expand -->
+  <div class="dock-panel collapsed" id="panel">
+    <div class="capsule">
+      <div class="side">
+        <span class="glyph-spin" id="capGlyph" style="color:var(--phosphor);font-size:10px">✳</span>
+        <span class="name" id="capName">api-server</span>
+      </div>
+      <div class="mid" id="capDots"></div>
+      <div class="side r">
+        <span class="elapsed" id="capElapsed">2m 14s</span>
+        <span class="st breath" id="capState" style="color:var(--cyan)">Thinking… ◐</span>
+      </div>
+    </div>
+
+    <div class="p-head">
+      <div class="robot">
+        <div class="ant"></div><div class="head"></div>
+        <div class="ear l"></div><div class="ear r"></div>
+        <div class="eye l"></div><div class="eye r"></div>
+      </div>
+      <span class="p-title">AGENTDOCK</span>
+      <span class="p-stats" id="stats">6 sessions · 3 agents · 5 running</span>
+      <div class="p-tabs">
+        <div class="p-tab active" data-page="sessions">≡</div>
+        <div class="p-tab" data-page="usage">
+          <svg width="12" height="12" viewBox="0 0 12 12">
+            <rect x="1.2" y="6.5" width="2.5" height="4.5" rx="0.7"/>
+            <rect x="4.8" y="3.5" width="2.5" height="7.5" rx="0.7"/>
+            <rect x="8.4" y="1"   width="2.5" height="10"  rx="0.7"/>
+          </svg>
+        </div>
+        <div class="p-tab" data-page="settings">⚙︎</div>
+      </div>
+    </div>
+
+    <div class="p-body">
+      <div class="page active" id="page-sessions">
+        <div id="sessionGroups"></div>
+
+        <div class="p-foot">
+          <span><span class="key">⌘</span> <span class="key">G</span> show/hide</span><span class="dot">·</span>
+          <span><span class="key">⌘</span> <span class="key">Y</span> allow</span><span class="dot">·</span>
+          <span><span class="key">⌘</span> <span class="key">N</span> deny</span>
+        </div>
+      </div>
+
+      <div class="page" id="page-usage">
+        <div class="refresh-row"><span class="term-btn green">REFRESH</span></div>
+        <div class="rule run"><span class="lead"></span><span class="label">CLAUDE CODE</span><span class="line"></span><span class="side-note">just now</span></div>
+        <div class="usage-line"><span class="win">5-hour</span><div class="ticks" data-pct="34"></div><span class="pct" style="color:var(--text1)">34%</span></div>
+        <div class="usage-line"><span class="win">7-day</span><div class="ticks" data-pct="61"></div><span class="pct" style="color:var(--text1)">61%</span></div>
+        <div class="rule run"><span class="lead"></span><span class="label">CODEX</span><span class="line"></span><span class="side-note">just now</span></div>
+        <div class="usage-line"><span class="win">5-hour</span><div class="ticks" data-pct="12"></div><span class="pct" style="color:var(--text1)">12%</span></div>
+        <div class="usage-line"><span class="win">weekly</span><div class="ticks" data-pct="92"></div><span class="pct" style="color:var(--red)">92%</span></div>
+        <div class="rule stat"><span class="lead"></span><span class="label">ACTIVITY</span><span class="line"></span></div>
+        <div class="stat-line"><span class="lbl">today</span>
+          <span style="color:rgba(82,255,138,.85)">worked 2h14m</span><span style="color:var(--text4)">·</span>
+          <span style="color:var(--text2)">≈1.2M tokens</span><span style="color:var(--text4)">·</span>
+          <span style="color:rgba(255,186,84,.85)">waited 3x · avg 4m</span></div>
+        <div class="stat-line"><span class="lbl">7 days</span>
+          <span style="color:rgba(82,255,138,.85)">worked 14h02m</span><span style="color:var(--text4)">·</span>
+          <span style="color:var(--text2)">≈8.9M tokens</span><span style="color:var(--text4)">·</span>
+          <span style="color:rgba(255,186,84,.85)">waited 12x · avg 6m</span></div>
+      </div>
+
+      <div class="page" id="page-settings">
+        <div class="rule rec"><span class="lead"></span><span class="label">GENERAL</span><span class="line"></span></div>
+        <div class="set-row"><span class="lbl">language</span>
+          <span class="right">
+            <span class="opt on"><span class="dot-o">●</span>English</span>
+            <span class="opt"><span class="dot-o">○</span>简体中文</span>
+          </span></div>
+        <div class="set-row"><span class="lbl">launch at login</span>
+          <span class="right"><span class="opt on"><span class="dot-o">●</span>on</span></span></div>
+        <div class="set-row"><span class="lbl">display</span>
+          <span class="right"><span class="opt on"><span class="dot-o">●</span>main display (default)</span></span></div>
+        <div class="rule rec"><span class="lead"></span><span class="label">SHORTCUTS</span><span class="line"></span></div>
+        <div class="set-row"><span class="lbl">show/hide panel</span>
+          <span class="right"><span class="key">⌘</span><span class="key">G</span></span></div>
+        <div class="set-row"><span class="lbl">approve (when pending)</span>
+          <span class="right"><span class="key">⌘</span><span class="key">Y</span></span></div>
+        <div class="set-row"><span class="lbl">deny (when pending)</span>
+          <span class="right"><span class="key">⌘</span><span class="key">N</span></span></div>
+        <div class="rule rec"><span class="lead"></span><span class="label">INTEGRATIONS</span><span class="line"></span></div>
+        <div class="set-row"><span class="lbl">CLAUDE CODE</span><span class="status-ok">installed</span>
+          <span class="right"><span class="term-btn red">UNINSTALL</span></span></div>
+        <div class="set-row"><span class="lbl">CODEX</span><span class="status-ok">installed</span>
+          <span class="right"><span class="term-btn red">UNINSTALL</span></span></div>
+        <div class="set-row"><span class="lbl">CURSOR</span><span class="status-ok">installed</span>
+          <span class="right"><span class="term-btn red">UNINSTALL</span></span></div>
+        <div class="rule rec"><span class="lead"></span><span class="label">PERMISSIONS</span><span class="line"></span></div>
+        <div class="set-row"><span class="lbl">automation · Terminal</span><span class="status-ok">granted</span></div>
+        <div class="set-row"><span class="lbl">accessibility</span><span class="status-ok">granted</span></div>
+        <div class="rule rec"><span class="lead"></span><span class="label">ABOUT</span><span class="line"></span></div>
+        <div class="set-row"><span class="lbl">version</span><span style="color:var(--text1)">v0.1.0</span>
+          <span class="right"><span class="term-btn green">CHECK UPDATES</span></span></div>
+        <div class="set-row"><span class="lbl">website</span>
+          <span class="right"><span class="link">agentdockstatus.app</span></span></div>
+        <div class="set-row"><span class="lbl">more apps</span>
+          <span class="right"><span class="link">Wallpaper Exchange · wallpaperexchange.com</span></span></div>
+      </div>
+    </div>
+  </div>
+  <div class="hint" id="hint">hover the notch bar to expand · move away to collapse</div>
+
+  <!-- Center: download -->
+  <div class="hero">
+    <h1>
+      <span class="robot">
+        <span class="ant"></span><span class="head"></span>
+        <span class="ear l"></span><span class="ear r"></span>
+        <span class="eye l"></span><span class="eye r"></span>
+      </span>
+      AGENTDOCK
+    </h1>
+    <p class="tagline">AI agent status in your notch: who's working, who needs you, how much quota is left.</p>
+    <p class="agents">Supports <b>Claude Code</b> ✳ · <b>Codex</b> ◆ · <b>Cursor</b> ⬢</p>
+    <a class="download" href="AgentDock-0.1.0.pkg" download>DOWNLOAD AGENTDOCK</a>
+  </div>
+</div>
+
+<!-- ── Dock(自绘,图标素材取自 Mac-OS-Desktop,本地文件) ── -->
+<div class="mac-dock" id="dock">
+  <img src="./macos/icon/dock/finder.png" alt="Finder">
+  <img src="./macos/icon/dock/launchpad.png" alt="Launchpad">
+  <img src="./macos/icon/dock/appstore.png" alt="App Store">
+  <img src="./macos/icon/dock/message.png" alt="Messages">
+  <img src="./macos/icon/dock/music.png" alt="Music">
+  <img src="./macos/icon/dock/mail.png" alt="Mail">
+  <img src="./macos/icon/dock/photos.png" alt="Photos">
+  <img src="./macos/icon/dock/maps.png" alt="Maps">
+  <img src="./macos/icon/dock/calculator.png" alt="Calculator">
+  <img src="./macos/icon/dock/notes.png" alt="Notes">
+  <img src="./macos/icon/dock/terminal.png" alt="Terminal">
+  <img src="./macos/icon/dock/preferences.png" alt="Preferences">
+  <img src="./macos/icon/dock/bin.png" alt="Trash">
+</div>
+
+<script>
+// Menu bar clock (replaces the project's script.js)
+function tick() {
+  const now = new Date();
+  const days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const pad = n => String(n).padStart(2, "0");
+  document.getElementById("clock").textContent =
+    `${days[now.getDay()]} ${months[now.getMonth()]} ${now.getDate()}  ${now.getHours()}:${pad(now.getMinutes())}`;
+}
+tick(); setInterval(tick, 15000);
+
+// Tick bars (same rule as the app: >=75% amber, >=90% red)
+document.querySelectorAll(".ticks").forEach(bar => {
+  const pct = Number(bar.dataset.pct || 0);
+  const total = 44, lit = Math.round(pct / 100 * total);
+  for (let i = 0; i < total; i++) {
+    const t = document.createElement("i");
+    if (i < lit) t.className = pct >= 90 ? "hot" : pct >= 75 ? "warn" : "on";
+    bar.appendChild(t);
+  }
+});
+
+// Tab switching
+const pages = { sessions: "page-sessions", usage: "page-usage", settings: "page-settings" };
+document.querySelectorAll(".p-tab[data-page]").forEach(tab => {
+  tab.addEventListener("click", e => {
+    e.stopPropagation();
+    document.querySelectorAll(".p-tab[data-page]").forEach(t => t.classList.remove("active"));
+    tab.classList.add("active");
+    document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+    document.getElementById(pages[tab.dataset.page]).classList.add("active");
+    document.getElementById("stats").style.visibility =
+      tab.dataset.page === "sessions" ? "visible" : "hidden";
+  });
+});
+
+// Like the real app: collapsed by default, hover to expand (#expanded 直接展开,便于预览)
+const panel = document.getElementById("panel");
+if (location.hash === "#expanded") panel.classList.remove("collapsed");
+panel.addEventListener("mouseenter", () => panel.classList.remove("collapsed"));
+panel.addEventListener("mouseleave", () => panel.classList.add("collapsed"));
+
+/* ── 假·实时模拟:状态机驱动,行为对齐真实 App ──
+   收起态胶囊 = 左翼(旋转图标+任务名) + 中段(每会话一个状态点) + 右翼(本轮耗时+状态),
+   进行中任务每 3 秒轮播;面板里任务状态随时间流转,token/耗时持续增长。 */
+const AGENTS = {
+  claude: { glyph: "✳", model: "claude-fable-5",  icon: "linear-gradient(135deg,#d97448,#b4552f)" },
+  codex:  { glyph: "◆", model: "gpt-5.5",         icon: "linear-gradient(135deg,#3b3f4a,#15171d)" },
+  cursor: { glyph: "⬢", model: "composer-2.5",    icon: "linear-gradient(135deg,#4b5878,#232c44)" },
+};
+const STATES = {
+  thinking: { label: "Thinking… ◐",     color: "var(--cyan)",   kind: "active" },
+  running:  { label: "Running cmd… ●",  color: "var(--phosphor)", kind: "active" },
+  editing:  { label: "Editing… ●",      color: "var(--phosphor)", kind: "active" },
+  asking:   { label: "Asking you",      color: "var(--amber)",  kind: "needs", pulse: "◌" },
+  approval: { label: "Needs approval",  color: "var(--yellow)", kind: "needs", pulse: "◉" },
+  waiting:  { label: "Waiting for input", color: "rgba(255,186,84,.55)", kind: "recent", mark: "◌" },
+  done:     { label: "Done",            color: "rgba(82,255,138,.5)",  kind: "recent", mark: "✓" },
+};
+const CMDS = [
+  "Bash: ./deploy.sh production", "Bash: npm run migrate", "Bash: git push origin main",
+  "Write: src/payment/refund.go", "Bash: rm -rf dist && make release",
+];
+const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const pickW = t => { let r = Math.random(); for (const [v, w] of t) { if ((r -= w) <= 0) return v; } return t[t.length - 1][0]; };
+
+function S(name, agent, state, elapsed, model) {
+  return { name, agent, state, model: model || AGENTS[agent].model,
+    elapsed, wait: rnd(3, 25), age: rnd(8, 40),
+    ctx: rnd(6, 45), tokens: rnd(15, 420) * 1000,
+    t: rnd(4, 10), cmd: CMDS[rnd(0, CMDS.length - 1)] };
+}
+const sessions = [
+  S("api-server",      "claude", "thinking", 134),
+  S("web-dashboard",   "codex",  "running",   47),
+  S("mobile-app",      "claude", "editing",  303),
+  S("payment-service", "cursor", "asking",    28),
+  S("data-pipeline",   "claude", "approval",   9),
+  S("docs-site",       "codex",  "waiting",    0),
+  S("design-system",   "claude", "done",       0, "claude-opus-4-8"),
+];
+const isActive = s => STATES[s.state].kind === "active";
+let dirty = true;
+
+function transition(s) {
+  const activeCount = sessions.filter(isActive).length;
+  const guard = v => (activeCount <= 2 && isActive(s) && !["running", "editing", "thinking"].includes(v)) ? "running" : v;
+  switch (s.state) {
+    case "thinking": setState(s, guard(pickW([["running", .42], ["editing", .3], ["thinking", .13], ["asking", .08], ["approval", .07]])), rnd(4, 10)); break;
+    case "running":  setState(s, guard(pickW([["thinking", .4], ["editing", .35], ["done", .25]])), rnd(5, 12)); break;
+    case "editing":  setState(s, guard(pickW([["thinking", .45], ["running", .35], ["done", .2]])), rnd(4, 10)); break;
+    case "asking":   setState(s, "thinking", rnd(4, 10)); break;   // 用户「回复」了
+    case "approval": setState(s, "running", rnd(5, 12)); break;    // 超时自动放行(演示)
+    case "waiting":  setState(s, "thinking", rnd(4, 10)); s.elapsed = 0; s.ctx = rnd(3, 9); s.tokens = rnd(2, 15) * 1000; break;
+    case "done":     setState(s, "thinking", rnd(4, 10)); s.elapsed = 0; s.ctx = rnd(3, 9); s.tokens = rnd(2, 15) * 1000; break;
+  }
+}
+function setState(s, next, dur) {
+  if (next === "approval") s.cmd = CMDS[rnd(0, CMDS.length - 1)];
+  if (next === "asking" || next === "approval") s.wait = 0;
+  if (STATES[next].kind === "recent") s.age = 0;
+  if (s.state !== next) dirty = true;
+  s.state = next;
+  s.t = { asking: rnd(12, 22), approval: rnd(10, 18), waiting: rnd(45, 90), done: rnd(30, 60) }[next] || dur;
+}
+
+const fmtT = s => s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
+const fmtAge = m => m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ""}`;
+const fmtTok = n => n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${(n / 1e3).toFixed(1)}k`;
+
+function rowHTML(s, i) {
+  const st = STATES[s.state], a = AGENTS[s.agent];
+  if (st.kind === "active") return `
+    <div class="row"><div class="top">
+      <span class="glyph" style="color:var(--phosphor)">${a.glyph}</span>
+      <span class="name" style="color:${st.color}">${s.name}</span>
+      <span class="state breath" style="color:${st.color}">${st.label}</span>
+      <span class="appicon" style="background:${a.icon}"></span>
+    </div><div class="metrics" data-m="${i}"></div></div>`;
+  if (st.kind === "needs") {
+    const detail = s.state === "approval"
+      ? `<div class="approval"><span class="cmd">${s.cmd}</span>
+           <span class="btn ok" data-ok="${i}">ALLOW</span><span class="btn no" data-no="${i}">DENY</span></div>`
+      : `<div class="metrics" data-m="${i}"></div>`;
+    return `
+    <div class="row need-bg"><div class="top">
+      <span class="glyph" style="color:${st.color}">${a.glyph}</span>
+      <span class="name" style="color:${st.color}">${s.name}</span>
+      <span class="state" style="color:${st.color}">${st.label} <span class="pulse">${st.pulse}</span></span>
+      <span class="appicon" style="background:${a.icon}"></span>
+    </div>${detail}</div>`;
+  }
+  return `
+    <div class="row compact">
+      <span class="glyph" style="color:var(--text3)">${a.glyph}</span>
+      <span class="name">${s.name}</span><span class="model">${s.model}</span>
+      <span class="right"><span style="color:${st.color}">${st.label}</span>
+        <span style="color:var(--text3)" data-age="${i}">${fmtAge(s.age)}</span>
+        <span style="color:${st.color}">${st.mark}</span></span>
+    </div>`;
+}
+function rule(cls, label) {
+  return `<div class="rule ${cls}"><span class="lead"></span><span class="label">${label}</span><span class="line"></span></div>`;
+}
+
+function renderStructure() {
+  const groups = { active: [], needs: [], recent: [] };
+  sessions.forEach((s, i) => groups[STATES[s.state].kind].push([s, i]));
+  let html = "";
+  if (groups.active.length) html += rule("run", "RUNNING") + groups.active.map(([s, i]) => rowHTML(s, i)).join("");
+  if (groups.needs.length)  html += rule("need", "NEEDS YOU") + groups.needs.map(([s, i]) => rowHTML(s, i)).join("");
+  if (groups.recent.length) html += rule("rec", "RECENT") + groups.recent.map(([s, i]) => rowHTML(s, i)).join("");
+  document.getElementById("sessionGroups").innerHTML = html;
+  document.getElementById("stats").textContent =
+    `${sessions.length} sessions · ${new Set(sessions.map(x => x.agent)).size} agents · ${groups.active.length} running`;
+  dirty = false;
+}
+
+function renderTexts() {
+  document.querySelectorAll("[data-m]").forEach(el => {
+    const s = sessions[+el.dataset.m];
+    el.textContent = s.state === "asking"
+      ? `${s.model} · context ${s.ctx}% · ${fmtTok(s.tokens)} tokens · waiting ${s.wait}s`
+      : `${s.model} · context ${s.ctx}% · ${fmtTok(s.tokens)} tokens · ${fmtT(s.elapsed)}`;
+  });
+  document.querySelectorAll("[data-age]").forEach(el => {
+    el.textContent = fmtAge(sessions[+el.dataset.age].age);
+  });
+}
+
+function renderCapsule(now) {
+  const active = sessions.filter(isActive);
+  const nameEl = document.getElementById("capName"), glyphEl = document.getElementById("capGlyph"),
+        stEl = document.getElementById("capState"), elEl = document.getElementById("capElapsed");
+  if (active.length) {
+    const p = active[Math.floor(now / 3000) % active.length];  // 3 秒轮播,同真实 App
+    glyphEl.textContent = AGENTS[p.agent].glyph;
+    glyphEl.style.display = "";
+    nameEl.textContent = p.name;
+    elEl.textContent = fmtT(p.elapsed);
+    stEl.textContent = STATES[p.state].label;
+    stEl.style.color = STATES[p.state].color;
+  } else {
+    glyphEl.style.display = "none";
+    nameEl.textContent = `❯ ${sessions.length} sessions`;
+    elEl.textContent = "";
+    stEl.textContent = `${new Set(sessions.map(x => x.agent)).size} agents`;
+    stEl.style.color = "var(--text2)";
+  }
+  // 状态点:重要在前(等你处理 > 进行中 > 其他)
+  const rank = s => STATES[s.state].kind === "needs" ? 0 : isActive(s) ? 1 : 2;
+  document.getElementById("capDots").innerHTML =
+    [...sessions].sort((a, b) => rank(a) - rank(b))
+      .map(s => `<i style="background:${STATES[s.state].color}"></i>`).join("");
+}
+
+// ALLOW / DENY 可点:放行 → 继续跑;拒绝 → 回到思考
+document.getElementById("sessionGroups").addEventListener("click", e => {
+  const ok = e.target.dataset.ok, no = e.target.dataset.no;
+  if (ok !== undefined) setState(sessions[+ok], "running", rnd(5, 12));
+  if (no !== undefined) setState(sessions[+no], "thinking", rnd(4, 10));
+});
+
+setInterval(() => {
+  for (const s of sessions) {
+    const kind = STATES[s.state].kind;
+    if (kind === "active") { s.elapsed++; s.tokens += rnd(60, 900); if (Math.random() < .06) s.ctx = Math.min(96, s.ctx + 1); }
+    if (kind === "needs") s.wait++;
+    if (kind === "recent" && Math.random() < .017) s.age++;  // 约每分钟 +1
+    if (--s.t <= 0) transition(s);
+  }
+  if (dirty) renderStructure();
+  renderTexts();
+  renderCapsule(Date.now());
+}, 1000);
+renderStructure(); renderTexts(); renderCapsule(Date.now());
+
+// Dock magnification: width-driven so neighbours make room (no overlap)
+const dock = document.getElementById("dock");
+const icons = [...dock.querySelectorAll("img")];
+const BASE = 48, GROW = 34, RANGE = 160;
+dock.addEventListener("mousemove", e => {
+  for (const icon of icons) {
+    const r = icon.getBoundingClientRect();
+    const distance = Math.abs(e.clientX - (r.left + r.width / 2));
+    const boost = Math.max(0, 1 - distance / RANGE);
+    icon.style.width = `${BASE + GROW * boost * boost}px`;
+  }
+});
+dock.addEventListener("mouseleave", () => {
+  icons.forEach(icon => icon.style.width = `${BASE}px`);
+});
+</script>
+</body>
+</html>

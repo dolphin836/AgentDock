@@ -9,7 +9,9 @@ public struct ClaudeInstaller {
     public let originalStatuslinePath: String
 
     static let hookEvents = ["SessionStart", "UserPromptSubmit", "PreToolUse",
-                             "PostToolUse", "Notification", "Stop", "SessionEnd"]
+                             "PostToolUse", "Notification", "Stop", "SessionEnd",
+                             "SubagentStart", "SubagentStop",
+                             "Elicitation", "ElicitationResult"]
 
     public init(settingsPath: String, emitPath: String,
                 originalStatuslinePath: String = NSString(string: "~/.agentdock/original-statusline-command").expandingTildeInPath) {

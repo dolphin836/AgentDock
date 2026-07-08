@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Carbon.HIToolbox
 import AgentDockCore
 
 @MainActor
@@ -7,17 +8,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let store = SessionStore()
     private var server: SocketServer?
     private var codexTailer: CodexSessionTailer?
+    private var cursorTailer: CodexSessionTailer?
     private var notchWindow: NotchWindow?
     private var pruneTimer: Timer?
     private var codexLimitsTimer: Timer?
     private var statusItem: NSStatusItem?
+    private let hotkeys = HotkeyManager()
+    private var toggleHotkeyId: UInt32 = 0
+    private var approvalHotkeyIds: [UInt32] = []
 
     static let home = NSHomeDirectory()
     static let socketPath = home + "/.agentdock/agentdock.sock"
     static let emitInstallPath = home + "/.agentdock/agentdock-emit"
+    /// 活动历史库(工作时长/token 消耗/等待统计)
+    static let history = HistoryStore(path: home + "/.agentdock/history.sqlite")
 
     private let claudeRegistry = ClaudeSessionRegistry(dir: home + "/.claude/sessions")
     private var allowedClaudeIds: Set<String> = []
+
+    /// 存活 codex 进程的 cwd → 宿主 App,每轮 backfill 刷新
+    private var codexLiveHosts: [String: String] = [:]
+    /// Cursor 的子 agent 会话 id(Task/best-of-N 派生),每轮 backfill 刷新 + 点查缓存
+    private var cursorSubagentIds: Set<String> = []
+    /// 已确认是用户主会话的 id(点查结果缓存,避免重复开库)
+    private var cursorKnownMainIds: Set<String> = []
+    /// 已注入过「向你提问」事件的 bubble,避免每轮重复触发
+    private var seenQuestionBubbles: Set<String> = []
+    /// 挂起中的交互卡片(bubbleId → 会话与类型):由高频监视器秒级检测处理结果
+    private var watchedInteractions: [String: (sessionId: String, kind: CursorStateReader.PendingInteractionKind)] = [:]
+    private var interactionWatchTimer: Timer?
+
+    // MARK: 通道优先级(三家同一套机制:主通道健康则次级让位,过期自动降级)
+    //
+    // Cursor:  1.hooks(亚秒) → 2.transcript tailer(秒级) → 3.bubble 探测(10s) → 4.回填(10s)
+    // Claude:  1.hooks(亚秒) → 2.注册表 status(10s,Claude 自报的权威状态) → 3.transcript 回填(10s)
+    // Codex:   1.rollout tailer + notify(秒级) → 2.SQLite 尾部推断(10s,天然幂等,常开兜底)
+    //
+    // 健康判定不猜版本,以事实为准:收到主通道事件即健康(2 分钟信任窗口)。
+    // 本版 Cursor 的 hooks 是坏的,哪个版本修好了,App 不用改动自动升级。
+
+    private static let channelTrustWindow: TimeInterval = 120
+    /// 最近一次收到各家主通道事件的时间
+    private var lastCursorHookAt: Date = .distantPast
+    private var lastClaudeHookAt: Date = .distantPast
+    private var cursorHooksHealthy: Bool {
+        Date().timeIntervalSince(lastCursorHookAt) < Self.channelTrustWindow
+    }
+    private var claudeHooksHealthy: Bool {
+        Date().timeIntervalSince(lastClaudeHookAt) < Self.channelTrustWindow
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         allowedClaudeIds = claudeRegistry.allowedSessionIds()
@@ -28,16 +67,87 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.allowedClaudeIds = self.claudeRegistry.allowedSessionIds()
             return self.allowedClaudeIds.contains(id)
         }
+        store.codexLivenessCheck = { [weak self] session in
+            guard let self, !session.cwd.isEmpty else { return true }
+            return self.codexLiveHosts[session.cwd] != nil
+        }
+        store.cursorSessionValidator = { [weak self] id in
+            guard let self else { return true }
+            if self.cursorSubagentIds.contains(id) { return false }
+            if self.cursorKnownMainIds.contains(id) { return true }
+            // 未知 id:名单可能还没刷新(hooks 事件比 10s 回填快),当场点查状态库
+            switch CursorStateReader.isSubagentConversation(
+                dbPath: CursorStateReader.defaultDatabasePath(), conversationId: id) {
+            case .some(true):
+                self.cursorSubagentIds.insert(id)
+                return false
+            case .some(false):
+                self.cursorKnownMainIds.insert(id)
+                return true
+            case .none:
+                return true  // 库里还没记录(会话刚创建):暂放行,回填名单会兜底清理
+            }
+        }
+        // 活动历史:状态区间与 token 采样落库(HistoryStore 内部异步,不阻塞)
+        store.transitionObserver = { sessionId, kind, project, newState in
+            Self.history.recordTransition(sessionId: sessionId, kind: kind,
+                                          project: project, to: newState)
+        }
+        store.tokenObserver = { sessionId, kind, tokens in
+            Self.history.recordTokens(sessionId: sessionId, kind: kind, tokens: tokens)
+        }
         installEmitScript()
         startServer()
         startCodexTailer()
+        startCursorTailer()
         setupStatusItem()
 
         notchWindow = NotchWindow(store: store, settings: AppSettings.shared)  // hover 由窗口层监听驱动
+        // 展开面板 = 用户正在看数据:限额若不够新鲜(>30s)立刻补一次探测,
+        // 覆盖「客户端重置额度后没有任务在跑」这类两次轮询间隙里的变化
+        notchWindow?.onHoverBegan = { [weak self] in self?.pollCodexRateLimits(minInterval: 30) }
         notchWindow?.show()
+        setupHotkeys()
+        NotificationCenter.default.addObserver(
+            forName: .agentDockOpenSettings, object: nil, queue: .main) { _ in
+            Task { @MainActor [weak self] in self?.openSettings() }
+        }
+        NotificationCenter.default.addObserver(
+            forName: .agentDockDisplayChanged, object: nil, queue: .main) { _ in
+            Task { @MainActor [weak self] in self?.notchWindow?.reposition() }
+        }
+        NotificationCenter.default.addObserver(
+            forName: .agentDockHotkeysChanged, object: nil, queue: .main) { _ in
+            Task { @MainActor [weak self] in self?.reloadHotkeys() }
+        }
+        // 快捷键录制期间暂停全局热键(否则按下的组合会被热键吞掉),并给面板键盘焦点
+        NotificationCenter.default.addObserver(
+            forName: .agentDockHotkeyRecordingBegan, object: nil, queue: .main) { _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.hotkeys.unregister(self.toggleHotkeyId)
+                self.approvalHotkeyIds.forEach { self.hotkeys.unregister($0) }
+                self.approvalHotkeyIds = []
+                self.notchWindow?.makeKeyForTyping()
+            }
+        }
+        NotificationCenter.default.addObserver(
+            forName: .agentDockHotkeyRecordingEnded, object: nil, queue: .main) { _ in
+            Task { @MainActor [weak self] in self?.reloadHotkeys() }
+        }
+        // 用量页手动刷新:立即探测 codex 限额 + 跑一轮回填(cursor/claude 指标)
+        NotificationCenter.default.addObserver(
+            forName: .agentDockRefreshUsage, object: nil, queue: .main) { _ in
+            Task { @MainActor [weak self] in
+                self?.pollCodexRateLimits()
+                self?.backfillSessions()
+            }
+        }
 
+        seedClaudeLimitsFromLastStatusline()
         backfillSessions()
-        pruneTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+        // 10s 一轮:全量扫描实测稳态约 70ms 且在后台线程执行,主线程只做数据应用
+        pruneTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.store.prune()
                 self?.backfillSessions()
@@ -47,10 +157,147 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         codexLimitsTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.pollCodexRateLimits() }
         }
+        // 首次启动(pkg 安装后自动拉起):弹出分步安装设置向导
+        SetupWizard.showIfNeeded()
     }
 
-    /// Codex 限额:后台起 app-server 查一次,5 分钟一轮
-    private func pollCodexRateLimits() {
+    /// Claude 限额只随 statusline 事件到达,App 重启会丢;emit 脚本每次都会把
+    /// statusline 原样落盘,启动时回放最后一份,限额(若带)就能立刻恢复。
+    /// 新鲜度以文件 mtime 为准,不冒充「刚更新」。
+    private func seedClaudeLimitsFromLastStatusline() {
+        let path = Self.home + "/.agentdock/last-statusline.json"
+        guard let payload = FileManager.default.contents(atPath: path), !payload.isEmpty else { return }
+        var envelope = Data(#"{"source":"claude-code","type":"statusline","payload":"#.utf8)
+        envelope.append(payload)
+        envelope.append(Data("}".utf8))
+        let result = EventIngestor.parseLine(envelope)
+        store.apply(result)
+        if case .metrics(_, _, _, .some(let limits)) = result,
+           let mtime = (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date {
+            store.claudeRateLimits = RateLimits(fiveHourPct: limits.fiveHourPct,
+                                                sevenDayPct: limits.sevenDayPct,
+                                                updatedAt: mtime)
+        }
+    }
+
+    private var lastCodexLimitsFetchAt: Date = .distantPast
+
+    // MARK: - 全局快捷键
+
+    /// 面板切换键常驻;允许/拒绝只在有待审批时注册(避免长期霸占系统级按键)
+    private func setupHotkeys() {
+        let toggle = AppSettings.shared.toggleHotkey
+        toggleHotkeyId = hotkeys.register(keyCode: toggle.keyCode, modifiers: toggle.modifiers) { [weak self] in
+            self?.notchWindow?.hoverState.pinnedOpen.toggle()
+        }
+        observeApprovals()
+    }
+
+    /// 设置里改了快捷键:全部注销重挂
+    private func reloadHotkeys() {
+        hotkeys.unregister(toggleHotkeyId)
+        approvalHotkeyIds.forEach { hotkeys.unregister($0) }
+        approvalHotkeyIds = []
+        let toggle = AppSettings.shared.toggleHotkey
+        toggleHotkeyId = hotkeys.register(keyCode: toggle.keyCode, modifiers: toggle.modifiers) { [weak self] in
+            self?.notchWindow?.hoverState.pinnedOpen.toggle()
+        }
+        syncApprovalHotkeys()
+    }
+
+    /// 持续观察审批队列/会话审批态变化,动态注册/注销允许/拒绝快捷键
+    private func observeApprovals() {
+        withObservationTracking {
+            _ = store.approvals.count
+            _ = store.sessions.filter { $0.state == .waitingApproval }.count
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.syncApprovalHotkeys()
+                self?.observeApprovals()
+            }
+        }
+    }
+
+    /// 有辅助代答能力的待审批会话(Codex/Cursor)
+    private var firstAssistedApprovalSession: AgentSession? {
+        store.sessions.first { $0.state == .waitingApproval && AssistedApproval.supports($0.kind) }
+    }
+
+    private func syncApprovalHotkeys() {
+        let hasPending = !store.approvals.isEmpty || firstAssistedApprovalSession != nil
+        if hasPending, approvalHotkeyIds.isEmpty {
+            let allow = AppSettings.shared.allowHotkey
+            let deny = AppSettings.shared.denyHotkey
+            approvalHotkeyIds = [
+                hotkeys.register(keyCode: allow.keyCode, modifiers: allow.modifiers) { [weak self] in
+                    self?.respondFirstApproval(allow: true)
+                },
+                hotkeys.register(keyCode: deny.keyCode, modifiers: deny.modifiers) { [weak self] in
+                    self?.respondFirstApproval(allow: false)
+                },
+            ]
+        } else if !hasPending, !approvalHotkeyIds.isEmpty {
+            approvalHotkeyIds.forEach { hotkeys.unregister($0) }
+            approvalHotkeyIds = []
+        }
+    }
+
+    private func respondFirstApproval(allow: Bool) {
+        // Claude 的 hook 阻塞代答优先;其次 Codex/Cursor 辅助代答
+        if let approval = store.approvals.first {
+            store.resolveApproval(id: approval.id, allow: allow)
+        } else if let session = firstAssistedApprovalSession {
+            AssistedApproval.respond(session: session, allow: allow)
+        }
+    }
+
+    // MARK: - 挂起交互监视器(秒级)
+    //
+    // 提问/审批卡片被用户处理后没有任何即时信号(应答不产生 hook 事件,
+    // transcript 延迟落盘),10s 回填粒度太粗。有卡片挂起时启动 1s 定时器,
+    // 只对挂起的 bubble 做主键点查(毫秒级),处理完立即解除等待态并停表。
+
+    private func watchInteraction(_ interaction: CursorStateReader.PendingInteraction) {
+        watchedInteractions[interaction.bubbleId] = (interaction.sessionId, interaction.kind)
+        guard interactionWatchTimer == nil else { return }
+        interactionWatchTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.checkWatchedInteractions() }
+        }
+    }
+
+    private func checkWatchedInteractions() {
+        guard !watchedInteractions.isEmpty else {
+            interactionWatchTimer?.invalidate()
+            interactionWatchTimer = nil
+            return
+        }
+        let bubbles = watchedInteractions.map { (sessionId: $0.value.sessionId, bubbleId: $0.key) }
+        Task.detached(priority: .utility) { [weak self] in
+            let resolved = CursorStateReader.resolvedBubbleIds(
+                dbPath: CursorStateReader.defaultDatabasePath(), bubbles: bubbles)
+            guard !resolved.isEmpty else { return }
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                for bubbleId in resolved {
+                    guard let watched = self.watchedInteractions.removeValue(forKey: bubbleId) else { continue }
+                    // 提问已答 → 回到思考;审批已处理 → 解除等待
+                    self.store.apply(.event(AgentEvent(
+                        sessionId: watched.sessionId, kind: .cursor,
+                        name: watched.kind == .question ? "postToolUse" : "approvalResolved")))
+                }
+                if self.watchedInteractions.isEmpty {
+                    self.interactionWatchTimer?.invalidate()
+                    self.interactionWatchTimer = nil
+                }
+            }
+        }
+    }
+
+    /// Codex 限额:后台起 app-server 查询。启动 + 5 分钟定时 + 悬停按需,
+    /// minInterval 防止频繁悬停反复拉起子进程。
+    private func pollCodexRateLimits(minInterval: TimeInterval = 0) {
+        guard Date().timeIntervalSince(lastCodexLimitsFetchAt) >= minInterval else { return }
+        lastCodexLimitsFetchAt = Date()
         Task.detached(priority: .utility) {
             let limits = CodexRateLimitProber.fetch()
             guard let limits else { return }
@@ -58,24 +305,96 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// 扫描磁盘 transcript,补上「启动前就存在、还没发过事件」的会话(CLI/桌面端/插件)
+    /// 回填任务在跑时跳过新一轮(10s 周期下防重入)
+    private var backfillInFlight = false
+
+    /// 扫描磁盘 transcript,补上「启动前就存在、还没发过事件」的会话(CLI/桌面端/插件)。
+    /// 全部 IO 在后台线程,主线程只应用结果。
     private func backfillSessions() {
-        allowedClaudeIds = claudeRegistry.allowedSessionIds()
-        let claudeRoot = Self.home + "/.claude/projects"
-        let codexRoot = Self.home + "/.codex/sessions"
-        var scanned = SessionBackfillScanner.scanClaude(projectsRoot: claudeRoot)
-            + SessionBackfillScanner.scanCodex(root: codexRoot)
-        // 新版 Codex 的会话状态在 SQLite 里,JSONL 只是旧版遗留
-        if let db = CodexStateReader.findDatabase(codexRoot: Self.home + "/.codex") {
-            scanned += CodexStateReader.recentThreads(dbPath: db)
-                .filter { !SessionBackfillScanner.isHiddenPath($0.cwd) }
+        guard !backfillInFlight else { return }
+        backfillInFlight = true
+        let home = Self.home
+        let registry = claudeRegistry
+        // claude hooks 不可用时,注册表 status 是 Claude 自报的权威状态(次级通道)
+        let useClaudeRegistryStatus = !claudeHooksHealthy
+        Task.detached(priority: .utility) { [weak self] in
+            let registryEntries = registry.allowedEntries()
+            // 回填的会话没经过发射脚本,appPath 缺失会导致点击跳不过去、图标退化成
+            // 通用 CLI 图标——claude 用注册表 pid、codex 用「cwd 匹配活进程」补齐宿主。
+            var claudeHosts: [String: String] = [:]
+            for entry in registryEntries {
+                if let app = HostAppResolver.appPath(forPid: entry.pid) {
+                    claudeHosts[entry.sessionId] = app
+                }
+            }
+            let codexHosts = HostAppResolver.hostAppsByCwd(executablePrefix: "codex")
+
+            var scanned = SessionBackfillScanner.scanClaude(projectsRoot: home + "/.claude/projects")
+                + SessionBackfillScanner.scanCodex(root: home + "/.codex/sessions")
+                + SessionBackfillScanner.scanCursor(projectsRoot: home + "/.cursor/projects")
+            // 新版 Codex 的会话状态在 SQLite 里,JSONL 只是旧版遗留
+            if let db = CodexStateReader.findDatabase(codexRoot: home + "/.codex") {
+                scanned += CodexStateReader.recentThreads(dbPath: db)
+                    .filter { !SessionBackfillScanner.isHiddenPath($0.cwd) }
+            }
+            // Cursor 的 ctx%/tokens 只在其全局状态库里,transcript/hook 都不带
+            let cursorSnapshot = CursorStateReader.recentConversations(
+                dbPath: CursorStateReader.defaultDatabasePath())
+            scanned += cursorSnapshot.sessions
+            // 等用户处理的提问/审批卡片:transcript 延迟落盘,hooks 也没有审批事件,
+            // 只能从 bubble 实时探测(始终运行)
+            let interactions = CursorStateReader.pendingInteractions(
+                dbPath: CursorStateReader.defaultDatabasePath(),
+                conversationIds: cursorSnapshot.sessions.map(\.id))
+            let resolved = scanned.map { session in
+                guard session.appPath == nil else { return session }
+                var s = session
+                switch s.kind {
+                case .claudeCode: s.appPath = claudeHosts[s.id]
+                case .codex: s.appPath = codexHosts[s.cwd].flatMap { $0.isEmpty ? nil : $0 }
+                case .cursor: break  // UI 兜底 Cursor.app
+                }
+                return s
+            }
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.allowedClaudeIds = Set(registryEntries.map(\.sessionId))
+                self.codexLiveHosts = codexHosts
+                self.cursorSubagentIds.formUnion(cursorSnapshot.subagentIds)
+                self.store.backfill(resolved)
+                for interaction in interactions {
+                    switch interaction.kind {
+                    case .question:
+                        guard !self.seenQuestionBubbles.contains(interaction.bubbleId) else { continue }
+                        self.seenQuestionBubbles.insert(interaction.bubbleId)
+                        self.store.apply(.event(AgentEvent(
+                            sessionId: interaction.sessionId, kind: .cursor,
+                            name: "preToolUse", detail: "AskQuestion", tool: "AskQuestion")))
+                        self.watchInteraction(interaction)
+                    case .approval:
+                        guard self.watchedInteractions[interaction.bubbleId] == nil else { continue }
+                        self.store.apply(.event(AgentEvent(
+                            sessionId: interaction.sessionId, kind: .cursor,
+                            name: "approvalRequest", detail: interaction.detail)))
+                        self.watchInteraction(interaction)
+                    }
+                }
+                if useClaudeRegistryStatus {
+                    for entry in registryEntries {
+                        if let state = entry.sessionState {
+                            self.store.applyAuthoritativeState(id: entry.sessionId, state: state)
+                        }
+                    }
+                }
+                self.backfillInFlight = false
+            }
         }
-        store.backfill(scanned)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         server?.stop()
         codexTailer?.stop()
+        cursorTailer?.stop()
     }
 
     // MARK: - 采集
@@ -88,7 +407,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             let result = EventIngestor.parseLine(line)
-            Task { @MainActor [weak self] in self?.store.apply(result) }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                // 主通道事件到达 = 该家 hooks 通道健康,次级通道让位
+                switch result {
+                case .event(let e) where e.kind == .cursor:
+                    if !self.cursorHooksHealthy { NSLog("AgentDock: cursor hooks channel active") }
+                    self.lastCursorHookAt = Date()
+                case .event(let e) where e.kind == .claudeCode:
+                    if !self.claudeHooksHealthy { NSLog("AgentDock: claude hooks channel active") }
+                    self.lastClaudeHookAt = Date()
+                default:
+                    break
+                }
+                self.store.apply(result)
+            }
         }
         do {
             try server.start()
@@ -101,12 +434,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startCodexTailer() {
         let root = Self.home + "/.codex/sessions"
         guard FileManager.default.fileExists(atPath: root) else { return }
-        let tailer = CodexSessionTailer(root: root) { sessionId, line in
+        let tailer = CodexSessionTailer(root: root) { _, sessionId, line in
             let result = EventIngestor.parseCodexRolloutLine(sessionId: sessionId, cwd: nil, line: line)
             Task { @MainActor [weak self] in self?.store.apply(result) }
         }
         tailer.start()
         codexTailer = tailer
+    }
+
+    /// Cursor 的 hooks 在部分版本上不可用(MainThreadShellExec not initialized),
+    /// transcript 是唯一稳定的实时信号:秒级 tail,与 hooks 事件走同一状态机。
+    private func startCursorTailer() {
+        let root = Self.home + "/.cursor/projects"
+        guard FileManager.default.fileExists(atPath: root) else { return }
+        let tailer = CodexSessionTailer(
+            root: root,
+            // subagents/ 下是子 agent transcript,秒级通道也必须排除,
+            // 否则会抢在 SQLite 子 agent 名单刷新前漏成重复会话
+            pathFilter: { $0.contains("/agent-transcripts/") && !$0.contains("/subagents/") }
+        ) { path, sessionId, line in
+            // projects/<slug>/agent-transcripts/... → 从 slug 还原项目路径
+            let cwd: String? = path.components(separatedBy: "/")
+                .drop(while: { $0 != "projects" }).dropFirst().first
+                .flatMap { SessionBackfillScanner.resolvePathSlug($0) }
+            let result = EventIngestor.parseCursorTranscriptLine(
+                sessionId: sessionId, cwd: cwd, line: line)
+            Task { @MainActor [weak self] in
+                guard let self, !self.cursorHooksHealthy else { return }
+                self.store.apply(result)
+            }
+        }
+        tailer.start()
+        cursorTailer = tailer
     }
 
     /// 解析权限审批请求行:{"source":"claude-code","type":"permission","payload":{...}}
@@ -145,72 +504,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(systemSymbolName: "cpu", accessibilityDescription: "AgentDock")
-        statusItem = item
-        rebuildMenu()
-    }
-
-    private func rebuildMenu() {
-        let t = AppSettings.shared.t
+        item.button?.image = MenuBarIcon.robot()
         let menu = NSMenu()
-        menu.addItem(withTitle: t("Install Claude Code Integration", "安装 Claude Code 集成"),
-                     action: #selector(installClaude), keyEquivalent: "")
-        menu.addItem(withTitle: t("Uninstall Claude Code Integration", "卸载 Claude Code 集成"),
-                     action: #selector(uninstallClaude), keyEquivalent: "")
-        menu.addItem(.separator())
-        menu.addItem(withTitle: t("Install Codex Integration", "安装 Codex 集成"),
-                     action: #selector(installCodex), keyEquivalent: "")
-        menu.addItem(withTitle: t("Uninstall Codex Integration", "卸载 Codex 集成"),
-                     action: #selector(uninstallCodex), keyEquivalent: "")
-        menu.addItem(.separator())
-
-        let langItem = NSMenuItem(title: t("Language", "语言"), action: nil, keyEquivalent: "")
-        let langMenu = NSMenu()
-        for lang in AppLanguage.allCases {
-            let mi = NSMenuItem(title: lang.displayName, action: #selector(switchLanguage(_:)), keyEquivalent: "")
-            mi.representedObject = lang.rawValue
-            mi.state = AppSettings.shared.language == lang ? .on : .off
-            mi.target = self
-            langMenu.addItem(mi)
-        }
-        langItem.submenu = langMenu
-        menu.addItem(langItem)
-        menu.addItem(.separator())
-        menu.addItem(withTitle: t("Quit AgentDock", "退出 AgentDock"),
-                     action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        for i in menu.items where i.action != #selector(NSApplication.terminate(_:)) { i.target = self }
-        statusItem?.menu = menu
+        menu.delegate = self  // 打开时实时重建,语言切换即时生效
+        item.menu = menu
+        statusItem = item
     }
 
-    @objc private func switchLanguage(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String,
-              let lang = AppLanguage(rawValue: raw) else { return }
-        AppSettings.shared.language = lang
-        rebuildMenu()
+    // MARK: - 设置(面板内 tab)
+
+    @objc func openSettings() {
+        notchWindow?.hoverState.pinnedOpen = true
+        notchWindow?.hoverState.activeTab = .settings
+    }
+}
+
+extension AppDelegate: NSMenuDelegate {
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        let t = AppSettings.shared.t
+        menu.removeAllItems()
+        let quit = NSMenuItem(title: t("Quit AgentDock", "退出 AgentDock"),
+                              action: #selector(quitApp), keyEquivalent: "q")
+        quit.target = self
+        menu.addItem(quit)
     }
 
-    private var claudeInstaller: ClaudeInstaller {
-        ClaudeInstaller(settingsPath: Self.home + "/.claude/settings.json",
-                        emitPath: Self.emitInstallPath)
-    }
-    private var codexInstaller: CodexInstaller {
-        CodexInstaller(configPath: Self.home + "/.codex/config.toml",
-                       emitPath: Self.emitInstallPath)
-    }
-
-    @objc private func installClaude() { runInstall { try self.claudeInstaller.install() } }
-    @objc private func uninstallClaude() { runInstall { try self.claudeInstaller.uninstall() } }
-    @objc private func installCodex() { runInstall { try self.codexInstaller.install() } }
-    @objc private func uninstallCodex() { runInstall { try self.codexInstaller.uninstall() } }
-
-    private func runInstall(_ body: () throws -> Void) {
-        do {
-            try body()
-        } catch {
-            let alert = NSAlert()
-            alert.messageText = AppSettings.shared.t("Operation failed", "操作失败")
-            alert.informativeText = error.localizedDescription
-            alert.runModal()
-        }
+    @objc func quitApp() {
+        AppQuit.quit()
     }
 }
