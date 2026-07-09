@@ -10,8 +10,7 @@ custom_domain = true
 [[d1_databases]]
 binding = "DB"
 database_name = "agentdock"
-# 跑 `npm run db:create` 后把输出的 database_id 填到这里
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "b2219f13-a192-48e6-b458-5b22f8fb492b"
 
 [vars]
 # 官网静态站(下载跳转目标 + CORS 来源)
