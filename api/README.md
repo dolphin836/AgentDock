@@ -1,6 +1,6 @@
 # AgentDock API (Cloudflare Workers)
 
-独立部署到 **`api.agentdockstatus.app`**，与官网静态站 `www.agentdockstatus.app` 分离。
+独立部署到 **`api.agentdockstatus.app`**，与官网静态站 `agentdockstatus.app` 分离。
 
 ## 能力
 
@@ -40,7 +40,7 @@ npm run deploy
 
 DNS：`api.agentdockstatus.app` 需在同一 Cloudflare zone；`custom_domain = true` 会自动处理。
 
-看板：部署官网后打开 `https://www.agentdockstatus.app/admin.html`（账号 `admin`，密码为你设的 secret）。
+看板：部署官网后打开 `https://agentdockstatus.app/admin.html`（账号 `admin`，密码为你设的 secret）。
 
 ## 本地调试
 

@@ -101,7 +101,7 @@ h2 { font-size: 15px; }
 展示已完成的配置,并引导授予一项可选的系统权限(辅助功能)。</p>
 <p>菜单栏会出现机器人图标,鼠标悬停屏幕顶部刘海区域即可展开面板。
 需要调整语言、开机自启、Agent 集成等,都可在面板的「设置」页中修改。</p>
-<p>官网:<a href="https://www.agentdockstatus.app">www.agentdockstatus.app</a></p>
+<p>官网:<a href="https://agentdockstatus.app">agentdockstatus.app</a></p>
 </body></html>
 HTML
 

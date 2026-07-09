@@ -107,7 +107,7 @@ struct SettingsPanelView: View {
 
             linkRow(label: settings.t("website", "官网"),
                     title: "agentdockstatus.app",
-                    url: "https://www.agentdockstatus.app")
+                    url: "https://agentdockstatus.app")
             linkRow(label: settings.t("more apps", "更多应用"),
                     title: "Wallpaper Exchange · wallpaperexchange.com",
                     url: "https://www.wallpaperexchange.com")

@@ -13,7 +13,7 @@ public struct UpdateInfo: Codable, Equatable, Sendable {
 
 /// 检查更新:拉取官网 version.json,与当前版本做语义比较
 public enum UpdateChecker {
-    public static let feedURL = URL(string: "https://www.agentdockstatus.app/version.json")!
+    public static let feedURL = URL(string: "https://agentdockstatus.app/version.json")!
 
     /// 拉取最新版本信息;10s 超时,绕过本地缓存(更新源必须拿到最新内容)
     public static func fetchLatest(from url: URL = feedURL) async throws -> UpdateInfo {
