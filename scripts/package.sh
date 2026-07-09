@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VERSION="0.2.0"
+VERSION="0.2.1"
 # 通用二进制:Intel 机器上纯 arm64 的 App 能安装但无法启动(无提示),必须双架构
 BIN=".build/apple/Products/Release"
 APP="dist/AgentDock.app"
