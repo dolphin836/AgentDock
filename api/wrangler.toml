@@ -14,7 +14,7 @@ database_id = "b2219f13-a192-48e6-b458-5b22f8fb492b"
 
 [vars]
 # 官网静态站(下载跳转目标 + CORS 来源)
-SITE_ORIGIN = "https://www.agentdockstatus.app"
+SITE_ORIGIN = "https://agentdockstatus.app"
 # 看板登录账号(密码用 secret,见 README)
 ADMIN_USER = "admin"
 

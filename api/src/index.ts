@@ -160,12 +160,13 @@ async function adminLogin(request: Request, env: Env): Promise<Response> {
   const body = await readJson(request);
   if (!body) return json({ error: "invalid_json" }, 400);
 
-  const user = asString(body.username) ?? "";
+  const user = (asString(body.username) ?? "").trim();
   const pass = asString(body.password) ?? "";
   if (!env.ADMIN_PASSWORD || !env.SESSION_SECRET) {
     return json({ error: "admin_not_configured" }, 503);
   }
-  if (user !== env.ADMIN_USER || pass !== env.ADMIN_PASSWORD) {
+  // Secret 在控制台粘贴时偶发带尾部换行,比对前 trim
+  if (user !== env.ADMIN_USER.trim() || pass !== env.ADMIN_PASSWORD.trim()) {
     return json({ error: "invalid_credentials" }, 401);
   }
 
@@ -315,17 +316,20 @@ const timingSafe = {
 // ─── Helpers ─────────────────────────────────────────────────────────
 
 function cors(res: Response, request: Request, env: Env): Response {
-  const origin = request.headers.get("Origin") ?? "";
+  const origin = (request.headers.get("Origin") ?? "").replace(/\/+$/, "");
+  const site = env.SITE_ORIGIN.replace(/\/+$/, "");
+  // 官网实际挂在 apex;www 可能未解析。两者都放行,避免看板跨域登录被拦。
   const allowed = new Set([
-    env.SITE_ORIGIN.replace(/\/+$/, ""),
+    site,
+    "https://agentdockstatus.app",
+    "https://www.agentdockstatus.app",
     "http://127.0.0.1:8787",
     "http://localhost:8787",
     "http://127.0.0.1:5500",
     "http://localhost:5500",
   ]);
-  // 官网静态页同源打开时无 Origin;跨域看板页需要白名单
   const headers = new Headers(res.headers);
-  if (origin && allowed.has(origin.replace(/\/+$/, ""))) {
+  if (origin && allowed.has(origin)) {
     headers.set("Access-Control-Allow-Origin", origin);
     headers.set("Access-Control-Allow-Credentials", "true");
     headers.set("Access-Control-Allow-Headers", "Content-Type");
