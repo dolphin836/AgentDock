@@ -34,6 +34,7 @@ struct SettingsPanelView: View {
             languageRow
             launchAtLoginRow
             keepAwakeRow
+            placementRow
             displayRow
 
             sectionRule(settings.t("SHORTCUTS", "快捷键"))
@@ -205,6 +206,36 @@ struct SettingsPanelView: View {
         .padding(.vertical, 4)
     }
 
+    private var placementRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(settings.t("panel position", "界面位置"))
+                    .font(Theme.mono(10))
+                    .foregroundStyle(Theme.text2)
+                Spacer()
+                VStack(alignment: .trailing, spacing: 3) {
+                    selectable(settings.t("notch (default)", "刘海(默认)"),
+                               active: settings.panelPlacement == .notch) {
+                        settings.panelPlacement = .notch
+                    }
+                    selectable(settings.t("menu bar icon", "菜单栏图标"),
+                               active: settings.panelPlacement == .menuBar) {
+                        settings.panelPlacement = .menuBar
+                    }
+                }
+            }
+            if settings.panelPlacement == .menuBar {
+                Text(settings.t("Hover or click the menu bar icon to open · right-click to quit",
+                                "悬停或左键点击菜单栏图标展开 · 右键退出"))
+                    .font(Theme.mono(9))
+                    .foregroundStyle(Theme.text4)
+                    .padding(.leading, 0)
+            }
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 4)
+    }
+
     private var displayRow: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(settings.t("display", "展示屏幕"))
@@ -228,6 +259,9 @@ struct SettingsPanelView: View {
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 4)
+        // 菜单栏模式下面板跟图标走,展示屏幕选项无意义
+        .opacity(settings.panelPlacement == .notch ? 1 : 0.35)
+        .disabled(settings.panelPlacement == .menuBar)
     }
 
     /// 单选项:● 选中(磷光绿)/ ○ 未选
@@ -322,10 +356,16 @@ struct SettingsPanelView: View {
                 .foregroundStyle(granted ? Theme.phosphor.opacity(0.8) : Theme.text4)
             Spacer()
             if !granted {
+                // 重装/ad-hoc 重签后系统常把 App 当成新条目:优先打开系统设置勾选,
+                // 「请求授权」只弹一次系统引导,避免反复打扰
                 TermButton(title: settings.t("REQUEST", "请求授权"),
                            color: Theme.phosphor.opacity(0.85)) {
                     _ = PermissionGuide.accessibilityGranted(promptIfNeeded: true)
                     permissionsRefresh += 1
+                }
+                TermButton(title: settings.t("SYSTEM SETTINGS", "系统设置"),
+                           color: Theme.amber.opacity(0.85)) {
+                    PermissionGuide.openAccessibilitySettings()
                 }
             }
         }

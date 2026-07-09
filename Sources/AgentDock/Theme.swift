@@ -25,6 +25,29 @@ enum Theme {
     static let text3 = Color.white.opacity(0.36)   // 辅助
     static let text4 = Color.white.opacity(0.22)   // 结构线/刻度底
 
+    // MARK: 表面 / 描边(统一透明度,避免各处漂移)
+
+    static let surface = Color.white.opacity(0.07)
+    static let surfaceHover = Color.white.opacity(0.10)
+    static let border = Color.white.opacity(0.18)
+    static let borderSubtle = Color.white.opacity(0.10)
+
+    /// 面板底:极轻冷绿偏色,比纯黑多一点「仪表」质感
+    static let panelFill = Color(red: 0.02, green: 0.035, blue: 0.028)
+
+    // MARK: 动效(短、软、少弹——高级感靠过渡而不是夸张)
+
+    /// 展开/收起刘海
+    static let expandSpring = Animation.spring(response: 0.34, dampingFraction: 0.86)
+    /// Tab / 内容切换
+    static let tabSwitch = Animation.easeInOut(duration: 0.2)
+    /// 悬停、状态色变化
+    static let soft = Animation.easeOut(duration: 0.16)
+    /// 列表项出现
+    static let appear = Animation.easeOut(duration: 0.22)
+    /// 收起态任务轮播交叉淡入
+    static let crossfade = Animation.easeInOut(duration: 0.28)
+
     /// 全局等宽字体:字符本身就是网格
     static func mono(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
         .system(size: size, weight: weight, design: .monospaced)
@@ -150,19 +173,20 @@ struct Keycaps: View {
                     .frame(minWidth: 10)
                     .padding(.horizontal, 3)
                     .padding(.vertical, 1.5)
-                    .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 3))
+                    .background(Theme.surface, in: RoundedRectangle(cornerRadius: 3))
                     .overlay(RoundedRectangle(cornerRadius: 3)
-                        .stroke(Color.white.opacity(0.18), lineWidth: 1))
+                        .stroke(Theme.border, lineWidth: 1))
             }
         }
     }
 }
 
-/// 终端风格小按钮:描边 + 等宽字,用于设置页操作
+/// 终端风格小按钮:描边 + 等宽字,用于设置页操作;悬停轻微提亮、按下略缩
 struct TermButton: View {
     let title: String
     var color: Color = Theme.text2
     let action: () -> Void
+    @State private var hovered = false
 
     var body: some View {
         Button(action: action) {
@@ -171,23 +195,37 @@ struct TermButton: View {
                 .foregroundStyle(color)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 2.5)
-                .background(color.opacity(0.08), in: RoundedRectangle(cornerRadius: 3))
-                .overlay(RoundedRectangle(cornerRadius: 3).stroke(color.opacity(0.4), lineWidth: 1))
+                .background(color.opacity(hovered ? 0.14 : 0.08), in: RoundedRectangle(cornerRadius: 3))
+                .overlay(RoundedRectangle(cornerRadius: 3)
+                    .stroke(color.opacity(hovered ? 0.55 : 0.4), lineWidth: 1))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SoftPressStyle())
+        .onHover { hovering in
+            withAnimation(Theme.soft) { hovered = hovering }
+        }
     }
 }
 
-/// 呼吸灯:active 时整体透明度缓慢起伏(1.6s 一个周期),表达「正在进行」
+/// 按下轻微缩小,松手回弹——比系统默认更克制
+struct SoftPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .opacity(configuration.isPressed ? 0.88 : 1)
+            .animation(Theme.soft, value: configuration.isPressed)
+    }
+}
+
+/// 呼吸灯:active 时整体透明度缓慢起伏,表达「正在进行」(幅度收一点,更不刺眼)
 struct Breathing: ViewModifier {
     let active: Bool
     @State private var dim = false
 
     func body(content: Content) -> some View {
         content
-            .opacity(active && dim ? 0.35 : 1)
+            .opacity(active && dim ? 0.48 : 1)
             .animation(active
-                       ? .easeInOut(duration: 0.8).repeatForever(autoreverses: true)
+                       ? .easeInOut(duration: 1.1).repeatForever(autoreverses: true)
                        : .default,
                        value: dim)
             .onAppear { dim = true }
@@ -198,6 +236,32 @@ extension View {
     /// 思考中/执行中的呼吸灯效果
     func breathing(_ active: Bool) -> some View {
         modifier(Breathing(active: active))
+    }
+
+    /// 语义色微光:运行中图标 / 激活 tab / 点亮刻度用,半径保持很小以免糊
+    func phosphorGlow(_ color: Color = Theme.phosphor, active: Bool = true) -> some View {
+        shadow(color: active ? color.opacity(0.45) : .clear, radius: 3.5, y: 0)
+    }
+
+    /// 列表项轻柔入场:淡入 + 轻微上移(不弹)
+    func softAppear(delay: Double = 0) -> some View {
+        modifier(SoftAppear(delay: delay))
+    }
+}
+
+/// 首次出现时淡入上移;之后保持,避免列表刷新反复跳动
+private struct SoftAppear: ViewModifier {
+    var delay: Double
+    @State private var shown = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(shown ? 1 : 0)
+            .offset(y: shown ? 0 : 4)
+            .onAppear {
+                guard !shown else { return }
+                withAnimation(Theme.appear.delay(delay)) { shown = true }
+            }
     }
 }
 

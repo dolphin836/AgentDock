@@ -8,6 +8,10 @@ import ApplicationServices
 /// 唯一需要用户批准的是「自动化」(Apple 事件):点击会话行、且宿主 App 未知时,
 /// 用 AppleScript 匹配 Terminal/iTerm2 窗口。未授权时该路径退化为 Finder 定位,
 /// 其他功能完全不受影响。
+///
+/// 「辅助功能」仅 Codex/Cursor 面板内辅助代答需要。注意:ad-hoc 签名每次重装
+/// CDHash 会变,系统可能把新包当成另一个 App——旧勾选对不上,需在系统设置里
+/// 重新打开 AgentDock 开关。
 @MainActor
 enum PermissionGuide {
 
@@ -29,6 +33,9 @@ enum PermissionGuide {
         /// 目标 App 未运行,系统无法判定/弹框
         case notRunning
     }
+
+    /// 本进程生命周期内最多弹一次辅助功能引导,避免每次审批都打扰
+    private static var didPromptAccessibilityThisLaunch = false
 
     /// 无打扰查询;askIfNeeded = true 且目标在运行时会触发系统授权弹窗
     static func automationStatus(bundleId: String, askIfNeeded: Bool = false) -> Status {
@@ -58,11 +65,21 @@ enum PermissionGuide {
         NSWorkspace.shared.open(url)
     }
 
+    static func openAccessibilitySettings() {
+        let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
+        NSWorkspace.shared.open(url)
+    }
+
     /// 「辅助功能」授权:Codex/Cursor 辅助代答需要合成键盘事件。
-    /// promptIfNeeded = true 时未授权会弹系统引导
+    /// - 默认静默查询,不弹窗
+    /// - `promptIfNeeded = true` 时仅在本进程首次未授权时弹一次系统引导
     static func accessibilityGranted(promptIfNeeded: Bool = false) -> Bool {
-        // kAXTrustedCheckOptionPrompt 是 C 全局变量,Swift 6 判定非并发安全;键名是固定常量
-        let options = ["AXTrustedCheckOptionPrompt": promptIfNeeded]
-        return AXIsProcessTrustedWithOptions(options as CFDictionary)
+        // 先静默查:已授权直接返回,绝不弹窗
+        if AXIsProcessTrusted() { return true }
+        guard promptIfNeeded, !didPromptAccessibilityThisLaunch else { return false }
+        didPromptAccessibilityThisLaunch = true
+        // kAXTrustedCheckOptionPrompt 是 CFString 全局;用字面键名避免 Swift 6 并发告警
+        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+        return AXIsProcessTrustedWithOptions(options)
     }
 }

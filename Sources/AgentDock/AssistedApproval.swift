@@ -13,8 +13,9 @@ enum AssistedApproval {
     }
 
     static func respond(session: AgentSession, allow: Bool) {
-        // 首次使用触发系统授权引导;未授权时只聚焦不按键(聚焦本身也有价值)
-        let trusted = PermissionGuide.accessibilityGranted(promptIfNeeded: true)
+        // 只静默检查,绝不在每次允许/拒绝时弹系统授权框(会反复打扰)。
+        // 未授权时仍聚焦宿主窗口;按键需要用户在设置页或系统设置里打开辅助功能。
+        let trusted = PermissionGuide.accessibilityGranted()
         // 必须聚焦到该会话所在的项目窗口,不能只激活 App:
         // 多窗口时按键会打进错误的窗口,看起来就是「点了没反应」
         TerminalJumper.jump(toCwd: session.cwd, appPath: session.appPath, kind: session.kind)

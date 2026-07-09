@@ -26,10 +26,10 @@ import Foundation
 
     @Test func decodesFeedJSON() throws {
         let json = Data("""
-        {"version": "0.2.1", "download": "https://api.agentdockstatus.app/v1/download/AgentDock-0.2.1.pkg"}
+        {"version": "0.2.2", "download": "https://api.agentdockstatus.app/v1/download/AgentDock-0.2.2.pkg"}
         """.utf8)
         let info = try JSONDecoder().decode(UpdateInfo.self, from: json)
-        #expect(info.version == "0.2.1")
-        #expect(info.download == "https://api.agentdockstatus.app/v1/download/AgentDock-0.2.1.pkg")
+        #expect(info.version == "0.2.2")
+        #expect(info.download == "https://api.agentdockstatus.app/v1/download/AgentDock-0.2.2.pkg")
     }
 }

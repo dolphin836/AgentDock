@@ -41,8 +41,11 @@ struct SessionRowView: View {
         } label: {
             if compact { compactRow } else { fullRow }
         }
-        .buttonStyle(.plain)
-        .onHover { hovered = $0 }
+        .buttonStyle(SoftPressStyle())
+        .onHover { hovering in
+            withAnimation(Theme.soft) { hovered = hovering }
+        }
+        .animation(Theme.soft, value: session.state)
     }
 
     // MARK: 双行(进行中 / 等你)
@@ -119,11 +122,16 @@ struct SessionRowView: View {
         .padding(.horizontal, 9)
         .background(rowBackground, in: RoundedRectangle(cornerRadius: 6))
         .overlay(alignment: .leading) {
-            // 左缘状态色条:扫视时快速定位「谁在等我」
+            // 左缘状态色条:扫视时快速定位「谁在等我」;hover 时略提亮
             RoundedRectangle(cornerRadius: 1)
-                .fill(session.state.dotColor.opacity(edgeOpacity))
+                .fill(session.state.dotColor.opacity(hovered ? min(edgeOpacity + 0.25, 1) : edgeOpacity))
                 .frame(width: 2)
                 .padding(.vertical, 6)
+                .phosphorGlow(session.state.dotColor, active: edgeOpacity > 0 || hovered)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(hovered ? Theme.borderSubtle : .clear, lineWidth: 1)
         }
         .contentShape(Rectangle())
     }
@@ -158,7 +166,7 @@ struct SessionRowView: View {
         }
         .padding(.vertical, 4)
         .padding(.horizontal, 9)
-        .background(hovered ? Color.white.opacity(0.06) : .clear,
+        .background(hovered ? Theme.surfaceHover : .clear,
                     in: RoundedRectangle(cornerRadius: 5))
         .contentShape(Rectangle())
     }
@@ -276,8 +284,9 @@ private extension SessionRowView {
                 .padding(.vertical, 3)
                 .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 3))
                 .overlay(RoundedRectangle(cornerRadius: 3).stroke(color.opacity(0.45), lineWidth: 1))
+                .phosphorGlow(color, active: true)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SoftPressStyle())
     }
 
     /// 审批请求的内容(命令/拦截原因),取最近一条审批事件
@@ -299,7 +308,7 @@ private extension SessionRowView {
 
     /// 等你的行有轻微暖色底;进行中靠光标动效;hover 提亮
     private var rowBackground: Color {
-        if hovered { return .white.opacity(0.08) }
+        if hovered { return Theme.surfaceHover }
         switch session.state {
         case .waitingApproval: return Theme.yellow.opacity(0.07)
         case .waitingInput: return Theme.amber.opacity(0.05)

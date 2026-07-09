@@ -13,6 +13,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pruneTimer: Timer?
     private var codexLimitsTimer: Timer?
     private var statusItem: NSStatusItem?
+    /// 菜单栏模式:运行中眨眼
+    private var statusBlinkTimer: Timer?
+    private var statusEyesOpen = true
     private let hotkeys = HotkeyManager()
     private var toggleHotkeyId: UInt32 = 0
     private var approvalHotkeyIds: [UInt32] = []
@@ -66,6 +69,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         allowedClaudeIds = claudeRegistry.allowedSessionIds()
         store.claudeSessionValidator = { [weak self] id in
             guard let self else { return true }
+            // 本地 UI 演示会话(scripts/fake-session.sh)不走 Claude 注册表
+            if id.hasPrefix("agentdock-demo") { return true }
             if self.allowedClaudeIds.contains(id) { return true }
             // 未知 id 可能是刚开的新会话:立刻重扫一次注册表再判
             self.allowedClaudeIds = self.claudeRegistry.allowedSessionIds()
@@ -110,6 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 展开面板 = 用户正在看数据:限额若不够新鲜(>30s)立刻补一次探测,
         // 覆盖「客户端重置额度后没有任务在跑」这类两次轮询间隙里的变化
         notchWindow?.onHoverBegan = { [weak self] in self?.pollAccountUsage(minInterval: 30) }
+        notchWindow?.statusButton = statusItem?.button
         notchWindow?.show()
         setupHotkeys()
         NotificationCenter.default.addObserver(
@@ -120,6 +126,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forName: .agentDockDisplayChanged, object: nil, queue: .main) { _ in
             Task { @MainActor [weak self] in self?.notchWindow?.reposition() }
         }
+        NotificationCenter.default.addObserver(
+            forName: .agentDockPlacementChanged, object: nil, queue: .main) { _ in
+            Task { @MainActor [weak self] in
+                // 切换挂靠位置时保持面板打开(用户多半在设置页操作),只重定位
+                self?.notchWindow?.hoverState.hovering = false
+                self?.notchWindow?.hoverState.pinnedOpen = true
+                self?.notchWindow?.reposition()
+                self?.refreshStatusItem()
+            }
+        }
+        observeStatusItem()
+        refreshStatusItem()
         NotificationCenter.default.addObserver(
             forName: .agentDockHotkeysChanged, object: nil, queue: .main) { _ in
             Task { @MainActor [weak self] in self?.reloadHotkeys() }
@@ -204,7 +222,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupHotkeys() {
         let toggle = AppSettings.shared.toggleHotkey
         toggleHotkeyId = hotkeys.register(keyCode: toggle.keyCode, modifiers: toggle.modifiers) { [weak self] in
-            self?.notchWindow?.hoverState.pinnedOpen.toggle()
+            self?.notchWindow?.togglePinned()
         }
         observeApprovals()
     }
@@ -216,19 +234,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         approvalHotkeyIds = []
         let toggle = AppSettings.shared.toggleHotkey
         toggleHotkeyId = hotkeys.register(keyCode: toggle.keyCode, modifiers: toggle.modifiers) { [weak self] in
-            self?.notchWindow?.hoverState.pinnedOpen.toggle()
+            self?.notchWindow?.togglePinned()
         }
         syncApprovalHotkeys()
     }
 
-    /// 持续观察审批队列/会话审批态变化,动态注册/注销允许/拒绝快捷键
+    /// 持续观察审批队列/会话审批态变化,动态注册/注销允许/拒绝快捷键;
+    /// 菜单栏模式下「等你处理」也要自动弹出面板
     private func observeApprovals() {
         withObservationTracking {
             _ = store.approvals.count
-            _ = store.sessions.filter { $0.state == .waitingApproval }.count
+            _ = store.sessions.filter {
+                $0.state == .waitingApproval || $0.state == .waitingInput
+            }.count
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.syncApprovalHotkeys()
+                self?.notchWindow?.refreshVisibility()
                 self?.observeApprovals()
             }
         }
@@ -468,9 +490,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// 无 Dock 图标、无主窗口:用户在启动台/访达再次点击 App 图标时系统发 reopen,
-    /// 不处理就毫无反应(看起来像"点不开")——展开刘海面板作为可见反馈
+    /// 不处理就毫无反应(看起来像"点不开")——展开面板作为可见反馈
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         notchWindow?.hoverState.pinnedOpen = true
+        notchWindow?.refreshVisibility()
         return false
     }
 
@@ -583,15 +606,146 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: Self.emitInstallPath)
     }
 
-    // MARK: - 菜单栏(安装/卸载入口)
+    // MARK: - 菜单栏
 
     private func setupStatusItem() {
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.image = MenuBarIcon.robot()
-        let menu = NSMenu()
-        menu.delegate = self  // 打开时实时重建,语言切换即时生效
-        item.menu = menu
+        item.button?.imagePosition = .imageLeft
+        // 左键:展开/收起面板(两种挂靠模式通用);右键:退出菜单
+        item.button?.target = self
+        item.button?.action = #selector(statusItemPrimaryAction(_:))
+        item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         statusItem = item
+    }
+
+    /// 会话状态变化时刷新菜单栏图标颜色 / 数量 / 眨眼
+    private func observeStatusItem() {
+        withObservationTracking {
+            _ = store.sessions.map { "\($0.id):\($0.state)" }
+            _ = AppSettings.shared.panelPlacement
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.refreshStatusItem()
+                self?.observeStatusItem()
+            }
+        }
+    }
+
+    private func refreshStatusItem() {
+        guard let button = statusItem?.button else { return }
+        let menuBar = AppSettings.shared.panelPlacement == .menuBar
+        let summary = statusSummary
+
+        if menuBar {
+            button.image = MenuBarIcon.robot(tint: summary.tint, eyesOpen: statusEyesOpen || !summary.blink)
+            if summary.count > 0 {
+                button.title = " \(summary.count)"
+                button.font = .monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+                // 标题色跟状态走,菜单栏深浅色下都够看
+                button.contentTintColor = summary.titleColor
+            } else {
+                button.title = ""
+                button.contentTintColor = nil
+            }
+            button.toolTip = summary.tooltip
+            syncBlinkTimer(enabled: summary.blink)
+        } else {
+            // 刘海模式:经典模板图标,不占宽度、不眨眼
+            button.image = MenuBarIcon.robot()
+            button.title = ""
+            button.contentTintColor = nil
+            button.toolTip = nil
+            syncBlinkTimer(enabled: false)
+            statusEyesOpen = true
+        }
+        notchWindow?.statusButton = button
+    }
+
+    private struct StatusSummary {
+        var tint: MenuBarIcon.Tint
+        var count: Int
+        var blink: Bool
+        var tooltip: String
+        var titleColor: NSColor?
+    }
+
+    /// 优先级:需要审批 > 运行中 > 其余(等待输入/仅有会话/无会话)一律模板色、无数字
+    private var statusSummary: StatusSummary {
+        let sessions = store.sessions
+        let needsApproval = sessions.filter { $0.state == .waitingApproval }
+        let running = sessions.filter { $0.state == .thinking || $0.state == .runningTool }
+        let t = AppSettings.shared.t
+
+        if !needsApproval.isEmpty {
+            return StatusSummary(
+                tint: .yellow,
+                count: needsApproval.count,
+                blink: true,
+                tooltip: t("\(needsApproval.count) need approval",
+                           "\(needsApproval.count) 个需要审批"),
+                titleColor: NSColor(red: 0.82, green: 0.72, blue: 0.38, alpha: 1))
+        }
+        if !running.isEmpty {
+            return StatusSummary(
+                tint: .phosphor,
+                count: running.count,
+                blink: true,
+                tooltip: t("\(running.count) running",
+                           "\(running.count) 个运行中"),
+                titleColor: NSColor(red: 0.45, green: 0.68, blue: 0.52, alpha: 1))
+        }
+        return StatusSummary(
+            tint: .template,
+            count: 0,
+            blink: false,
+            tooltip: t("AgentDock", "AgentDock"),
+            titleColor: nil)
+    }
+
+    private func syncBlinkTimer(enabled: Bool) {
+        if enabled {
+            if statusBlinkTimer == nil {
+                statusEyesOpen = true
+                statusBlinkTimer = Timer.scheduledTimer(withTimeInterval: 0.55, repeats: true) { [weak self] _ in
+                    Task { @MainActor in
+                        guard let self else { return }
+                        self.statusEyesOpen.toggle()
+                        self.refreshStatusItem()
+                    }
+                }
+            }
+        } else if let timer = statusBlinkTimer {
+            timer.invalidate()
+            statusBlinkTimer = nil
+            statusEyesOpen = true
+        }
+    }
+
+    @objc private func statusItemPrimaryAction(_ sender: NSStatusBarButton) {
+        guard let event = NSApp.currentEvent else {
+            notchWindow?.togglePinned()
+            return
+        }
+        switch event.type {
+        case .rightMouseUp:
+            showStatusItemMenu(from: sender)
+        default:
+            // 左键:两种模式都切换面板(刘海模式等同 ⌘G 固定展开)
+            notchWindow?.togglePinned()
+        }
+    }
+
+    private func showStatusItemMenu(from button: NSStatusBarButton) {
+        let t = AppSettings.shared.t
+        let menu = NSMenu()
+        let quit = NSMenuItem(title: t("Quit AgentDock", "退出 AgentDock"),
+                              action: #selector(quitApp), keyEquivalent: "q")
+        quit.target = self
+        menu.addItem(quit)
+        // popUp 相对按钮,右键菜单不抢左键
+        let point = NSPoint(x: 0, y: button.bounds.height + 2)
+        menu.popUp(positioning: nil, at: point, in: button)
     }
 
     // MARK: - 设置(面板内 tab)
@@ -599,17 +753,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func openSettings() {
         notchWindow?.hoverState.pinnedOpen = true
         notchWindow?.hoverState.activeTab = .settings
-    }
-}
-
-extension AppDelegate: NSMenuDelegate {
-    func menuNeedsUpdate(_ menu: NSMenu) {
-        let t = AppSettings.shared.t
-        menu.removeAllItems()
-        let quit = NSMenuItem(title: t("Quit AgentDock", "退出 AgentDock"),
-                              action: #selector(quitApp), keyEquivalent: "q")
-        quit.target = self
-        menu.addItem(quit)
+        notchWindow?.refreshVisibility()
     }
 
     @objc func quitApp() {

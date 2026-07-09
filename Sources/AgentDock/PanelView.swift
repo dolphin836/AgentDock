@@ -26,31 +26,39 @@ struct PanelView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // 标题行固定:不参与 tab 切换动画,避免切到设置时整行跟着晃
             header
+                .transaction { $0.animation = nil }
 
-            switch hoverState.activeTab {
-            case .sessions:
-                Group {
-                    scrollable(sessionList)
-                    footer  // 页脚固定在滚动区之外,始终可见
-                }
-                .transition(.opacity.combined(with: .move(edge: .leading)))
-            case .usage:
-                scrollable(
-                    UsagePanelView(store: store, settings: settings)
-                        .padding(.bottom, 8))
-                    .transition(.opacity)
-            case .settings:
-                scrollable(
-                    SettingsPanelView(settings: settings)
-                        .padding(.bottom, 4))
-                    .transition(.opacity.combined(with: .move(edge: .trailing)))
-            }
+            tabBody
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .animation(Theme.tabSwitch, value: hoverState.activeTab)
         }
         .padding(.horizontal, NotchLayout.edgePadding - 6)
+        .padding(.top, AppSettings.shared.panelPlacement == .menuBar ? 12 : 0)
         .padding(.bottom, 12)
-        .frame(width: width)
-        .animation(.easeInOut(duration: 0.22), value: hoverState.activeTab)
+        .frame(width: width, alignment: .topLeading)
+    }
+
+    @ViewBuilder private var tabBody: some View {
+        switch hoverState.activeTab {
+        case .sessions:
+            Group {
+                scrollable(sessionList)
+                footer  // 页脚固定在滚动区之外,始终可见
+            }
+            .transition(.opacity)
+        case .usage:
+            scrollable(
+                UsagePanelView(store: store, settings: settings)
+                    .padding(.bottom, 8))
+                .transition(.opacity)
+        case .settings:
+            scrollable(
+                SettingsPanelView(settings: settings)
+                    .padding(.bottom, 4))
+                .transition(.opacity)
+        }
     }
 
     // MARK: 内容滚动:内容不高时贴合高度,超出上限(会话多)时转为滚动,避免被窗口截断
@@ -122,9 +130,9 @@ struct PanelView: View {
                         .frame(minWidth: 10)
                         .padding(.horizontal, 3)
                         .padding(.vertical, 1.5)
-                        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 3))
+                        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 3))
                         .overlay(RoundedRectangle(cornerRadius: 3)
-                            .stroke(Color.white.opacity(0.18), lineWidth: 1))
+                            .stroke(Theme.border, lineWidth: 1))
                 }
             }
             Text(label)
@@ -136,6 +144,7 @@ struct PanelView: View {
     // MARK: 顶部:左标题 / 中统计 / 右 tab 切换
 
     private var header: some View {
+        // 中间统计始终占位(非会话页透明),避免显隐导致标题行几何变化
         ZStack {
             HStack(spacing: 6) {
                 RobotGlyph(size: 15)
@@ -143,6 +152,7 @@ struct PanelView: View {
                     .font(Theme.mono(11, .bold))
                     .tracking(2)
                     .foregroundStyle(Theme.text1)
+                    .phosphorGlow(Theme.phosphor.opacity(0.7), active: true)
                 Spacer(minLength: 8)
                 tab("list.bullet", active: hoverState.activeTab == .sessions,
                     help: settings.t("Sessions", "会话")) {
@@ -157,17 +167,17 @@ struct PanelView: View {
                     hoverState.activeTab = .settings
                 }
             }
-            if hoverState.activeTab == .sessions {
-                Text(SessionStats(sessions: store.sessions, settings: settings).headerText)
-                    .font(Theme.mono(9))
-                    .foregroundStyle(Theme.text3)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .allowsHitTesting(false)
-            }
+            Text(SessionStats(sessions: store.sessions, settings: settings).headerText)
+                .font(Theme.mono(9))
+                .foregroundStyle(Theme.text3)
+                .lineLimit(1)
+                .opacity(hoverState.activeTab == .sessions ? 1 : 0)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .allowsHitTesting(false)
         }
         .padding(.horizontal, 8)
         .padding(.bottom, 8)
+        .frame(height: 28, alignment: .center)
     }
 
     /// 图标 tab:圆形描边统一轮廓,激活态磷光绿,切换带过渡动画
@@ -180,12 +190,13 @@ struct PanelView: View {
                 .frame(width: 20, height: 20)
                 .background(active ? Theme.phosphor.opacity(0.1) : .clear, in: Circle())
                 .overlay(Circle().stroke(
-                    active ? Theme.phosphor.opacity(0.55) : Color.white.opacity(0.16),
+                    active ? Theme.phosphor.opacity(0.55) : Theme.borderSubtle,
                     lineWidth: 1))
+                .phosphorGlow(active: active)
                 .contentShape(Circle())
-                .animation(.easeInOut(duration: 0.2), value: active)
+                .animation(Theme.tabSwitch, value: active)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SoftPressStyle())
         .help(help)
     }
 
@@ -202,6 +213,9 @@ struct PanelView: View {
                     .font(Theme.mono(9, .semibold))
                     .tracking(1.6)
                     .foregroundStyle(tint.opacity(0.85))
+                Text("\(sessions.count)")
+                    .font(Theme.mono(9, .semibold))
+                    .foregroundStyle(tint.opacity(0.55))
                 Rectangle()
                     .fill(tint.opacity(0.18))
                     .frame(height: 1)
@@ -209,23 +223,26 @@ struct PanelView: View {
             .padding(.horizontal, 9)
             .padding(.top, 9)
             .padding(.bottom, 4)
-            ForEach(sessions) { session in
+            ForEach(Array(sessions.enumerated()), id: \.element.id) { index, session in
                 SessionRowView(session: session, settings: settings, compact: compact,
                                approval: store.approval(for: session.id),
                                onDecision: { id, allow in store.resolveApproval(id: id, allow: allow) })
+                    .softAppear(delay: Double(min(index, 6)) * 0.03)
             }
         }
+        .animation(Theme.soft, value: sessions.map(\.id))
     }
 }
 
 /// 竖线刻度进度条:按百分比点亮;高用量时点亮部分转暖色警示。
-/// 默认小号(列表页),用量页用大号参数
+/// 默认小号(列表页),用量页用大号参数。pct 变化时点亮刻度带轻微扫入感。
 struct TickBar: View {
     let pct: Int
     var ticks: Int = 20
     var tickWidth: CGFloat = 1.5
     var tickHeight: CGFloat = 8
     var spacing: CGFloat = 1.5
+    @State private var revealed = 0
 
     var body: some View {
         HStack(spacing: spacing) {
@@ -233,15 +250,39 @@ struct TickBar: View {
                 RoundedRectangle(cornerRadius: 0.5)
                     .fill(color(at: i))
                     .frame(width: tickWidth, height: tickHeight)
+                    .opacity(i < revealed ? 1 : 0.35)
+                    .phosphorGlow(litColor(at: i), active: i == filled - 1 && filled > 0 && i < revealed)
             }
         }
+        .onAppear { animateReveal() }
+        .onChange(of: pct) { _, _ in animateReveal() }
+    }
+
+    private var filled: Int {
+        Int((Double(min(max(pct, 0), 100)) / 100 * Double(ticks)).rounded())
+    }
+
+    private func animateReveal() {
+        revealed = 0
+        let target = max(filled, 1)
+        for i in 0..<target {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.018) {
+                withAnimation(.easeOut(duration: 0.12)) {
+                    revealed = i + 1
+                }
+            }
+        }
+        if filled == 0 { revealed = 0 }
+    }
+
+    private func litColor(at index: Int) -> Color {
+        if pct >= 90 { return Theme.red }
+        if pct >= 75 { return Theme.amber }
+        return Theme.phosphor
     }
 
     private func color(at index: Int) -> Color {
-        let filled = Int((Double(min(max(pct, 0), 100)) / 100 * Double(ticks)).rounded())
         guard index < filled else { return Theme.text4 }
-        if pct >= 90 { return Theme.red }
-        if pct >= 75 { return Theme.amber }
-        return Theme.phosphor.opacity(0.8)
+        return litColor(at: index).opacity(pct >= 90 || pct >= 75 ? 1 : 0.8)
     }
 }

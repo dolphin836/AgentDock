@@ -1,22 +1,123 @@
 #!/bin/bash
-# 向运行中的 AgentDock 灌一段模拟的 Claude Code 会话事件,用于端到端验证 UI。
-set -e
+# 向运行中的 AgentDock 灌模拟会话,用于看「进行中」动效 / 轮播 / 分组。
+#
+# 用法:
+#   ./scripts/fake-session.sh           # 默认:多会话停在进行中约 45 秒
+#   ./scripts/fake-session.sh running   # 同上
+#   ./scripts/fake-session.sh approval  # 2 个需要审批(黄机器人眨眼),保持约 30 秒
+#   ./scripts/fake-session.sh cycle     # 完整生命周期(含审批→完成)
+#   ./scripts/fake-session.sh clear     # 发 Stop 清掉演示会话
+set -euo pipefail
 SOCK="$HOME/.agentdock/agentdock.sock"
-[ -S "$SOCK" ] || { echo "AgentDock 未运行($SOCK 不存在)"; exit 1; }
+MODE="${1:-running}"
+
+[ -S "$SOCK" ] || { echo "AgentDock 未运行($SOCK 不存在)。先启动 App 再跑本脚本。"; exit 1; }
 
 emit() {
-  printf '{"source":"claude-code","type":"hook","payload":{"session_id":"agentdock-demo","hook_event_name":"%s","cwd":"/tmp/agentdock-demo","tool_name":"%s"}}\n' "$1" "$2" \
-    | nc -U -w 1 "$SOCK"
-}
-metrics() {
-  printf '{"source":"claude-code","type":"statusline","payload":{"session_id":"agentdock-demo","model":{"display_name":"Opus"},"cost":{"total_cost_usd":0.42},"context_window":{"used_percentage":37}}}\n' \
-    | nc -U -w 1 "$SOCK"
+  local sid="$1" event="$2" tool="${3:-}" cwd="${4:-/tmp/agentdock-demo}"
+  printf '{"source":"claude-code","type":"hook","payload":{"session_id":"%s","hook_event_name":"%s","cwd":"%s","tool_name":"%s"}}\n' \
+    "$sid" "$event" "$cwd" "$tool" | nc -U -w 1 "$SOCK" >/dev/null || true
 }
 
-echo "SessionStart";       emit SessionStart "";        sleep 2
-echo "UserPromptSubmit";   emit UserPromptSubmit "";    metrics; sleep 2
-echo "PreToolUse(Bash)";   emit PreToolUse "Bash";      sleep 3
-echo "Notification(审批)"; emit Notification "";        sleep 6
-echo "PostToolUse";        emit PostToolUse "Bash";     sleep 2
-echo "Stop";               emit Stop ""
-echo "done — 面板中会话应显示 已完成"
+metrics() {
+  local sid="$1" model="${2:-Opus}" pct="${3:-37}"
+  printf '{"source":"claude-code","type":"statusline","payload":{"session_id":"%s","model":{"display_name":"%s"},"cost":{"total_cost_usd":0.42},"context_window":{"used_percentage":%s}}}\n' \
+    "$sid" "$model" "$pct" | nc -U -w 1 "$SOCK" >/dev/null || true
+}
+
+start_running() {
+  local sid="$1" cwd="$2" tool="$3" model="$4" pct="$5"
+  emit "$sid" SessionStart "" "$cwd"
+  sleep 0.15
+  emit "$sid" UserPromptSubmit "" "$cwd"
+  metrics "$sid" "$model" "$pct"
+  sleep 0.15
+  emit "$sid" PreToolUse "$tool" "$cwd"
+}
+
+case "$MODE" in
+  clear)
+    echo "停止演示会话…"
+    for sid in agentdock-demo-a agentdock-demo-b agentdock-demo-c agentdock-demo \
+               agentdock-demo-appr-a agentdock-demo-appr-b; do
+      emit "$sid" Stop ""
+    done
+    echo "done"
+    ;;
+
+  approval)
+    echo "模拟 2 个需要审批…"
+    echo "  A  需要审批  ·  /tmp/agentdock-approve-a"
+    echo "  B  需要审批  ·  /tmp/agentdock-approve-b"
+    for sid_cwd in \
+      "agentdock-demo-appr-a|/tmp/agentdock-approve-a|Bash|Opus|41" \
+      "agentdock-demo-appr-b|/tmp/agentdock-approve-b|Edit|Sonnet|63"
+    do
+      IFS='|' read -r sid cwd tool model pct <<<"$sid_cwd"
+      emit "$sid" SessionStart "" "$cwd"
+      sleep 0.1
+      emit "$sid" UserPromptSubmit "" "$cwd"
+      metrics "$sid" "$model" "$pct"
+      sleep 0.1
+      emit "$sid" PreToolUse "$tool" "$cwd"
+      sleep 0.1
+      emit "$sid" Notification "" "$cwd"
+    done
+    echo "保持需要审批约 30 秒(Ctrl+C 可提前结束)…"
+    for i in $(seq 1 10); do
+      sleep 3
+      emit agentdock-demo-appr-a Notification "" /tmp/agentdock-approve-a
+      emit agentdock-demo-appr-b Notification "" /tmp/agentdock-approve-b
+      printf "  …%ss\n" $((i * 3))
+    done
+    echo "收尾 → Stop"
+    emit agentdock-demo-appr-a Stop "" /tmp/agentdock-approve-a
+    emit agentdock-demo-appr-b Stop "" /tmp/agentdock-approve-b
+    echo "done"
+    ;;
+
+  cycle)
+    echo "完整生命周期(约 15s)…"
+    emit agentdock-demo SessionStart "" /tmp/agentdock-demo
+    sleep 1
+    emit agentdock-demo UserPromptSubmit "" /tmp/agentdock-demo
+    metrics agentdock-demo
+    sleep 1
+    emit agentdock-demo PreToolUse Bash /tmp/agentdock-demo
+    sleep 3
+    emit agentdock-demo Notification "" /tmp/agentdock-demo
+    sleep 5
+    emit agentdock-demo PostToolUse Bash /tmp/agentdock-demo
+    sleep 1
+    emit agentdock-demo Stop "" /tmp/agentdock-demo
+    echo "done — 应进入 RECENT"
+    ;;
+
+  running|*)
+    echo "模拟 3 个进行中任务(悬停刘海看面板;收起态会轮播)…"
+    echo "  A  命令执行中  ·  /tmp/agentdock-alpha"
+    echo "  B  检索中      ·  /tmp/agentdock-beta"
+    echo "  C  编辑中      ·  /tmp/agentdock-gamma"
+    start_running agentdock-demo-a /tmp/agentdock-alpha Bash Sonnet 28
+    start_running agentdock-demo-b /tmp/agentdock-beta Grep Opus 55
+    start_running agentdock-demo-c /tmp/agentdock-gamma Edit Haiku 12
+
+    # 保持「进行中」:周期性补 PreToolUse,避免被当成空闲
+    echo "保持进行中约 45 秒(Ctrl+C 可提前结束;结束后自动 Stop)…"
+    for i in $(seq 1 15); do
+      sleep 3
+      case $((i % 3)) in
+        1) emit agentdock-demo-a PreToolUse Bash /tmp/agentdock-alpha ;;
+        2) emit agentdock-demo-b PreToolUse Grep /tmp/agentdock-beta ;;
+        0) emit agentdock-demo-c PreToolUse Edit /tmp/agentdock-gamma ;;
+      esac
+      printf "  …%ss\n" $((i * 3))
+    done
+
+    echo "收尾 → Stop"
+    emit agentdock-demo-a Stop "" /tmp/agentdock-alpha
+    emit agentdock-demo-b Stop "" /tmp/agentdock-beta
+    emit agentdock-demo-c Stop "" /tmp/agentdock-gamma
+    echo "done"
+    ;;
+esac

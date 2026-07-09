@@ -20,30 +20,41 @@ struct CapsuleView: View {
         } else {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 let primary = rotatingPrimary(at: context.date)
+                // id 变化时交叉淡入,轮播不硬切
                 bar(
-                    left: AnyView(HStack(spacing: 5) {
-                        AgentIcon(kind: primary.kind, spinning: true)
-                        Text(primary.projectName)
-                            .font(Theme.mono(11, .semibold))
-                            .foregroundStyle(Theme.text1)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }),
-                    center: AnyView(dotRow),
-                    right: AnyView(HStack(spacing: 5) {
-                        Text(elapsedText(primary, now: context.date))
-                            .font(Theme.mono(10, .medium))
-                            .foregroundStyle(Theme.text2)
+                    left: AnyView(
                         HStack(spacing: 5) {
-                            Text(primary.activityLabel(settings: settings))
-                                .font(Theme.mono(10, .medium))
-                                .foregroundStyle(primary.state.dotColor)
+                            AgentIcon(kind: primary.kind, spinning: true)
+                            Text(primary.projectName)
+                                .font(Theme.mono(11, .semibold))
+                                .foregroundStyle(Theme.text1)
                                 .lineLimit(1)
-                            StatusGlyph(state: primary.state, size: 9)
+                                .truncationMode(.tail)
                         }
-                        .breathing(primary.state == .thinking || primary.state == .runningTool)
-                    })
+                        .id(primary.id)
+                        .transition(.opacity.combined(with: .offset(y: 2)))
+                    ),
+                    center: AnyView(dotRow(highlightId: primary.id)),
+                    right: AnyView(
+                        HStack(spacing: 5) {
+                            Text(elapsedText(primary, now: context.date))
+                                .font(Theme.mono(10, .medium))
+                                .foregroundStyle(Theme.text2)
+                                .contentTransition(.numericText())
+                            HStack(spacing: 5) {
+                                Text(primary.activityLabel(settings: settings))
+                                    .font(Theme.mono(10, .medium))
+                                    .foregroundStyle(primary.state.dotColor)
+                                    .lineLimit(1)
+                                StatusGlyph(state: primary.state, size: 9)
+                            }
+                            .breathing(primary.state == .thinking || primary.state == .runningTool)
+                        }
+                        .id(primary.id + "-right")
+                        .transition(.opacity)
+                    )
                 )
+                .animation(Theme.crossfade, value: primary.id)
             }
         }
     }
@@ -59,25 +70,36 @@ struct CapsuleView: View {
                 Text(stats.sessionsText)
                     .font(Theme.mono(10, .medium))
                     .foregroundStyle(Theme.text2)
+                    .contentTransition(.numericText())
             }),
-            center: AnyView(dotRow),
+            center: AnyView(dotRow(highlightId: nil)),
             right: AnyView(Text(stats.agentsText)
                 .font(Theme.mono(10, .medium))
-                .foregroundStyle(Theme.text2))
+                .foregroundStyle(Theme.text2)
+                .contentTransition(.numericText()))
         )
+        .animation(Theme.soft, value: sessions.count)
     }
 
-    /// 一排状态点:每个会话一个点,颜色即状态,一眼看出「几个在跑、几个在等我」。
-    /// 排序:等你处理 > 进行中 > 其他,重要的排前面(空间不够时先看到要紧的)
-    private var dotRow: some View {
+    /// 一排状态点:每个会话一个点,颜色即状态;当前轮播任务略放大提亮
+    private func dotRow(highlightId: String?) -> some View {
         let ordered = sessions.sorted { rank($0.state) < rank($1.state) }
         return HStack(spacing: 4.5) {
             ForEach(ordered.prefix(18)) { session in
+                let lit = session.id == highlightId
+                    || session.state == .thinking
+                    || session.state == .runningTool
+                    || session.state == .waitingApproval
                 Circle()
                     .fill(session.state.dotColor)
-                    .frame(width: 5, height: 5)
+                    .frame(width: lit && session.id == highlightId ? 6 : 5,
+                           height: lit && session.id == highlightId ? 6 : 5)
+                    .opacity(session.id == highlightId || highlightId == nil ? 1 : 0.55)
+                    .phosphorGlow(session.state.dotColor, active: lit)
+                    .animation(Theme.soft, value: highlightId)
             }
         }
+        .animation(Theme.soft, value: sessions.map(\.id))
     }
 
     private func rank(_ state: SessionState) -> Int {
@@ -107,7 +129,23 @@ struct CapsuleView: View {
                 .frame(maxHeight: .infinity)
         }
         .frame(width: NotchLayout.totalWidth, height: NotchLayout.barHeight)
-        .background(NotchShape().fill(.black))
+        .background(NotchShape().fill(Theme.panelFill))
+        .overlay {
+            NotchShape()
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            Theme.phosphor.opacity(0),
+                            Theme.phosphor.opacity(0.22),
+                            Theme.phosphor.opacity(0),
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ),
+                    lineWidth: 1
+                )
+                .allowsHitTesting(false)
+        }
     }
 
     /// 进行中任务每 3 秒轮播
@@ -153,4 +191,3 @@ struct SessionStats {
                    "\(sessionCount) 个会话 · \(agentCount) 个 Agent · \(runningCount) 个运行中")
     }
 }
-

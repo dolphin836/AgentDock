@@ -13,9 +13,12 @@ struct NotchRootView: View {
         hoverState.hovering || hoverState.pinnedOpen || !waitingIds.isEmpty
     }
 
-    /// 顶栏高度:主屏有刘海用刘海高度,否则用菜单栏高度
+    private var menuBarMode: Bool { settings.panelPlacement == .menuBar }
+
+    /// 刘海模式:顶栏高度避开刘海/菜单栏;菜单栏下拉模式:面板直接从图标下方开始
     private var topInset: CGFloat {
-        guard let screen = NSScreen.screens.first else { return 24 }
+        if menuBarMode { return 0 }
+        guard let screen = settings.targetScreen ?? NSScreen.screens.first else { return 24 }
         return screen.safeAreaInsets.top > 0
             ? screen.safeAreaInsets.top
             : screen.frame.maxY - screen.visibleFrame.maxY
@@ -25,14 +28,12 @@ struct NotchRootView: View {
         VStack(spacing: 0) {
             Group {
                 if expanded {
-                    // 面板内容从顶栏下沿开始,避免被刘海/菜单栏遮挡
-                    PanelView(store: store, settings: settings, hoverState: hoverState,
-                              width: NotchLayout.totalWidth)
-                        .padding(.top, topInset)
-                        .background(NotchShape(topRadius: 8, bottomRadius: 18).fill(.black))
-                } else {
-                    // 收起态贴着屏幕顶端,中段与(虚拟)刘海对齐
+                    panelChrome
+                } else if !menuBarMode {
+                    // 收起态仅刘海模式显示三段条;菜单栏模式收起时窗口隐藏
                     CapsuleView(sessions: store.sessions, settings: settings)
+                } else {
+                    Color.clear.frame(width: 1, height: 1)
                 }
             }
             .onChange(of: expanded) { _, isExpanded in
@@ -45,7 +46,53 @@ struct NotchRootView: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity)
-        .animation(.spring(duration: 0.25), value: expanded)
+        .animation(Theme.expandSpring, value: expanded)
+    }
+
+    @ViewBuilder private var panelChrome: some View {
+        let panel = PanelView(store: store, settings: settings, hoverState: hoverState,
+                              width: NotchLayout.totalWidth)
+            .padding(.top, topInset)
+        let edge = LinearGradient(
+            colors: [
+                Theme.phosphor.opacity(0),
+                Theme.phosphor.opacity(0.28),
+                Theme.cyan.opacity(0.18),
+                Theme.phosphor.opacity(0),
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+        if menuBarMode {
+            // 菜单栏下拉:顶部箭头指向状态栏图标 + 圆角卡片(无磷光描边)
+            VStack(spacing: 0) {
+                MenuBarCaret()
+                    .fill(Theme.panelFill)
+                    .frame(width: 18, height: 9)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, max(0, hoverState.menuBarCaretX - 9))
+                    // 箭头底边压进卡片 1pt,盖住接缝
+                    .padding(.bottom, -1)
+                    .zIndex(1)
+
+                panel
+                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.panelFill))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Theme.borderSubtle, lineWidth: 1)
+                            .allowsHitTesting(false)
+                    }
+            }
+            .frame(width: NotchLayout.totalWidth)
+        } else {
+            panel
+                .background(NotchShape(topRadius: 8, bottomRadius: 18).fill(Theme.panelFill))
+                .overlay {
+                    NotchShape(topRadius: 8, bottomRadius: 18)
+                        .stroke(edge, lineWidth: 1)
+                        .allowsHitTesting(false)
+                }
+        }
     }
 
     /// 需要保持面板展开提醒的会话:等待审批,或 agent 主动提问等用户回答
@@ -55,6 +102,26 @@ struct NotchRootView: View {
             return session.state == .waitingInput
                 && session.recentEvents.last?.tool.map(isUserFacingTool) == true
         }.map(\.id))
+    }
+}
+
+/// 菜单栏下拉面板顶部的小三角,尖朝上指向状态栏图标;两侧向内凹的弧边
+struct MenuBarCaret: Shape {
+    func path(in rect: CGRect) -> Path {
+        let tip = CGPoint(x: rect.midX, y: rect.minY)
+        let right = CGPoint(x: rect.maxX, y: rect.maxY)
+        let left = CGPoint(x: rect.minX, y: rect.maxY)
+        // 控制点偏向中轴,两侧边向内凹
+        let insetX = rect.width * 0.12
+        var path = Path()
+        path.move(to: tip)
+        path.addQuadCurve(to: right,
+                          control: CGPoint(x: rect.midX + insetX, y: rect.midY))
+        path.addLine(to: left)
+        path.addQuadCurve(to: tip,
+                          control: CGPoint(x: rect.midX - insetX, y: rect.midY))
+        path.closeSubpath()
+        return path
     }
 }
 
@@ -80,6 +147,7 @@ struct AgentIcon: View {
         glyph
             .frame(width: size, height: size)
             .foregroundStyle(spinning ? Theme.phosphor : .white.opacity(0.55))
+            .phosphorGlow(active: spinning)
             .rotationEffect(.degrees(spin && spinning ? 360 : 0))
             .animation(spinning
                        ? .linear(duration: 2.5).repeatForever(autoreverses: false)

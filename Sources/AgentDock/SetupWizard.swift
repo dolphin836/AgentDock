@@ -295,11 +295,15 @@ struct SetupWizardView: View {
                         _ = PermissionGuide.accessibilityGranted(promptIfNeeded: true)
                         refresh += 1
                     }
+                    TermButton(title: settings.t("SYSTEM SETTINGS", "系统设置"),
+                               color: Theme.amber.opacity(0.85)) {
+                        PermissionGuide.openAccessibilitySettings()
+                    }
                 }
             }
             .id(refresh)
-            Text(settings.t("Used for assisted approve/deny of Codex/Cursor approvals from the panel.",
-                            "用于在面板内对 Codex/Cursor 的审批请求做辅助代答(聚焦宿主并代按审批键)。"))
+            Text(settings.t("Used for assisted approve/deny of Codex/Cursor approvals from the panel. After reinstall, re-enable AgentDock in System Settings → Privacy → Accessibility.",
+                            "用于在面板内对 Codex/Cursor 的审批请求做辅助代答。重装后若仍显示未授权,请到系统设置 → 隐私与安全性 → 辅助功能里重新打开 AgentDock。"))
                 .font(Theme.mono(9))
                 .foregroundStyle(Theme.text4)
             Text(settings.t("\"Automation\" (jump to exact terminal tab) is requested on first use.",

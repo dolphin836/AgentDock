@@ -16,6 +16,12 @@ enum AppLanguage: String, CaseIterable {
     }
 }
 
+/// 面板挂靠位置:刘海居中(默认) / 菜单栏图标下拉
+enum PanelPlacement: String, CaseIterable {
+    case notch
+    case menuBar
+}
+
 /// 全局快捷键组合(Carbon keyCode + 修饰键),display 为 ⌘G 这样的展示串
 struct Hotkey: Codable, Equatable {
     var keyCode: Int
@@ -31,6 +37,7 @@ extension Notification.Name {
     static let agentDockDisplayChanged = Notification.Name("AgentDockDisplayChanged")
     static let agentDockHotkeysChanged = Notification.Name("AgentDockHotkeysChanged")
     static let agentDockKeepAwakeChanged = Notification.Name("AgentDockKeepAwakeChanged")
+    static let agentDockPlacementChanged = Notification.Name("AgentDockPlacementChanged")
 }
 
 @MainActor
@@ -47,6 +54,14 @@ final class AppSettings {
         didSet {
             UserDefaults.standard.set(displayID ?? 0, forKey: "AgentDockDisplayID")
             NotificationCenter.default.post(name: .agentDockDisplayChanged, object: nil)
+        }
+    }
+
+    /// 面板位置:刘海居中(默认) / 菜单栏图标下拉
+    var panelPlacement: PanelPlacement {
+        didSet {
+            UserDefaults.standard.set(panelPlacement.rawValue, forKey: "AgentDockPanelPlacement")
+            NotificationCenter.default.post(name: .agentDockPlacementChanged, object: nil)
         }
     }
 
@@ -77,6 +92,7 @@ final class AppSettings {
         language = AppLanguage(rawValue: defaults.string(forKey: "AgentDockLanguage") ?? "") ?? .english
         let storedDisplay = defaults.integer(forKey: "AgentDockDisplayID")
         displayID = storedDisplay == 0 ? nil : storedDisplay
+        panelPlacement = PanelPlacement(rawValue: defaults.string(forKey: "AgentDockPanelPlacement") ?? "") ?? .notch
         keepAwakeWhileRunning = defaults.object(forKey: "AgentDockKeepAwake") as? Bool ?? true
         toggleHotkey = Self.load(key: "AgentDockHotkeyToggle") ?? Self.defaultToggle
         allowHotkey = Self.load(key: "AgentDockHotkeyAllow") ?? Self.defaultAllow
