@@ -20,17 +20,21 @@ cd api
 npm install
 cp .dev.vars.example .dev.vars   # 本地调试用
 
-# 1) 创建 D1，把输出的 database_id 填进 wrangler.toml
+# 1) 登录（本机首次）
+npx wrangler login
+
+# 2) 创建 D1，把输出的 database_id 填进 wrangler.toml
 npm run db:create
 
-# 2) 迁移表结构
+# 3) 迁移表结构
 npm run db:migrate
 
-# 3) 生产密钥（不要提交仓库）
+# 4) 生产密钥（不要提交仓库）
 npx wrangler secret put ADMIN_PASSWORD
 npx wrangler secret put SESSION_SECRET
 
-# 4) 部署(会按 wrangler.toml 绑定 api.agentdockstatus.app)
+# 5) 部署(会按 wrangler.toml 绑定 api.agentdockstatus.app)
+#    若用 Cloudflare Workers Builds 连 Git，推 main 即可；Worker 名须为 agent-dock
 npm run deploy
 ```
 

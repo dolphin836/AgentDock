@@ -1,4 +1,4 @@
-name = "agentdock-api"
+name = "agent-dock"
 main = "src/index.ts"
 compatibility_date = "2025-06-01"
 
