@@ -11,10 +11,12 @@ enum SetupWizard {
 
     static func showIfNeeded() {
         guard !UserDefaults.standard.bool(forKey: doneKey) else { return }
-        show()
+        // 安装器已预配置(语言/自启/集成):精简向导,只做必须在 GUI 里完成的权限授权
+        let preconfigured = UserDefaults.standard.bool(forKey: SetupCLI.preconfiguredKey)
+        show(preconfigured: preconfigured)
     }
 
-    static func show() {
+    static func show(preconfigured: Bool = false) {
         if window == nil {
             let w = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 540, height: 460),
@@ -24,7 +26,7 @@ enum SetupWizard {
             w.titleVisibility = .hidden
             w.backgroundColor = .black
             w.isReleasedWhenClosed = false
-            w.contentView = NSHostingView(rootView: SetupWizardView {
+            w.contentView = NSHostingView(rootView: SetupWizardView(preconfigured: preconfigured) {
                 UserDefaults.standard.set(true, forKey: doneKey)
                 window?.orderOut(nil)
             })
@@ -37,6 +39,8 @@ enum SetupWizard {
 }
 
 struct SetupWizardView: View {
+    /// 安装器已预配置时,向导只保留「已就绪总结 + 权限授权」两步
+    var preconfigured = false
     let onFinish: () -> Void
     @Bindable private var settings = AppSettings.shared
     @State private var step = 0
@@ -45,14 +49,26 @@ struct SetupWizardView: View {
 
     private static let home = NSHomeDirectory()
     private static let emitPath = home + "/.agentdock/agentdock-emit"
-    private let totalSteps = 5
 
-    private var stepTitles: [String] {
-        [settings.t("Language", "语言"),
-         settings.t("Launch at Login", "开机自启"),
-         settings.t("Keep Awake", "防休眠"),
-         settings.t("Integrations", "Agent 集成"),
-         settings.t("Permissions", "系统权限")]
+    private enum Step { case summary, language, autostart, keepAwake, integrations, permissions }
+
+    private var steps: [Step] {
+        preconfigured
+            ? [.summary, .permissions]
+            : [.language, .autostart, .keepAwake, .integrations, .permissions]
+    }
+    private var totalSteps: Int { steps.count }
+    private var current: Step { steps[min(step, steps.count - 1)] }
+
+    private func title(for s: Step) -> String {
+        switch s {
+        case .summary: settings.t("Ready", "已就绪")
+        case .language: settings.t("Language", "语言")
+        case .autostart: settings.t("Launch at Login", "开机自启")
+        case .keepAwake: settings.t("Keep Awake", "防休眠")
+        case .integrations: settings.t("Integrations", "Agent 集成")
+        case .permissions: settings.t("Permissions", "系统权限")
+        }
     }
 
     var body: some View {
@@ -61,12 +77,13 @@ struct SetupWizardView: View {
             Rectangle().fill(Theme.text4.opacity(0.5)).frame(height: 1)
 
             Group {
-                switch step {
-                case 0: languageStep
-                case 1: autostartStep
-                case 2: keepAwakeStep
-                case 3: integrationsStep
-                default: permissionsStep
+                switch current {
+                case .summary: summaryStep
+                case .language: languageStep
+                case .autostart: autostartStep
+                case .keepAwake: keepAwakeStep
+                case .integrations: integrationsStep
+                case .permissions: permissionsStep
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -107,11 +124,59 @@ struct SetupWizardView: View {
         .padding(.bottom, 14)
     }
 
+    // MARK: 预配置总结(安装器已配好时的首屏)
+
+    private var summaryStep: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            stepHeading(settings.t("You're set up", "已为你配置好"),
+                        settings.t("The installer configured AgentDock with sensible defaults. You can change any of these later in Settings.",
+                                   "安装器已用推荐默认值配置好 AgentDock,以下各项之后都能在「设置」里改。"))
+            summaryLine(settings.t("Language", "语言"),
+                        settings.language.displayName)
+            summaryLine(settings.t("Launch at login", "开机自启"),
+                        LaunchAtLogin.isEnabled ? settings.t("on", "开启") : settings.t("off", "关闭"))
+            summaryLine(settings.t("Keep awake while agents run", "任务进行中防休眠"),
+                        settings.keepAwakeWhileRunning ? settings.t("on", "开启") : settings.t("off", "关闭"))
+            summaryLine(settings.t("Integrations", "Agent 集成"),
+                        installedIntegrationsText)
+            Text(settings.t("One optional step left: system permission.", "还剩一步可选的系统权限授权。"))
+                .font(Theme.mono(10))
+                .foregroundStyle(Theme.text3)
+                .padding(.top, 4)
+        }
+    }
+
+    private var installedIntegrationsText: String {
+        let installed = SetupCLI.detectInstalledAgents().filter { name in
+            switch name {
+            case "claude": ClaudeInstaller(settingsPath: Self.home + "/.claude/settings.json",
+                                           emitPath: Self.emitPath).isInstalled
+            case "codex": CodexInstaller(configPath: Self.home + "/.codex/config.toml",
+                                         emitPath: Self.emitPath).isInstalled
+            case "cursor": CursorInstaller(hooksPath: Self.home + "/.cursor/hooks.json",
+                                           emitPath: Self.emitPath).isInstalled
+            default: false
+            }
+        }
+        guard !installed.isEmpty else { return settings.t("none detected", "未检测到") }
+        return installed.map { $0.uppercased() }.joined(separator: " · ")
+    }
+
+    private func summaryLine(_ label: String, _ value: String) -> some View {
+        HStack(spacing: 10) {
+            Text("●").font(Theme.mono(9)).foregroundStyle(Theme.phosphor.opacity(0.7))
+            Text(label).font(Theme.mono(11)).foregroundStyle(Theme.text2)
+            Spacer()
+            Text(value).font(Theme.mono(11, .semibold)).foregroundStyle(Theme.text1)
+        }
+        .padding(.vertical, 3)
+    }
+
     // MARK: 步骤 1:语言
 
     private var languageStep: some View {
         VStack(alignment: .leading, spacing: 14) {
-            stepHeading(stepTitles[0], settings.t("Choose the interface language.", "选择界面语言。"))
+            stepHeading(title(for: .language), settings.t("Choose the interface language.", "选择界面语言。"))
             ForEach(AppLanguage.allCases, id: \.self) { lang in
                 bigOption(lang.displayName, active: settings.language == lang) {
                     settings.language = lang
@@ -124,7 +189,7 @@ struct SetupWizardView: View {
 
     private var autostartStep: some View {
         VStack(alignment: .leading, spacing: 14) {
-            stepHeading(stepTitles[1],
+            stepHeading(title(for: .autostart),
                         settings.t("Start AgentDock automatically when you log in.",
                                    "登录时自动启动 AgentDock,agent 状态随时可见。"))
             bigOption(settings.t("Enable (recommended)", "开启(推荐)"), active: launchAtLogin) {
@@ -140,7 +205,7 @@ struct SetupWizardView: View {
 
     private var keepAwakeStep: some View {
         VStack(alignment: .leading, spacing: 14) {
-            stepHeading(stepTitles[2],
+            stepHeading(title(for: .keepAwake),
                         settings.t("Prevent your Mac from idle-sleeping while an agent task is running, so long tasks don't get suspended midway.",
                                    "Agent 任务进行中阻止 Mac 闲置休眠,长任务不会跑到一半被挂起。"))
             bigOption(settings.t("Enable (recommended)", "开启(推荐)"),
@@ -162,7 +227,7 @@ struct SetupWizardView: View {
 
     private var integrationsStep: some View {
         VStack(alignment: .leading, spacing: 10) {
-            stepHeading(stepTitles[3],
+            stepHeading(title(for: .integrations),
                         settings.t("Register the event emitter into each agent for sub-second status and in-panel approvals.",
                                    "把事件发射器注册进各 agent,获得亚秒级状态与面板内审批。"))
             Group {
@@ -214,7 +279,7 @@ struct SetupWizardView: View {
     private var permissionsStep: some View {
         let granted = PermissionGuide.accessibilityGranted()
         return VStack(alignment: .leading, spacing: 14) {
-            stepHeading(stepTitles[4],
+            stepHeading(title(for: .permissions),
                         settings.t("Optional system permissions.", "可选的系统权限,跳过不影响核心功能。"))
             HStack(spacing: 10) {
                 Text(settings.t("Accessibility", "辅助功能"))
@@ -295,7 +360,7 @@ struct SetupWizardView: View {
                        ? settings.t("FINISH", "完成")
                        : settings.t("CONTINUE", "继续"),
                        color: Theme.phosphor) {
-                if step == 1 {
+                if current == .autostart {
                     try? LaunchAtLogin.setEnabled(launchAtLogin)  // 离开自启步骤时落盘
                 }
                 if step == totalSteps - 1 {

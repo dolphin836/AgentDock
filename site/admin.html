@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>AgentDock · Admin</title>
+<style>
+  :root {
+    --bg: #0b0f0c;
+    --panel: #121a14;
+    --line: #1e2a22;
+    --text: #d7e7db;
+    --muted: #7f9586;
+    --accent: #52ff8a;
+    --danger: #ff6b6b;
+    --warn: #ffc857;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    background: radial-gradient(1200px 600px at 20% -10%, #16301f 0%, transparent 55%), var(--bg);
+    color: var(--text);
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 40px 20px 80px; }
+  h1 { font-size: 18px; letter-spacing: .08em; margin: 0 0 6px; }
+  .sub { color: var(--muted); font-size: 12px; margin-bottom: 28px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 20px; margin-bottom: 16px;
+  }
+  label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+  input {
+    width: 100%; padding: 10px 12px; margin-bottom: 14px;
+    background: #0a100c; border: 1px solid var(--line); border-radius: 6px;
+    color: var(--text); font: inherit;
+  }
+  button {
+    font: inherit; cursor: pointer; border: 0; border-radius: 6px;
+    padding: 10px 14px; background: var(--accent); color: #06210f; font-weight: 700;
+  }
+  button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+  .metric {
+    background: #0a100c; border: 1px solid var(--line); border-radius: 8px; padding: 14px;
+  }
+  .metric .n { font-size: 28px; font-weight: 700; color: var(--accent); line-height: 1.1; }
+  .metric .l { font-size: 11px; color: var(--muted); margin-top: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .err { color: var(--danger); font-size: 12px; margin-top: 8px; }
+  .stack {
+    white-space: pre-wrap; word-break: break-word; color: var(--warn);
+    font-size: 11px; max-height: 160px; overflow: auto;
+  }
+  .hidden { display: none; }
+  .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div>
+      <h1>AGENTDOCK ADMIN</h1>
+      <div class="sub">download · active installs · crashes</div>
+    </div>
+    <button class="ghost hidden" id="logoutBtn" type="button">logout</button>
+  </div>
+
+  <div class="card" id="loginCard">
+    <form id="loginForm">
+      <label for="username">username</label>
+      <input id="username" name="username" autocomplete="username" required>
+      <label for="password">password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <button type="submit">login</button>
+      <div class="err hidden" id="loginErr"></div>
+    </form>
+  </div>
+
+  <div id="dash" class="hidden">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;margin-bottom:14px">
+        <strong style="font-size:13px">overview</strong>
+        <button class="ghost" id="refreshBtn" type="button">refresh</button>
+      </div>
+      <div class="grid" id="metrics"></div>
+    </div>
+
+    <div class="card">
+      <strong style="font-size:13px">downloads by file</strong>
+      <table style="margin-top:12px">
+        <thead><tr><th>file</th><th>count</th></tr></thead>
+        <tbody id="byFile"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <strong style="font-size:13px">launches by version</strong>
+      <table style="margin-top:12px">
+        <thead><tr><th>version</th><th>installs</th></tr></thead>
+        <tbody id="byVersion"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <strong style="font-size:13px">recent crashes</strong>
+      <table style="margin-top:12px">
+        <thead>
+          <tr>
+            <th>when</th><th>ver</th><th>os</th><th>name</th><th>detail</th>
+          </tr>
+        </thead>
+        <tbody id="crashes"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 独立 API 域名;本地调试可改成 http://127.0.0.1:8787
+  const API = "https://api.agentdockstatus.app";
+
+  const $ = (id) => document.getElementById(id);
+  const loginCard = $("loginCard");
+  const dash = $("dash");
+  const loginErr = $("loginErr");
+
+  async function api(path, opts = {}) {
+    const res = await fetch(API + path, {
+      credentials: "include",
+      headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
+      ...opts,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = new Error(data.error || ("http_" + res.status));
+      err.status = res.status;
+      throw err;
+    }
+    return data;
+  }
+
+  function showLoggedIn(on) {
+    loginCard.classList.toggle("hidden", on);
+    dash.classList.toggle("hidden", !on);
+    $("logoutBtn").classList.toggle("hidden", !on);
+  }
+
+  function metric(label, n) {
+    return `<div class="metric"><div class="n">${n ?? 0}</div><div class="l">${label}</div></div>`;
+  }
+
+  async function load() {
+    const [stats, crashRes] = await Promise.all([
+      api("/v1/admin/stats"),
+      api("/v1/admin/crashes?limit=40"),
+    ]);
+
+    $("metrics").innerHTML = [
+      metric("downloads total", stats.downloads.total),
+      metric("downloads today", stats.downloads.today),
+      metric("downloads 7d", stats.downloads.last_7d),
+      metric("active today", stats.usage.active_today),
+      metric("active 7d", stats.usage.active_7d),
+      metric("active 30d", stats.usage.active_30d),
+      metric("launches total", stats.usage.launches_total),
+      metric("crashes total", stats.crashes.total),
+      metric("crashes today", stats.crashes.today),
+    ].join("");
+
+    $("byFile").innerHTML = (stats.downloads_by_file || []).map((r) =>
+      `<tr><td>${esc(r.filename)}</td><td>${r.n}</td></tr>`
+    ).join("") || `<tr><td colspan="2" style="color:var(--muted)">no data</td></tr>`;
+
+    $("byVersion").innerHTML = (stats.launches_by_version || []).map((r) =>
+      `<tr><td>${esc(r.app_version)}</td><td>${r.n}</td></tr>`
+    ).join("") || `<tr><td colspan="2" style="color:var(--muted)">no data</td></tr>`;
+
+    $("crashes").innerHTML = (crashRes.crashes || []).map((c) => `
+      <tr>
+        <td>${esc(c.created_at || "")}</td>
+        <td>${esc(c.app_version || "")}</td>
+        <td>${esc((c.os_version || "") + (c.arch ? " / " + c.arch : ""))}</td>
+        <td>${esc(c.name || "")}</td>
+        <td>
+          <div>${esc(c.reason || "")}</div>
+          ${c.stack ? `<div class="stack">${esc(c.stack)}</div>` : ""}
+        </td>
+      </tr>
+    `).join("") || `<tr><td colspan="5" style="color:var(--muted)">no crashes</td></tr>`;
+  }
+
+  function esc(s) {
+    return String(s)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;");
+  }
+
+  $("loginForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    loginErr.classList.add("hidden");
+    try {
+      await api("/v1/admin/login", {
+        method: "POST",
+        body: JSON.stringify({
+          username: $("username").value,
+          password: $("password").value,
+        }),
+      });
+      showLoggedIn(true);
+      await load();
+    } catch (err) {
+      loginErr.textContent = err.message || "login failed";
+      loginErr.classList.remove("hidden");
+    }
+  });
+
+  $("logoutBtn").addEventListener("click", async () => {
+    try { await api("/v1/admin/logout", { method: "POST", body: "{}" }); } catch (_) {}
+    showLoggedIn(false);
+  });
+
+  $("refreshBtn").addEventListener("click", () => load().catch(console.error));
+
+  // 已有 cookie 则直接进看板
+  api("/v1/admin/stats")
+    .then(() => { showLoggedIn(true); return load(); })
+    .catch(() => showLoggedIn(false));
+</script>
+</body>
+</html>

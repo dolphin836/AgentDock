@@ -1,15 +1,28 @@
 import AppKit
 import AgentDockCore
 
-/// 无头安装模式:`AgentDock --setup key=value ...`,供 install.sh 在安装时调用。
+/// 无头安装模式:`AgentDock --setup key=value ...`,供 pkg 的 postinstall 在安装时调用。
 /// 支持的参数:
-///   language=en|zh        默认语言
+///   language=en|zh|auto   默认语言(auto=按系统区域)
 ///   autostart=yes|no      开机自启(LaunchAgent)
-///   integrations=claude,codex,cursor   要安装的集成
-///   permissions=ask       触发「辅助功能」系统授权弹窗
+///   integrations=claude,codex,cursor|auto   要安装的集成(auto=探测本机已装的 agent)
+///   permissions=ask       触发「辅助功能」系统授权弹窗(仅 GUI 环境有效)
+/// 执行成功后写「已预配置」标记,首次启动向导据此精简为只做权限授权。
 @MainActor
 enum SetupCLI {
     static let home = NSHomeDirectory()
+    /// 预配置完成标记:首次启动向导读取,精简步骤
+    static let preconfiguredKey = "AgentDockPreconfigured"
+
+    /// 探测本机已安装的 agent(以其配置目录是否存在为准)
+    static func detectInstalledAgents() -> [String] {
+        let fm = FileManager.default
+        var found: [String] = []
+        if fm.fileExists(atPath: home + "/.claude") { found.append("claude") }
+        if fm.fileExists(atPath: home + "/.codex") { found.append("codex") }
+        if fm.fileExists(atPath: home + "/.cursor") { found.append("cursor") }
+        return found
+    }
 
     /// 命中 --setup 时执行并返回 true(调用方直接退出,不进入 GUI)
     static func runIfRequested() -> Bool {
@@ -22,7 +35,13 @@ enum SetupCLI {
         }
 
         if let lang = options["language"] {
-            let value = lang.hasPrefix("zh") ? "zh-Hans" : "en"
+            let value: String
+            if lang == "auto" {
+                let prefersChinese = Locale.preferredLanguages.first?.hasPrefix("zh") ?? false
+                value = prefersChinese ? "zh-Hans" : "en"
+            } else {
+                value = lang.hasPrefix("zh") ? "zh-Hans" : "en"
+            }
             UserDefaults.standard.set(value, forKey: "AgentDockLanguage")
             print("language: \(value)")
         }
@@ -37,9 +56,12 @@ enum SetupCLI {
         }
 
         if let integrations = options["integrations"], !integrations.isEmpty {
+            let names = integrations == "auto"
+                ? detectInstalledAgents()
+                : integrations.split(separator: ",").map(String.init)
             installEmitScript()
             let emitPath = home + "/.agentdock/agentdock-emit"
-            for name in integrations.split(separator: ",").map(String.init) {
+            for name in names {
                 do {
                     switch name {
                     case "claude":
@@ -68,6 +90,8 @@ enum SetupCLI {
             print("accessibility: \(granted ? "granted" : "prompted — grant in System Settings")")
         }
 
+        // 标记已预配置:首次启动向导据此精简为只做权限授权
+        UserDefaults.standard.set(true, forKey: preconfiguredKey)
         print("setup done")
         return true
     }

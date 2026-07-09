@@ -1,0 +1,24 @@
+name = "agentdock-api"
+main = "src/index.ts"
+compatibility_date = "2025-06-01"
+
+# 独立子域(与官网静态站分离)。部署前确认该域名 DNS 已在 Cloudflare。
+[[routes]]
+pattern = "api.agentdockstatus.app"
+custom_domain = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "agentdock"
+# 跑 `npm run db:create` 后把输出的 database_id 填到这里
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+[vars]
+# 官网静态站(下载跳转目标 + CORS 来源)
+SITE_ORIGIN = "https://www.agentdockstatus.app"
+# 看板登录账号(密码用 secret,见 README)
+ADMIN_USER = "admin"
+
+# 密码与会话签名密钥不要写进仓库,用:
+#   npx wrangler secret put ADMIN_PASSWORD
+#   npx wrangler secret put SESSION_SECRET

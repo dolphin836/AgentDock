@@ -172,6 +172,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // 首次启动(pkg 安装后自动拉起):弹出分步安装设置向导
         SetupWizard.showIfNeeded()
+        // 匿名遥测:崩溃 handler + 每日一次启动活跃(不采集会话/路径/token)
+        Telemetry.installCrashReporting(appVersion: AppInfo.version)
+        Telemetry.recordLaunch(appVersion: AppInfo.version)
     }
 
     /// Claude 限额只随 statusline 事件到达,App 重启会丢;emit 脚本每次都会把
