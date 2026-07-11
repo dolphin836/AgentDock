@@ -156,7 +156,7 @@ rm -f site/AgentDock-*.pkg
 cp "$PKG" site/
 # 下载走 api 计数跳转;pkg 实体仍托管在官网上
 DOWNLOAD_URL="https://api.agentdockstatus.app/v1/download/AgentDock-$VERSION.pkg"
-# 只改下载按钮的 href,避免误伤页面其它文案
+# 更新所有下载链接 + 版本号文案
 python3 - "$DOWNLOAD_URL" "$VERSION" <<'PY'
 from pathlib import Path
 import re, sys
@@ -164,12 +164,12 @@ download_url, version = sys.argv[1], sys.argv[2]
 path = Path("site/index.html")
 text = path.read_text()
 text, n = re.subn(
-    r'(<a class="download" href=")[^"]+(">)',
-    rf'\1{download_url}\2',
+    r'https://api\.agentdockstatus\.app/v1/download/AgentDock-[0-9.]+\.pkg',
+    download_url,
     text,
-    count=1,
 )
 text = re.sub(r'>v\d+\.\d+\.\d+<', f'>v{version}<', text)
+text = re.sub(r'(<b>)v\d+\.\d+\.\d+(</b>)', rf'\1v{version}\2', text)
 path.write_text(text)
 print(f"  index.html download href updated ({n} match)")
 PY

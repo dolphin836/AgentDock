@@ -1,661 +1,863 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AgentDock — AI agent status in your notch</title>
-<meta name="description" content="macOS notch companion: live session status, usage and pending approvals for Claude Code / Codex / Cursor.">
+<title>AgentDock | Every AI agent, at a glance</title>
+<meta name="description" content="AgentDock keeps Claude Code, Codex, and Cursor visible in your macOS notch, with live status, approvals, and usage.">
+<meta name="theme-color" content="#07111d">
 <link rel="icon" type="image/png" href="./favicon.png">
 <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 <style>
-:root {
-  --panel: #09090b;
-  --text1: rgba(250,250,252,.92);
-  --text2: rgba(250,250,252,.58);
-  --text3: rgba(250,250,252,.36);
-  --text4: rgba(250,250,252,.20);
-  --phosphor: #52ff8a;
-  --cyan: #61e8f5;
-  --amber: #ffba54;
-  --yellow: #ffe35c;
-  --red: #ff6b62;
-  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
-}
-* { margin: 0; padding: 0; box-sizing: border-box; }
-html, body { height: 100%; }
-body {
-  font-family: var(--mono);
-  background: #7a4fd0;  /* 壁纸主色兜底 */
-  color: var(--text1);
-  overflow: hidden;  /* 单屏桌面形态 */
-  user-select: none;
-}
-.wallpaper { position: fixed; inset: 0; width: 100vw; height: 100vh;
-  object-fit: cover; z-index: 0; pointer-events: none; }
+  :root {
+    --ink: oklch(0.17 0.03 248);
+    --ink-deep: oklch(0.12 0.025 248);
+    --surface: oklch(0.205 0.025 245);
+    --surface-2: oklch(0.235 0.024 245);
+    --line: oklch(0.36 0.025 244 / 0.62);
+    --line-soft: oklch(0.31 0.022 244 / 0.5);
+    --text: oklch(0.94 0.012 78);
+    --text-2: oklch(0.77 0.016 76);
+    --text-3: oklch(0.61 0.018 74);
+    --copper: oklch(0.72 0.12 55);
+    --copper-soft: oklch(0.33 0.06 51);
+    --green: oklch(0.78 0.18 148);
+    --cyan: oklch(0.76 0.12 225);
+    --amber: oklch(0.79 0.15 78);
+    --red: oklch(0.69 0.17 28);
+    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+    --mono: "SFMono-Regular", "SF Mono", Menlo, Monaco, Consolas, monospace;
+    --max: 1180px;
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  }
 
-/* ── 菜单栏(自绘,毛玻璃) ── */
-.menubar {
-  position: fixed; top: 0; left: 0; right: 0; height: 30px;
-  display: flex; align-items: center;
-  padding: 0 16px;
-  /* 彩色壁纸下的 macOS 菜单栏:毛玻璃半透明,浅色图文 */
-  background: rgba(28,20,54,.22);
-  backdrop-filter: blur(28px) saturate(1.5);
-  -webkit-backdrop-filter: blur(28px) saturate(1.5);
-  font-size: 12.5px;
-  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-  color: rgba(255,255,255,.92);
-  z-index: 30;
-}
-.menubar .spacer { flex: 1; }
-.menubar .status { display: flex; align-items: center; gap: 14px; opacity: .85; }
-.menubar svg { display: block; }
-/* 菜单栏里的 AgentDock 图标:同 App 模板图,深色壁纸下白身镂空眼 */
-.menubar .robot .head, .menubar .robot .ant, .menubar .robot .ear { background: rgba(255,255,255,.92); }
-.menubar .robot .eye { background: rgba(60,25,45,.85); animation: none; }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    min-width: 320px;
+    color: var(--text);
+    background: var(--ink-deep);
+    font-family: var(--sans);
+    font-synthesis: none;
+    -webkit-font-smoothing: antialiased;
+  }
+  body::selection { color: var(--ink-deep); background: var(--copper); }
+  a { color: inherit; }
+  button, a { -webkit-tap-highlight-color: transparent; }
+  button { font: inherit; }
+  :focus-visible { outline: 2px solid var(--cyan); outline-offset: 4px; }
 
-.desktop-center {
-  position: absolute; left: 0; right: 0; bottom: 90px; top: 0;  /* 从屏幕顶端开始:胶囊像真刘海一样嵌进菜单栏 */
-  pointer-events: none;
-  z-index: 35;  /* 高于菜单栏(30),notch 不被遮挡 */
-}
-.desktop-center > * { pointer-events: auto; }
-/* 面板是悬浮层:展开只覆盖桌面,绝不推动页面其他内容 */
-.dock-panel { position: absolute; top: 0; left: 50%; transform: translateX(-50%); z-index: 10; }
-.hint { position: absolute; top: 42px; left: 0; right: 0; z-index: 2; pointer-events: none; }
-.hero { position: absolute; top: 50%; left: 0; right: 0; transform: translateY(-50%); z-index: 1; }
+  .skip-link {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 100;
+    padding: 10px 14px;
+    color: var(--ink-deep);
+    background: var(--text);
+    border-radius: 8px;
+    transform: translateY(-160%);
+    transition: transform 180ms var(--ease);
+  }
+  .skip-link:focus { transform: translateY(0); }
 
-/* ── Dock(自绘:深色毛玻璃 + 宽度驱动放大,邻居让位) ── */
-.mac-dock {
-  position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);
-  z-index: 20;
-  display: flex; align-items: flex-end; gap: 10px;
-  height: 66px; padding: 8px 12px;
-  background: rgba(26,28,40,.55);
-  backdrop-filter: blur(28px) saturate(1.4);
-  -webkit-backdrop-filter: blur(28px) saturate(1.4);
-  border: 1px solid rgba(255,255,255,.16);
-  border-radius: 21px;
-  box-shadow: 0 10px 40px rgba(0,0,0,.35);
-  overflow: visible;
-}
-.mac-dock img {
-  width: 48px; height: auto; aspect-ratio: 1; display: block;
-  transition: width .12s cubic-bezier(0, .55, .45, 1);
-  will-change: width;
-}
+  .shell { width: min(var(--max), calc(100% - 48px)); margin-inline: auto; }
 
-/* ── AgentDock panel:收起/展开同宽(与真实 App 一致:190 中段 + 185×2 翼 = 560,含两侧 8px 外扩弧) ── */
-.dock-panel {
-  width: 544px; max-width: calc(100vw - 32px);
-  background: var(--panel);
-  border-radius: 0 0 18px 18px;
-  padding: 40px 22px 12px;
-  box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 4px 18px rgba(0,0,0,.4);
-  font-family: var(--mono);
-}
-.dock-panel::before {
-  content: "";
-  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
-  width: 196px; height: 34px;
-  background: var(--panel);
-  border-radius: 0 0 14px 14px;
-  z-index: 0;
-}
-.dock-panel::after {
-  content: "";
-  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
-  width: 8px; height: 8px; border-radius: 50%;
-  background: #17181d; box-shadow: inset 0 0 2px 1px #000;
-}
-.dock-panel .capsule, .dock-panel .p-head, .dock-panel .p-body { position: relative; z-index: 1; }
-/* 小窗口下内容区内部滚动,不撑破视口 */
-.dock-panel .p-body { max-height: calc(100vh - 230px); overflow-y: auto; scrollbar-width: none; }
-.dock-panel .p-body::-webkit-scrollbar { display: none; }
-/* 收起时与菜单栏完全重合:同高 30px,底部凸圆角 13px(同 App NotchShape),无投影 */
-.dock-panel.collapsed { padding: 0 18px; height: 30px; border-radius: 0 0 13px 13px; box-shadow: none; }
-/* 收起时隐藏展开态的刘海凸起与摄像头圆点 */
-.dock-panel.collapsed::before, .dock-panel.collapsed::after { display: none; }
-/* 顶角外扩凹弧(同 App NotchShape topRadius=8):收起/展开都与屏幕顶边圆滑衔接 */
-.dock-panel .flare {
-  position: absolute; top: 0; width: 8px; height: 8px; z-index: 1;
-}
-.dock-panel .flare.l {
-  left: -8px;
-  background: radial-gradient(circle 8px at 0 8px, transparent 0 7.5px, var(--panel) 8px);
-}
-.dock-panel .flare.r {
-  right: -8px;
-  background: radial-gradient(circle 8px at 8px 8px, transparent 0 7.5px, var(--panel) 8px);
-}
-.dock-panel.collapsed .p-body, .dock-panel.collapsed .p-head { display: none; }
-.capsule { display: none; }
-.dock-panel.collapsed .capsule { display: flex; align-items: center; height: 30px; gap: 8px; }
-.capsule .side { display: flex; align-items: center; gap: 6px; width: 180px; }
-.capsule .side.r { justify-content: flex-end; }
-.capsule .mid { flex: 1; display: flex; justify-content: center; gap: 5px; }
-.capsule .mid i { width: 5px; height: 5px; border-radius: 50%; }
-.capsule .name { font-size: 10.5px; font-weight: 600; color: var(--text1);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.capsule .st { font-size: 9.5px; white-space: nowrap; }
-.capsule .elapsed { font-size: 9px; color: var(--text2); }
-.glyph-spin { display: inline-block; animation: spin 2.4s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-.hint { text-align: center; font-size: 10px; color: rgba(255,255,255,.65);
-  padding-top: 8px; letter-spacing: 1px; font-family: var(--mono);
-  text-shadow: 0 1px 6px rgba(40,20,90,.5); }
+  .site-header {
+    position: relative;
+    z-index: 20;
+    border-bottom: 1px solid var(--line-soft);
+    background: var(--ink-deep);
+  }
+  .nav {
+    min-height: 72px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+  }
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 11px;
+    font-size: 18px;
+    font-weight: 670;
+    letter-spacing: -0.02em;
+    text-decoration: none;
+  }
+  .brand img { width: 28px; height: 28px; border-radius: 7px; }
+  .nav-actions { display: flex; align-items: center; gap: 20px; }
+  .lang-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 3px;
+    border: 1px solid var(--line-soft);
+    border-radius: 999px;
+  }
+  .lang-switch button {
+    min-width: 44px;
+    min-height: 34px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 999px;
+    color: var(--text-3);
+    background: transparent;
+    cursor: pointer;
+  }
+  .lang-switch button[aria-pressed="true"] { color: var(--text); background: var(--surface-2); }
+  .nav-download {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 0 17px;
+    border: 1px solid var(--copper);
+    border-radius: 9px;
+    color: var(--text);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 620;
+    transition: color 180ms var(--ease), background 180ms var(--ease), transform 180ms var(--ease);
+  }
+  .nav-download:hover { color: var(--ink-deep); background: var(--copper); transform: translateY(-1px); }
 
-.p-head { display: flex; align-items: center; gap: 8px; padding: 0 8px 9px; }
-.p-title { font-size: 11.5px; font-weight: 700; letter-spacing: 2.5px; color: var(--text1); }
-.p-stats { position: absolute; left: 0; right: 0; text-align: center; font-size: 9px; color: var(--text3); pointer-events: none; }
-.p-tabs { margin-left: auto; display: flex; gap: 9px; }
-.p-tab {
-  width: 25px; height: 25px; border-radius: 50%;
-  border: 1px solid rgba(255,255,255,.16);
-  display: grid; place-items: center;
-  color: var(--text3); font-size: 12px; cursor: pointer;
-  transition: color .2s, border-color .2s, background .2s;
-}
-.p-tab svg { fill: currentColor; display: block; }
-.p-tab.active { border-color: rgba(82,255,138,.55); color: var(--phosphor); background: rgba(82,255,138,.09); }
-.page { display: none; }
-.page.active { display: block; }
+  .hero {
+    position: relative;
+    overflow: hidden;
+    padding: clamp(72px, 10vw, 132px) 0 0;
+    background: var(--ink);
+  }
+  .hero::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    background: var(--line-soft);
+    opacity: 0.6;
+  }
+  .hero-intro {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(330px, 0.78fr);
+    gap: clamp(64px, 10vw, 144px);
+    align-items: start;
+  }
+  .eyebrow {
+    margin: 0 0 22px;
+    color: var(--copper);
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+  .hero h1 {
+    max-width: 720px;
+    margin: 0;
+    font-size: clamp(50px, 6.4vw, 92px);
+    line-height: 0.98;
+    letter-spacing: -0.065em;
+    font-weight: 730;
+  }
+  .hero h1 .line { display: block; }
+  .hero h1 .accent { color: var(--copper); }
+  .hero-sub {
+    max-width: 620px;
+    margin: 30px 0 0;
+    color: var(--text-2);
+    font-size: clamp(18px, 2vw, 24px);
+    line-height: 1.5;
+  }
+  .hero-actions { display: flex; align-items: center; gap: 18px; margin-top: 36px; flex-wrap: wrap; }
+  .primary-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 58px;
+    padding: 0 26px;
+    border: 1px solid var(--copper);
+    border-radius: 10px;
+    color: var(--ink-deep);
+    background: var(--copper);
+    text-decoration: none;
+    font-size: 16px;
+    font-weight: 700;
+    box-shadow: 0 16px 40px oklch(0.08 0.02 248 / 0.34);
+    transition: transform 200ms var(--ease), box-shadow 200ms var(--ease);
+  }
+  .primary-cta:hover { transform: translateY(-2px); box-shadow: 0 22px 54px oklch(0.08 0.02 248 / 0.52); }
+  .release-meta { color: var(--text-3); font-family: var(--mono); font-size: 12px; }
+  .release-meta b { color: var(--text-2); font-weight: 500; }
 
-.robot { position: relative; width: 16px; height: 16px; flex: none; }
-.robot .head { position: absolute; left: 2.8px; top: 4.3px; width: 10.4px; height: 9.4px; border-radius: 2.5px; background: var(--text1); }
-.robot .ant  { position: absolute; left: 7.2px; top: 1.9px; width: 1.6px; height: 3px; border-radius: 1px; background: var(--text1); }
-.robot .ear  { position: absolute; top: 7px; width: 1.5px; height: 4px; border-radius: 1px; background: var(--text1); }
-.robot .ear.l { left: .9px; } .robot .ear.r { right: .9px; }
-.robot .eye { position: absolute; top: 7.3px; width: 2.8px; height: 2.8px; border-radius: 50%; background: var(--panel);
-  animation: glance 2.8s ease-in-out infinite; }
-.robot .eye.l { left: 4.6px; } .robot .eye.r { left: 8.9px; }
-@keyframes glance { 0%,100% { transform: translateX(-.6px);} 50% { transform: translateX(.6px);} }
+  .source-map { padding-top: 10px; }
+  .source-map-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 18px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .source-map-header strong { font-size: 15px; letter-spacing: -0.01em; }
+  .source-map-header span { color: var(--text-3); font-family: var(--mono); font-size: 11px; }
+  .source-list { border-left: 1px solid var(--line); }
+  .source-row {
+    display: grid;
+    grid-template-columns: 88px 1fr auto;
+    align-items: center;
+    gap: 18px;
+    min-height: 84px;
+    padding: 0 0 0 22px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .source-code { color: var(--text-3); font-family: var(--mono); font-size: 11px; }
+  .source-name { font-size: 19px; font-weight: 640; }
+  .source-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-2);
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+  .state-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); }
+  .state-dot.run { background: var(--green); box-shadow: 0 0 0 4px oklch(0.78 0.18 148 / 0.12); }
+  .state-dot.need { background: var(--copper); box-shadow: 0 0 0 4px oklch(0.72 0.12 55 / 0.12); }
+  .state-dot.usage { background: var(--cyan); box-shadow: 0 0 0 4px oklch(0.76 0.12 225 / 0.12); }
+  .map-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    padding-top: 18px;
+    color: var(--text-3);
+    font-family: var(--mono);
+    font-size: 11px;
+  }
 
-.rule { display: flex; align-items: center; gap: 6px; padding: 8px 9px 3px; }
-.rule .lead { width: 12px; height: 1px; }
-.rule .label { font-size: 8.5px; font-weight: 600; letter-spacing: 1.8px; }
-.rule .line { flex: 1; height: 1px; }
-.rule .side-note { font-size: 8.5px; color: var(--text3); }
-.rule.run  .lead { background: rgba(82,255,138,.35);} .rule.run .label { color: rgba(82,255,138,.85);} .rule.run .line { background: rgba(82,255,138,.16);}
-.rule.need .lead { background: rgba(255,186,84,.4);} .rule.need .label { color: rgba(255,186,84,.9);} .rule.need .line { background: rgba(255,186,84,.18);}
-.rule.rec  .lead { background: rgba(255,255,255,.2);} .rule.rec .label { color: var(--text3);} .rule.rec .line { background: rgba(255,255,255,.09);}
-.rule.stat .lead { background: rgba(97,232,245,.35);} .rule.stat .label { color: var(--text1);} .rule.stat .line { background: rgba(255,255,255,.09);}
+  .product-stage {
+    position: relative;
+    min-height: 570px;
+    margin-top: clamp(70px, 9vw, 118px);
+    border: 14px solid oklch(0.08 0.01 250);
+    border-bottom: 0;
+    border-radius: 38px 38px 0 0;
+    background: var(--ink-deep) url("./hero-wallpaper.jpg") center / cover no-repeat;
+    box-shadow: 0 -1px 0 oklch(0.54 0.03 245 / 0.65), 0 -32px 80px oklch(0.08 0.02 248 / 0.42);
+  }
+  .menu-bar {
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 22px;
+    color: oklch(0.89 0.01 78);
+    background: oklch(0.13 0.018 248 / 0.9);
+    border-bottom: 1px solid oklch(0.34 0.025 245 / 0.42);
+    font-size: 12px;
+  }
+  .menu-brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 650; }
+  .menu-brand img { width: 18px; height: 18px; border-radius: 5px; }
+  .menu-meta { display: flex; gap: 18px; color: var(--text-2); font-family: var(--mono); }
+  .notch-wrap {
+    position: absolute;
+    top: -1px;
+    left: 50%;
+    z-index: 4;
+    width: min(520px, calc(100% - 44px));
+    transform: translateX(-50%);
+  }
+  .notch-trigger {
+    width: 100%;
+    min-height: 62px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    align-items: center;
+    gap: 1px;
+    padding: 0 16px 6px;
+    border: 0;
+    border-radius: 0 0 28px 28px;
+    color: var(--text);
+    background: oklch(0.08 0.008 248);
+    cursor: pointer;
+  }
+  .notch-chip {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 10px;
+    border-right: 1px solid oklch(0.28 0.015 245 / 0.72);
+    font-family: var(--mono);
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .notch-chip:last-child { border-right: 0; }
+  .notch-chip.run { color: var(--green); }
+  .notch-chip.need { color: var(--copper); }
+  .notch-chip.usage { color: var(--cyan); }
+  .notch-panel {
+    visibility: hidden;
+    position: absolute;
+    top: 52px;
+    left: 50%;
+    width: min(440px, calc(100% - 20px));
+    padding: 18px;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    color: var(--text);
+    background: oklch(0.145 0.019 246 / 0.97);
+    box-shadow: 0 28px 60px oklch(0.06 0.018 248 / 0.68);
+    opacity: 0;
+    transform: translate(-50%, -12px) scale(0.97);
+    transform-origin: top center;
+    transition: opacity 220ms var(--ease), transform 220ms var(--ease), visibility 220ms;
+  }
+  .notch-wrap.is-open .notch-panel {
+    visibility: visible;
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  .panel-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 0 2px 13px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .panel-title strong { font-size: 13px; letter-spacing: 0.1em; }
+  .panel-title span { color: var(--text-3); font-family: var(--mono); font-size: 10px; }
+  .session-list { display: grid; gap: 1px; margin-top: 7px; }
+  .session-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 13px 4px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .session-row:last-child { border-bottom: 0; }
+  .session-name { font-size: 13px; font-weight: 650; }
+  .session-detail { margin-top: 5px; color: var(--text-3); font-family: var(--mono); font-size: 10px; }
+  .session-status { font-family: var(--mono); font-size: 10px; }
+  .session-status.run { color: var(--green); }
+  .session-status.need { color: var(--copper); }
+  .session-status.usage { color: var(--cyan); }
+  .stage-note {
+    position: absolute;
+    right: 24px;
+    bottom: 20px;
+    max-width: 260px;
+    margin: 0;
+    color: oklch(0.82 0.012 76);
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.6;
+    text-align: right;
+  }
 
-.row { padding: 6px 9px; border-radius: 6px; position: relative; font-family: var(--mono); }
-.row.need-bg { background: rgba(255,186,84,.05); }
-.row .top { display: flex; align-items: center; gap: 7px; }
-.row .glyph { width: 14px; text-align: center; font-size: 10.5px; flex: none; }
-.row .name { font-size: 12px; font-weight: 600; }
-.row .state { margin-left: auto; font-size: 9.5px; display: flex; align-items: center; gap: 5px; }
-.row .metrics { font-size: 9px; color: var(--text3); padding: 3px 0 0 21px; }
-.row .appicon { width: 13px; height: 13px; border-radius: 3px; flex: none; opacity: .9; }
-.breath { animation: breath 1.6s ease-in-out infinite alternate; }
-@keyframes breath { from { opacity: 1; } to { opacity: .35; } }
-.pulse { animation: pulse .6s ease-in-out infinite alternate; }
-@keyframes pulse { from { opacity: 1; } to { opacity: .25; } }
+  .workflow {
+    padding: clamp(92px, 11vw, 160px) 0;
+    background: var(--ink-deep);
+  }
+  .workflow-grid {
+    display: grid;
+    grid-template-columns: minmax(260px, 0.72fr) minmax(360px, 1.08fr) minmax(260px, 0.72fr);
+    gap: clamp(36px, 5vw, 76px);
+    align-items: start;
+  }
+  .workflow-copy h2 {
+    max-width: 500px;
+    margin: 0;
+    font-size: clamp(42px, 5vw, 66px);
+    line-height: 1.02;
+    letter-spacing: -0.055em;
+  }
+  .workflow-copy p:not(.eyebrow) {
+    margin: 26px 0 0;
+    color: var(--text-2);
+    font-size: 17px;
+    line-height: 1.7;
+  }
+  .approval-panel {
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: var(--surface);
+    box-shadow: 0 28px 70px oklch(0.07 0.018 248 / 0.42);
+    overflow: hidden;
+  }
+  .approval-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    min-height: 66px;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--line);
+  }
+  .approval-agent { font-weight: 660; }
+  .approval-status { color: var(--copper); font-family: var(--mono); font-size: 11px; }
+  .approval-body { padding: 22px 20px; }
+  .approval-label { margin: 0 0 8px; color: var(--text-3); font-family: var(--mono); font-size: 10px; }
+  .approval-command {
+    margin: 0;
+    padding: 14px;
+    border: 1px solid var(--line-soft);
+    border-radius: 10px;
+    color: var(--text-2);
+    background: var(--ink-deep);
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+  }
+  .approval-actions { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px; margin-top: 16px; }
+  .approval-actions button {
+    min-height: 44px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--text-2);
+    background: var(--surface-2);
+    cursor: pointer;
+    font-size: 12px;
+    transition: color 160ms var(--ease), border-color 160ms var(--ease), background 160ms var(--ease);
+  }
+  .approval-actions button:hover { color: var(--text); border-color: var(--text-3); }
+  .approval-actions .allow { color: var(--ink-deep); border-color: var(--copper); background: var(--copper); font-weight: 700; }
+  .approval-panel.approved .approval-status { color: var(--green); }
+  .approval-panel.denied .approval-status { color: var(--red); }
+  .approval-panel.approved .allow { color: var(--ink-deep); border-color: var(--green); background: var(--green); }
+  .approval-foot {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 20px;
+    border-top: 1px solid var(--line);
+    color: var(--text-3);
+    font-family: var(--mono);
+    font-size: 10px;
+  }
 
-.approval { display: flex; align-items: center; gap: 8px; padding: 4px 0 0 21px; }
-.approval .cmd { font-size: 9px; color: rgba(255,227,92,.9); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.approval .btn { font-size: 8.5px; font-weight: 700; letter-spacing: .5px; padding: 2px 9px; border-radius: 3px; flex: none; cursor: default; }
-.approval .ok  { color: var(--phosphor); background: rgba(82,255,138,.12); border: 1px solid rgba(82,255,138,.45); margin-left: auto; }
-.approval .no  { color: var(--red); background: rgba(255,107,98,.12); border: 1px solid rgba(255,107,98,.45); }
+  .privacy {
+    border-top: 1px solid var(--line);
+    padding-top: 22px;
+  }
+  .privacy h3 { margin: 0 0 22px; color: var(--copper); font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; }
+  .fact-list { list-style: none; margin: 0; padding: 0; }
+  .fact-list li {
+    display: grid;
+    grid-template-columns: 30px 1fr;
+    gap: 14px;
+    padding: 17px 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .fact-list li:last-child { border-bottom: 0; }
+  .fact-number { color: var(--text-3); font-family: var(--mono); font-size: 10px; }
+  .fact-copy strong { display: block; font-size: 14px; line-height: 1.45; }
+  .fact-copy span { display: block; margin-top: 5px; color: var(--text-3); font-size: 12px; line-height: 1.55; }
 
-.row.compact { padding: 3.5px 9px; display: flex; align-items: center; gap: 7px; }
-.row.compact .name { font-size: 10.5px; font-weight: 400; color: var(--text2); }
-.row.compact .model { font-size: 9px; color: var(--text4); }
-.row.compact .right { margin-left: auto; display: flex; gap: 8px; font-size: 9px; }
+  .closing {
+    padding: clamp(86px, 10vw, 140px) 0;
+    border-top: 1px solid var(--line-soft);
+    background: var(--ink);
+  }
+  .closing-inner {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 40px;
+    align-items: end;
+  }
+  .closing h2 { max-width: 780px; margin: 0; font-size: clamp(40px, 5vw, 72px); line-height: 1.02; letter-spacing: -0.055em; }
+  .closing p { margin: 20px 0 0; color: var(--text-2); font-size: 18px; }
+  .closing-actions { text-align: right; }
+  .closing-actions .release-meta { display: block; margin-top: 14px; }
 
-.ticks { display: flex; gap: 2.5px; }
-.ticks i { width: 3px; height: 12px; border-radius: .5px; background: var(--text4); }
-.ticks i.on { background: rgba(82,255,138,.8); }
-.ticks i.warn { background: var(--amber); }
-.ticks i.hot { background: var(--red); }
-.usage-line { display: flex; align-items: center; gap: 12px; padding: 3.5px 9px; font-family: var(--mono); }
-.usage-line .win { width: 52px; font-size: 10px; color: var(--text2); }
-.usage-line .pct { margin-left: auto; font-size: 9px; font-weight: 600; }
-.stat-line { display: flex; align-items: center; gap: 9px; padding: 3.5px 9px; font-size: 9.5px; font-family: var(--mono); }
-.stat-line .lbl { width: 52px; color: var(--text2); }
-.refresh-row { display: flex; justify-content: flex-end; padding: 3px 9px 0; }
+  footer { border-top: 1px solid var(--line-soft); background: var(--ink-deep); }
+  .footer-inner {
+    min-height: 84px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    color: var(--text-3);
+    font-size: 12px;
+  }
+  .footer-brand { display: inline-flex; align-items: center; gap: 9px; color: var(--text-2); }
+  .footer-brand img { width: 20px; height: 20px; border-radius: 5px; }
+  .footer-note { text-align: right; }
 
-.set-row { display: flex; align-items: center; gap: 10px; padding: 3.5px 9px; font-size: 9.5px; font-family: var(--mono); }
-.set-row .lbl { color: var(--text2); }
-.set-row .right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
-.opt { display: inline-flex; gap: 5px; align-items: center; color: var(--text3); }
-.opt.on { color: var(--text1); }
-.opt .dot-o { font-size: 7.5px; }
-.opt.on .dot-o { color: var(--phosphor); }
-.term-btn { font-size: 8.5px; font-weight: 700; letter-spacing: .5px; padding: 2px 8px; border-radius: 3px; cursor: default; font-family: var(--mono); }
-.term-btn.green { color: var(--phosphor); background: rgba(82,255,138,.1); border: 1px solid rgba(82,255,138,.42); }
-.term-btn.red { color: var(--red); background: rgba(255,107,98,.1); border: 1px solid rgba(255,107,98,.42); }
-.status-ok { color: rgba(82,255,138,.8); font-size: 8.5px; }
-.link { color: var(--cyan); border-bottom: 1px solid rgba(97,232,245,.35); font-size: 9.5px; }
+  @media (max-width: 980px) {
+    .hero::before { display: none; }
+    .hero-intro { grid-template-columns: 1fr; gap: 70px; }
+    .source-map { max-width: 620px; }
+    .product-stage { min-height: 520px; }
+    .workflow-grid { grid-template-columns: 1fr 1.15fr; }
+    .privacy { grid-column: 1 / -1; display: grid; grid-template-columns: 220px 1fr; gap: 30px; }
+    .privacy h3 { margin-top: 2px; }
+    .fact-list { display: grid; grid-template-columns: 1fr 1fr; column-gap: 26px; }
+  }
 
-.p-foot { border-top: 1px solid rgba(255,255,255,.12); margin-top: 8px; padding-top: 7px;
-  display: flex; justify-content: center; gap: 10px; align-items: center; font-size: 8.5px; color: var(--text2); font-family: var(--mono); }
-.key { display: inline-block; min-width: 11px; text-align: center; font-size: 8px; font-weight: 600; color: var(--text1);
-  padding: 1px 3px; border-radius: 3px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.18); }
-.p-foot .dot { color: var(--text4); }
+  @media (max-width: 700px) {
+    .shell { width: min(100% - 30px, var(--max)); }
+    .nav { min-height: 64px; gap: 12px; }
+    .brand { font-size: 16px; }
+    .brand img { width: 25px; height: 25px; }
+    .nav-actions { gap: 10px; }
+    .nav-download { display: none; }
+    .lang-switch button { min-width: 38px; min-height: 32px; padding-inline: 8px; }
+    .hero { padding-top: 72px; }
+    .hero h1 { font-size: clamp(46px, 15vw, 68px); }
+    .hero-sub { font-size: 18px; }
+    .source-row { grid-template-columns: 54px 1fr; gap: 10px; min-height: 72px; }
+    .source-state { grid-column: 2; padding-bottom: 13px; margin-top: -13px; }
+    .map-footer { flex-direction: column; gap: 6px; }
+    .product-stage { min-height: 470px; margin-inline: -15px; border-width: 8px; border-radius: 28px 28px 0 0; }
+    .menu-bar { height: 34px; padding-inline: 12px; }
+    .menu-meta span:first-child { display: none; }
+    .notch-wrap { width: calc(100% - 24px); }
+    .notch-trigger { min-height: 56px; padding-inline: 6px; }
+    .notch-chip { padding-inline: 5px; font-size: 9px; }
+    .notch-chip .state-dot { width: 6px; height: 6px; }
+    .notch-panel { top: 48px; padding: 14px; }
+    .stage-note { left: 18px; right: 18px; bottom: 16px; max-width: none; text-align: left; }
+    .workflow-grid { grid-template-columns: 1fr; }
+    .workflow-copy p:not(.eyebrow) { font-size: 16px; }
+    .approval-actions { grid-template-columns: 1fr 1fr; }
+    .approval-actions .allow { grid-column: 1 / -1; }
+    .privacy { grid-column: auto; display: block; }
+    .fact-list { display: block; }
+    .closing-inner { grid-template-columns: 1fr; align-items: start; }
+    .closing-actions { text-align: left; }
+    .footer-inner { min-height: 110px; flex-direction: column; align-items: flex-start; justify-content: center; }
+    .footer-note { text-align: left; }
+  }
 
-/* ── Hero(彩色壁纸上白字) ── */
-.hero { text-align: center; font-family: var(--mono); }
-.hero h1 { font-size: 34px; letter-spacing: 6px; font-weight: 700; color: var(--text1);
-  display: flex; align-items: center; justify-content: center; gap: 20px;
-  text-shadow: 0 2px 24px rgba(40,20,90,.55); }
-.hero h1 .robot { transform: scale(2); transform-origin: center; }
-.hero h1 .robot .eye { background: #8a4bd0; }
-.hero .tagline { margin-top: 14px; font-size: 13.5px; color: rgba(255,255,255,.9); letter-spacing: 1px;
-  text-shadow: 0 1px 12px rgba(40,20,90,.55); }
-.hero .agents { margin-top: 10px; font-size: 11px; color: rgba(255,255,255,.72); letter-spacing: 1px;
-  text-shadow: 0 1px 10px rgba(40,20,90,.5); }
-.hero .agents b { color: rgba(255,255,255,.95); font-weight: 600; }
-.download { display: inline-block; margin-top: 24px;
-  font-family: var(--mono); font-size: 14px; font-weight: 700; letter-spacing: 2px;
-  color: #08130b; text-decoration: none; background: var(--phosphor);
-  padding: 13px 40px; border-radius: 8px;
-  box-shadow: 0 8px 40px rgba(82,255,138,.45), 0 2px 10px rgba(0,0,0,.15);
-  transition: transform .18s cubic-bezier(.22,1,.36,1), box-shadow .18s cubic-bezier(.22,1,.36,1); }
-.download:hover { transform: translateY(-2px); box-shadow: 0 14px 52px rgba(82,255,138,.55), 0 4px 14px rgba(0,0,0,.15); }
-
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  }
 </style>
 </head>
 <body>
+<a class="skip-link" href="#main" data-i18n="skip">Skip to content</a>
 
-<!-- 壁纸 -->
-<img class="wallpaper" src="./macos/background/wallpaper.png" alt="">
-
-<!-- ── 菜单栏(自绘) ── -->
-<div class="menubar">
-  <svg width="14" height="16" viewBox="0 0 24 28" fill="rgba(255,255,255,.92)" aria-label="Apple">
-    <path d="M12.152 10.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.03 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 7.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.56-1.702"/>
-  </svg>
-  <span class="spacer"></span>
-  <span class="status">
-    <span class="robot" title="AgentDock">
-      <span class="ant"></span><span class="head"></span>
-      <span class="ear l"></span><span class="ear r"></span>
-      <span class="eye l"></span><span class="eye r"></span>
-    </span>
-    <svg width="15" height="11" viewBox="0 0 15 11" fill="rgba(255,255,255,.88)"><path d="M7.5 8.6a1.4 1.4 0 1 0 0 2.4 1.4 1.4 0 0 0 0-2.4zM3.9 6.7l1.3 1.3a3.3 3.3 0 0 1 4.6 0l1.3-1.3a5.2 5.2 0 0 0-7.2 0zM1.3 4.1l1.3 1.3a7 7 0 0 1 9.8 0l1.3-1.3a8.9 8.9 0 0 0-12.4 0z"/></svg>
-    <svg width="22" height="11" viewBox="0 0 22 11"><rect x=".5" y=".5" width="18" height="10" rx="2.5" fill="none" stroke="rgba(255,255,255,.5)"/><rect x="2" y="2" width="12" height="7" rx="1.2" fill="rgba(255,255,255,.88)"/><rect x="19.5" y="3.5" width="2" height="4" rx="1" fill="rgba(255,255,255,.5)"/></svg>
-    <span id="clock"></span>
-  </span>
-</div>
-
-<!-- ── Desktop center: AgentDock mock + download ── -->
-<div class="desktop-center" id="desktopCenter">
-
-  <!-- AgentDock panel: collapsed by default, hover to expand -->
-  <div class="dock-panel collapsed" id="panel">
-    <i class="flare l"></i><i class="flare r"></i>
-    <div class="capsule">
-      <div class="side">
-        <span class="glyph-spin" id="capGlyph" style="color:var(--phosphor);font-size:10px">✳</span>
-        <span class="name" id="capName">api-server</span>
+<header class="site-header">
+  <nav class="nav shell" aria-label="Primary navigation">
+    <a class="brand" href="#top" aria-label="AgentDock home">
+      <img src="./favicon.png" alt="">
+      <span>AgentDock</span>
+    </a>
+    <div class="nav-actions">
+      <div class="lang-switch" aria-label="Language">
+        <button type="button" data-lang="en" aria-pressed="true">EN</button>
+        <button type="button" data-lang="zh" aria-pressed="false">中文</button>
       </div>
-      <div class="mid" id="capDots"></div>
-      <div class="side r">
-        <span class="elapsed" id="capElapsed">2m 14s</span>
-        <span class="st breath" id="capState" style="color:var(--cyan)">Thinking… ◐</span>
-      </div>
+      <a class="nav-download download" href="https://api.agentdockstatus.app/v1/download/AgentDock-0.2.2.pkg" data-i18n="downloadShort">Download</a>
     </div>
+  </nav>
+</header>
 
-    <div class="p-head">
-      <div class="robot">
-        <div class="ant"></div><div class="head"></div>
-        <div class="ear l"></div><div class="ear r"></div>
-        <div class="eye l"></div><div class="eye r"></div>
-      </div>
-      <span class="p-title">AGENTDOCK</span>
-      <span class="p-stats" id="stats">6 sessions · 3 agents · 5 running</span>
-      <div class="p-tabs">
-        <div class="p-tab active" data-page="sessions">≡</div>
-        <div class="p-tab" data-page="usage">
-          <svg width="12" height="12" viewBox="0 0 12 12">
-            <rect x="1.2" y="6.5" width="2.5" height="4.5" rx="0.7"/>
-            <rect x="4.8" y="3.5" width="2.5" height="7.5" rx="0.7"/>
-            <rect x="8.4" y="1"   width="2.5" height="10"  rx="0.7"/>
-          </svg>
+<main id="main">
+  <section class="hero" id="top">
+    <div class="shell">
+      <div class="hero-intro">
+        <div class="hero-copy">
+          <p class="eyebrow" data-i18n="heroEyebrow">Built for focused work</p>
+          <h1>
+            <span class="line" data-i18n="heroLine1">Your agents are working.</span>
+            <span class="line accent" data-i18n="heroLine2">You stay in flow.</span>
+          </h1>
+          <p class="hero-sub" data-i18n="heroSub">AgentDock keeps Claude Code, Codex, and Cursor visible in your macOS notch, without pulling you out of the work.</p>
+          <div class="hero-actions">
+            <a class="primary-cta download" href="https://api.agentdockstatus.app/v1/download/AgentDock-0.2.2.pkg" data-i18n="download">Download for Mac</a>
+            <span class="release-meta">macOS 14+ · Universal · Free · <b>v0.2.2</b></span>
+          </div>
         </div>
-        <div class="p-tab" data-page="settings">⚙︎</div>
+
+        <aside class="source-map" aria-label="Supported agents">
+          <div class="source-map-header">
+            <strong data-i18n="sourceTitle">Three agents, one quiet surface</strong>
+            <span data-i18n="sourceMode">LIVE STATUS</span>
+          </div>
+          <div class="source-list">
+            <div class="source-row">
+              <span class="source-code">A / 01</span>
+              <span class="source-name">Claude Code</span>
+              <span class="source-state"><i class="state-dot run" aria-hidden="true"></i><span data-i18n="running">Running</span></span>
+            </div>
+            <div class="source-row">
+              <span class="source-code">A / 02</span>
+              <span class="source-name">Codex</span>
+              <span class="source-state"><i class="state-dot need" aria-hidden="true"></i><span data-i18n="needsYou">Needs you</span></span>
+            </div>
+            <div class="source-row">
+              <span class="source-code">A / 03</span>
+              <span class="source-name">Cursor</span>
+              <span class="source-state"><i class="state-dot usage" aria-hidden="true"></i><span data-i18n="usage">Usage</span></span>
+            </div>
+          </div>
+          <div class="map-footer">
+            <span data-i18n="mapLocal">Local sessions</span>
+            <span data-i18n="mapNotch">One macOS notch</span>
+          </div>
+        </aside>
       </div>
-    </div>
 
-    <div class="p-body">
-      <div class="page active" id="page-sessions">
-        <div id="sessionGroups"></div>
-
-        <div class="p-foot">
-          <span><span class="key">⌘</span> <span class="key">G</span> show/hide</span><span class="dot">·</span>
-          <span><span class="key">⌘</span> <span class="key">Y</span> allow</span><span class="dot">·</span>
-          <span><span class="key">⌘</span> <span class="key">N</span> deny</span>
+      <div class="product-stage" id="product" aria-label="Interactive AgentDock preview">
+        <div class="menu-bar">
+          <span class="menu-brand"><img src="./favicon.png" alt="">AgentDock</span>
+          <span class="menu-meta"><span>MacBook Pro</span><span>9:41</span></span>
         </div>
-      </div>
-
-      <div class="page" id="page-usage">
-        <div class="refresh-row"><span class="term-btn green">REFRESH</span></div>
-        <div class="rule run"><span class="lead"></span><span class="label">CLAUDE CODE</span><span class="line"></span><span class="side-note">just now</span></div>
-        <div class="usage-line"><span class="win">5-hour</span><div class="ticks" data-pct="34"></div><span class="pct" style="color:var(--text1)">34%</span></div>
-        <div class="usage-line"><span class="win">7-day</span><div class="ticks" data-pct="61"></div><span class="pct" style="color:var(--text1)">61%</span></div>
-        <div class="rule run"><span class="lead"></span><span class="label">CODEX</span><span class="line"></span><span class="side-note">just now</span></div>
-        <div class="usage-line"><span class="win">5-hour</span><div class="ticks" data-pct="12"></div><span class="pct" style="color:var(--text1)">12%</span></div>
-        <div class="usage-line"><span class="win">weekly</span><div class="ticks" data-pct="92"></div><span class="pct" style="color:var(--red)">92%</span></div>
-        <div class="rule stat"><span class="lead"></span><span class="label">ACTIVITY</span><span class="line"></span></div>
-        <div class="stat-line"><span class="lbl">today</span>
-          <span style="color:rgba(82,255,138,.85)">worked 2h14m</span><span style="color:var(--text4)">·</span>
-          <span style="color:var(--text2)">≈1.2M tokens</span><span style="color:var(--text4)">·</span>
-          <span style="color:rgba(255,186,84,.85)">waited 3x · avg 4m</span></div>
-        <div class="stat-line"><span class="lbl">7 days</span>
-          <span style="color:rgba(82,255,138,.85)">worked 14h02m</span><span style="color:var(--text4)">·</span>
-          <span style="color:var(--text2)">≈8.9M tokens</span><span style="color:var(--text4)">·</span>
-          <span style="color:rgba(255,186,84,.85)">waited 12x · avg 6m</span></div>
-      </div>
-
-      <div class="page" id="page-settings">
-        <div class="rule rec"><span class="lead"></span><span class="label">GENERAL</span><span class="line"></span></div>
-        <div class="set-row"><span class="lbl">language</span>
-          <span class="right">
-            <span class="opt on"><span class="dot-o">●</span>English</span>
-            <span class="opt"><span class="dot-o">○</span>简体中文</span>
-          </span></div>
-        <div class="set-row"><span class="lbl">launch at login</span>
-          <span class="right"><span class="opt on"><span class="dot-o">●</span>on</span></span></div>
-        <div class="set-row"><span class="lbl">display</span>
-          <span class="right"><span class="opt on"><span class="dot-o">●</span>main display (default)</span></span></div>
-        <div class="rule rec"><span class="lead"></span><span class="label">SHORTCUTS</span><span class="line"></span></div>
-        <div class="set-row"><span class="lbl">show/hide panel</span>
-          <span class="right"><span class="key">⌘</span><span class="key">G</span></span></div>
-        <div class="set-row"><span class="lbl">approve (when pending)</span>
-          <span class="right"><span class="key">⌘</span><span class="key">Y</span></span></div>
-        <div class="set-row"><span class="lbl">deny (when pending)</span>
-          <span class="right"><span class="key">⌘</span><span class="key">N</span></span></div>
-        <div class="rule rec"><span class="lead"></span><span class="label">INTEGRATIONS</span><span class="line"></span></div>
-        <div class="set-row"><span class="lbl">CLAUDE CODE</span><span class="status-ok">installed</span>
-          <span class="right"><span class="term-btn red">UNINSTALL</span></span></div>
-        <div class="set-row"><span class="lbl">CODEX</span><span class="status-ok">installed</span>
-          <span class="right"><span class="term-btn red">UNINSTALL</span></span></div>
-        <div class="set-row"><span class="lbl">CURSOR</span><span class="status-ok">installed</span>
-          <span class="right"><span class="term-btn red">UNINSTALL</span></span></div>
-        <div class="rule rec"><span class="lead"></span><span class="label">PERMISSIONS</span><span class="line"></span></div>
-        <div class="set-row"><span class="lbl">automation · Terminal</span><span class="status-ok">granted</span></div>
-        <div class="set-row"><span class="lbl">accessibility</span><span class="status-ok">granted</span></div>
-        <div class="rule rec"><span class="lead"></span><span class="label">ABOUT</span><span class="line"></span></div>
-        <div class="set-row"><span class="lbl">version</span><span style="color:var(--text1)">v0.2.2</span>
-          <span class="right"><span class="term-btn green">CHECK UPDATES</span></span></div>
-        <div class="set-row"><span class="lbl">website</span>
-          <span class="right"><span class="link">agentdockstatus.app</span></span></div>
-        <div class="set-row"><span class="lbl">more apps</span>
-          <span class="right"><span class="link">Wallpaper Exchange · wallpaperexchange.com</span></span></div>
+        <div class="notch-wrap" id="notchWrap">
+          <button class="notch-trigger" id="notchToggle" type="button" aria-expanded="false" aria-controls="notchPanel">
+            <span class="notch-chip run"><i class="state-dot run" aria-hidden="true"></i><span data-i18n="running">Running</span></span>
+            <span class="notch-chip need"><i class="state-dot need" aria-hidden="true"></i><span data-i18n="needsYou">Needs you</span></span>
+            <span class="notch-chip usage"><i class="state-dot usage" aria-hidden="true"></i><span data-i18n="usage">Usage</span></span>
+          </button>
+          <div class="notch-panel" id="notchPanel">
+            <div class="panel-title"><strong>AGENTDOCK</strong><span data-i18n="panelHint">CLICK TO PIN</span></div>
+            <div class="session-list">
+              <div class="session-row">
+                <div><div class="session-name">Claude Code</div><div class="session-detail">api-gateway · opus-4.1</div></div>
+                <span class="session-status run" data-i18n="running">Running</span>
+              </div>
+              <div class="session-row">
+                <div><div class="session-name">Codex</div><div class="session-detail">checkout-flow · gpt-5</div></div>
+                <span class="session-status need" data-i18n="needsYou">Needs you</span>
+              </div>
+              <div class="session-row">
+                <div><div class="session-name">Cursor</div><div class="session-detail">weekly · 38% used</div></div>
+                <span class="session-status usage" data-i18n="usage">Usage</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="stage-note" data-i18n="stageNote">Hover or click the notch to open the live panel.</p>
       </div>
     </div>
-  </div>
-  <div class="hint" id="hint">hover the notch bar to expand · move away to collapse</div>
+  </section>
 
-  <!-- Center: download -->
-  <div class="hero">
-    <h1>
-      <span class="robot">
-        <span class="ant"></span><span class="head"></span>
-        <span class="ear l"></span><span class="ear r"></span>
-        <span class="eye l"></span><span class="eye r"></span>
-      </span>
-      AGENTDOCK
-    </h1>
-    <p class="tagline">AI agent status in your notch: who's working, who needs you, how much quota is left.</p>
-    <p class="agents">Supports <b>Claude Code</b> ✳ · <b>Codex</b> ◆ · <b>Cursor</b> ⬢</p>
-    <a class="download" href="https://api.agentdockstatus.app/v1/download/AgentDock-0.2.2.pkg">DOWNLOAD AGENTDOCK</a>
-  </div>
-</div>
+  <section class="workflow" id="workflow">
+    <div class="workflow-grid shell">
+      <div class="workflow-copy">
+        <p class="eyebrow" data-i18n="workflowEyebrow">Know what needs you</p>
+        <h2 data-i18n="workflowTitle">See what matters. Approve and move on.</h2>
+        <p data-i18n="workflowBody">AgentDock surfaces approvals at the moment they matter. Review the request, decide, then return to the right terminal or editor.</p>
+      </div>
 
-<!-- ── Dock(自绘,图标素材取自 Mac-OS-Desktop,本地文件) ── -->
-<div class="mac-dock" id="dock">
-  <img src="./macos/icon/dock/finder.png" alt="Finder">
-  <img src="./macos/icon/dock/launchpad.png" alt="Launchpad">
-  <img src="./macos/icon/dock/appstore.png" alt="App Store">
-  <img src="./macos/icon/dock/message.png" alt="Messages">
-  <img src="./macos/icon/dock/music.png" alt="Music">
-  <img src="./macos/icon/dock/mail.png" alt="Mail">
-  <img src="./macos/icon/dock/photos.png" alt="Photos">
-  <img src="./macos/icon/dock/maps.png" alt="Maps">
-  <img src="./macos/icon/dock/calculator.png" alt="Calculator">
-  <img src="./macos/icon/dock/notes.png" alt="Notes">
-  <img src="./macos/icon/dock/terminal.png" alt="Terminal">
-  <img src="./macos/icon/dock/preferences.png" alt="Preferences">
-  <img src="./macos/icon/dock/bin.png" alt="Trash">
-</div>
+      <div class="approval-panel" id="approvalPanel">
+        <div class="approval-head">
+          <span class="approval-agent">Codex · checkout-flow</span>
+          <span class="approval-status" id="approvalStatus" aria-live="polite" data-i18n="waitingApproval">Waiting for approval</span>
+        </div>
+        <div class="approval-body">
+          <p class="approval-label" data-i18n="requestLabel">REQUEST</p>
+          <pre class="approval-command">Create branch feature/checkout-flow
+Update docs/checkout.md
+Run tests/checkout.test.ts</pre>
+          <div class="approval-actions">
+            <button class="allow approval-action" type="button" data-action="allow" data-i18n="allow">Allow</button>
+            <button class="approval-action" type="button" data-action="review" data-i18n="review">Review</button>
+            <button class="approval-action" type="button" data-action="deny" data-i18n="deny">Deny</button>
+          </div>
+        </div>
+        <div class="approval-foot"><span data-i18n="approvalFoot">Assisted approval for Codex and Cursor</span><span>⌘↩ / ⌘⌫</span></div>
+      </div>
+
+      <aside class="privacy" id="privacy">
+        <h3 data-i18n="privacyTitle">Local by design</h3>
+        <ol class="fact-list">
+          <li><span class="fact-number">01</span><span class="fact-copy"><strong data-i18n="privacyOneTitle">Session data stays on your Mac.</strong><span data-i18n="privacyOneBody">Content, paths, and token details are not uploaded.</span></span></li>
+          <li><span class="fact-number">02</span><span class="fact-copy"><strong data-i18n="privacyTwoTitle">Permissions have a clear purpose.</strong><span data-i18n="privacyTwoBody">Automation jumps to the right workspace. Accessibility assists approvals.</span></span></li>
+          <li><span class="fact-number">03</span><span class="fact-copy"><strong data-i18n="privacyThreeTitle">Telemetry is limited.</strong><span data-i18n="privacyThreeBody">Anonymous launch, version, system, architecture, and crash metadata only.</span></span></li>
+          <li><span class="fact-number">04</span><span class="fact-copy"><strong data-i18n="privacyFourTitle">You remain in control.</strong><span data-i18n="privacyFourBody">Install or remove each agent integration from settings.</span></span></li>
+        </ol>
+      </aside>
+    </div>
+  </section>
+
+  <section class="closing">
+    <div class="closing-inner shell">
+      <div>
+        <p class="eyebrow" data-i18n="closingEyebrow">One glance, then back to work</p>
+        <h2 data-i18n="closingTitle">Keep every agent visible without adding another dashboard.</h2>
+        <p data-i18n="closingBody">Claude Code, Codex, and Cursor, together in your notch.</p>
+      </div>
+      <div class="closing-actions">
+        <a class="primary-cta download" href="https://api.agentdockstatus.app/v1/download/AgentDock-0.2.2.pkg" data-i18n="download">Download for Mac</a>
+        <span class="release-meta">macOS 14+ · Universal · Free · <b>v0.2.2</b></span>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="footer-inner shell">
+    <span class="footer-brand"><img src="./favicon.png" alt="">AgentDock</span>
+    <span class="footer-note" data-i18n="footer">A focused macOS companion for local AI agents.</span>
+  </div>
+</footer>
 
 <script>
-// Menu bar clock (replaces the project's script.js)
-function tick() {
-  const now = new Date();
-  const days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  const pad = n => String(n).padStart(2, "0");
-  document.getElementById("clock").textContent =
-    `${days[now.getDay()]} ${months[now.getMonth()]} ${now.getDate()}  ${now.getHours()}:${pad(now.getMinutes())}`;
-}
-tick(); setInterval(tick, 15000);
+  const translations = {
+    en: {
+      skip: "Skip to content",
+      downloadShort: "Download",
+      download: "Download for Mac",
+      heroEyebrow: "Built for focused work",
+      heroLine1: "Your agents are working.",
+      heroLine2: "You stay in flow.",
+      heroSub: "AgentDock keeps Claude Code, Codex, and Cursor visible in your macOS notch, without pulling you out of the work.",
+      sourceTitle: "Three agents, one quiet surface",
+      sourceMode: "LIVE STATUS",
+      running: "Running",
+      needsYou: "Needs you",
+      usage: "Usage",
+      mapLocal: "Local sessions",
+      mapNotch: "One macOS notch",
+      panelHint: "CLICK TO PIN",
+      stageNote: "Hover or click the notch to open the live panel.",
+      workflowEyebrow: "Know what needs you",
+      workflowTitle: "See what matters. Approve and move on.",
+      workflowBody: "AgentDock surfaces approvals at the moment they matter. Review the request, decide, then return to the right terminal or editor.",
+      waitingApproval: "Waiting for approval",
+      approved: "Approved",
+      deniedStatus: "Denied",
+      reviewStatus: "Review opened",
+      requestLabel: "REQUEST",
+      allow: "Allow",
+      review: "Review",
+      deny: "Deny",
+      approvalFoot: "Assisted approval for Codex and Cursor",
+      privacyTitle: "Local by design",
+      privacyOneTitle: "Session data stays on your Mac.",
+      privacyOneBody: "Content, paths, and token details are not uploaded.",
+      privacyTwoTitle: "Permissions have a clear purpose.",
+      privacyTwoBody: "Automation jumps to the right workspace. Accessibility assists approvals.",
+      privacyThreeTitle: "Telemetry is limited.",
+      privacyThreeBody: "Anonymous launch, version, system, architecture, and crash metadata only.",
+      privacyFourTitle: "You remain in control.",
+      privacyFourBody: "Install or remove each agent integration from settings.",
+      closingEyebrow: "One glance, then back to work",
+      closingTitle: "Keep every agent visible without adding another dashboard.",
+      closingBody: "Claude Code, Codex, and Cursor, together in your notch.",
+      footer: "A focused macOS companion for local AI agents."
+    },
+    zh: {
+      skip: "跳到主要内容",
+      downloadShort: "下载",
+      download: "下载 Mac 版",
+      heroEyebrow: "为专注工作而生",
+      heroLine1: "Agent 在工作。",
+      heroLine2: "你保持专注。",
+      heroSub: "AgentDock 将 Claude Code、Codex 和 Cursor 的状态放进 macOS 刘海，不打断当前工作。",
+      sourceTitle: "三个 Agent，一个安静入口",
+      sourceMode: "实时状态",
+      running: "运行中",
+      needsYou: "需要你",
+      usage: "用量",
+      mapLocal: "本地会话",
+      mapNotch: "一个 macOS 刘海",
+      panelHint: "点击固定面板",
+      stageNote: "悬停或点击刘海，展开实时面板。",
+      workflowEyebrow: "只看真正需要你的事",
+      workflowTitle: "看见重点，完成审批，继续工作。",
+      workflowBody: "AgentDock 在审批真正需要你时及时显示请求。查看内容、作出决定，然后回到正确的终端或编辑器。",
+      waitingApproval: "等待审批",
+      approved: "已允许",
+      deniedStatus: "已拒绝",
+      reviewStatus: "已打开详情",
+      requestLabel: "请求内容",
+      allow: "允许",
+      review: "查看",
+      deny: "拒绝",
+      approvalFoot: "Codex 与 Cursor 辅助审批",
+      privacyTitle: "本地优先",
+      privacyOneTitle: "会话数据留在你的 Mac。",
+      privacyOneBody: "会话内容、路径和 Token 明细不会上传。",
+      privacyTwoTitle: "每项权限都有明确用途。",
+      privacyTwoBody: "自动化权限用于返回工作区，辅助功能权限用于协助审批。",
+      privacyThreeTitle: "遥测范围保持克制。",
+      privacyThreeBody: "仅包含匿名启动、版本、系统、架构和崩溃元数据。",
+      privacyFourTitle: "控制权始终属于你。",
+      privacyFourBody: "可在设置中安装或移除每个 Agent 集成。",
+      closingEyebrow: "看一眼，然后继续工作",
+      closingTitle: "无需再开一个仪表盘，也能看见每个 Agent。",
+      closingBody: "Claude Code、Codex 和 Cursor，全都在你的刘海里。",
+      footer: "专注服务于本地 AI Agent 的 macOS 伴侣。"
+    }
+  };
 
-// Tick bars (same rule as the app: >=75% amber, >=90% red)
-document.querySelectorAll(".ticks").forEach(bar => {
-  const pct = Number(bar.dataset.pct || 0);
-  const total = 44, lit = Math.round(pct / 100 * total);
-  for (let i = 0; i < total; i++) {
-    const t = document.createElement("i");
-    if (i < lit) t.className = pct >= 90 ? "hot" : pct >= 75 ? "warn" : "on";
-    bar.appendChild(t);
+  let language = "en";
+  try {
+    language = localStorage.getItem("agentdock-language") || (navigator.language.startsWith("zh") ? "zh" : "en");
+  } catch (_) {
+    language = navigator.language.startsWith("zh") ? "zh" : "en";
   }
-});
 
-// Tab switching
-const pages = { sessions: "page-sessions", usage: "page-usage", settings: "page-settings" };
-document.querySelectorAll(".p-tab[data-page]").forEach(tab => {
-  tab.addEventListener("click", e => {
-    e.stopPropagation();
-    document.querySelectorAll(".p-tab[data-page]").forEach(t => t.classList.remove("active"));
-    tab.classList.add("active");
-    document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
-    document.getElementById(pages[tab.dataset.page]).classList.add("active");
-    document.getElementById("stats").style.visibility =
-      tab.dataset.page === "sessions" ? "visible" : "hidden";
+  const langButtons = document.querySelectorAll("[data-lang]");
+  const i18nNodes = document.querySelectorAll("[data-i18n]");
+  const approvalPanel = document.getElementById("approvalPanel");
+  const approvalStatus = document.getElementById("approvalStatus");
+  let approvalState = "waitingApproval";
+
+  function applyLanguage(next) {
+    language = next === "zh" ? "zh" : "en";
+    document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
+    i18nNodes.forEach(node => {
+      const value = translations[language][node.dataset.i18n];
+      if (value) node.textContent = value;
+    });
+    langButtons.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.lang === language)));
+    approvalStatus.textContent = translations[language][approvalState];
+    try { localStorage.setItem("agentdock-language", language); } catch (_) {}
+  }
+
+  langButtons.forEach(button => button.addEventListener("click", () => applyLanguage(button.dataset.lang)));
+  applyLanguage(language);
+
+  const notchWrap = document.getElementById("notchWrap");
+  const notchToggle = document.getElementById("notchToggle");
+  let notchPinned = false;
+
+  function setNotch(open) {
+    notchWrap.classList.toggle("is-open", open);
+    notchToggle.setAttribute("aria-expanded", String(open));
+  }
+  notchToggle.addEventListener("click", () => {
+    notchPinned = !notchPinned;
+    setNotch(notchPinned);
   });
-});
-
-// Like the real app: collapsed by default, hover to expand (#expanded 直接展开,便于预览)
-const panel = document.getElementById("panel");
-if (location.hash === "#expanded") panel.classList.remove("collapsed");
-panel.addEventListener("mouseenter", () => panel.classList.remove("collapsed"));
-panel.addEventListener("mouseleave", () => panel.classList.add("collapsed"));
-
-/* ── 假·实时模拟:状态机驱动,行为对齐真实 App ──
-   收起态胶囊 = 左翼(旋转图标+任务名) + 中段(每会话一个状态点) + 右翼(本轮耗时+状态),
-   进行中任务每 3 秒轮播;面板里任务状态随时间流转,token/耗时持续增长。 */
-const AGENTS = {
-  claude: { glyph: "✳", model: "claude-fable-5",  icon: "linear-gradient(135deg,#d97448,#b4552f)" },
-  codex:  { glyph: "◆", model: "gpt-5.5",         icon: "linear-gradient(135deg,#3b3f4a,#15171d)" },
-  cursor: { glyph: "⬢", model: "composer-2.5",    icon: "linear-gradient(135deg,#4b5878,#232c44)" },
-};
-const STATES = {
-  thinking: { label: "Thinking… ◐",     color: "var(--cyan)",   kind: "active" },
-  running:  { label: "Running cmd… ●",  color: "var(--phosphor)", kind: "active" },
-  editing:  { label: "Editing… ●",      color: "var(--phosphor)", kind: "active" },
-  asking:   { label: "Asking you",      color: "var(--amber)",  kind: "needs", pulse: "◌" },
-  approval: { label: "Needs approval",  color: "var(--yellow)", kind: "needs", pulse: "◉" },
-  waiting:  { label: "Waiting for input", color: "rgba(255,186,84,.55)", kind: "recent", mark: "◌" },
-  done:     { label: "Done",            color: "rgba(82,255,138,.5)",  kind: "recent", mark: "✓" },
-};
-const CMDS = [
-  "Bash: ./deploy.sh production", "Bash: npm run migrate", "Bash: git push origin main",
-  "Write: src/payment/refund.go", "Bash: rm -rf dist && make release",
-];
-const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
-const pickW = t => { let r = Math.random(); for (const [v, w] of t) { if ((r -= w) <= 0) return v; } return t[t.length - 1][0]; };
-
-function S(name, agent, state, elapsed, model) {
-  return { name, agent, state, model: model || AGENTS[agent].model,
-    elapsed, wait: rnd(3, 25), age: rnd(8, 40),
-    ctx: rnd(6, 45), tokens: rnd(15, 420) * 1000,
-    t: rnd(4, 10), cmd: CMDS[rnd(0, CMDS.length - 1)] };
-}
-const sessions = [
-  S("api-server",      "claude", "thinking", 134),
-  S("web-dashboard",   "codex",  "running",   47),
-  S("mobile-app",      "claude", "editing",  303),
-  S("payment-service", "cursor", "asking",    28),
-  S("data-pipeline",   "claude", "approval",   9),
-  S("docs-site",       "codex",  "waiting",    0),
-  S("design-system",   "claude", "done",       0, "claude-opus-4-8"),
-];
-const isActive = s => STATES[s.state].kind === "active";
-let dirty = true;
-
-function transition(s) {
-  const activeCount = sessions.filter(isActive).length;
-  const guard = v => (activeCount <= 2 && isActive(s) && !["running", "editing", "thinking"].includes(v)) ? "running" : v;
-  switch (s.state) {
-    case "thinking": setState(s, guard(pickW([["running", .42], ["editing", .3], ["thinking", .13], ["asking", .08], ["approval", .07]])), rnd(4, 10)); break;
-    case "running":  setState(s, guard(pickW([["thinking", .4], ["editing", .35], ["done", .25]])), rnd(5, 12)); break;
-    case "editing":  setState(s, guard(pickW([["thinking", .45], ["running", .35], ["done", .2]])), rnd(4, 10)); break;
-    case "asking":   setState(s, "thinking", rnd(4, 10)); break;   // 用户「回复」了
-    case "approval": setState(s, "running", rnd(5, 12)); break;    // 超时自动放行(演示)
-    case "waiting":  setState(s, "thinking", rnd(4, 10)); s.elapsed = 0; s.ctx = rnd(3, 9); s.tokens = rnd(2, 15) * 1000; break;
-    case "done":     setState(s, "thinking", rnd(4, 10)); s.elapsed = 0; s.ctx = rnd(3, 9); s.tokens = rnd(2, 15) * 1000; break;
-  }
-}
-function setState(s, next, dur) {
-  if (next === "approval") s.cmd = CMDS[rnd(0, CMDS.length - 1)];
-  if (next === "asking" || next === "approval") s.wait = 0;
-  if (STATES[next].kind === "recent") s.age = 0;
-  if (s.state !== next) dirty = true;
-  s.state = next;
-  s.t = { asking: rnd(12, 22), approval: rnd(10, 18), waiting: rnd(45, 90), done: rnd(30, 60) }[next] || dur;
-}
-
-const fmtT = s => s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
-const fmtAge = m => m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ""}`;
-const fmtTok = n => n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${(n / 1e3).toFixed(1)}k`;
-
-function rowHTML(s, i) {
-  const st = STATES[s.state], a = AGENTS[s.agent];
-  if (st.kind === "active") return `
-    <div class="row"><div class="top">
-      <span class="glyph" style="color:var(--phosphor)">${a.glyph}</span>
-      <span class="name" style="color:${st.color}">${s.name}</span>
-      <span class="state breath" style="color:${st.color}">${st.label}</span>
-      <span class="appicon" style="background:${a.icon}"></span>
-    </div><div class="metrics" data-m="${i}"></div></div>`;
-  if (st.kind === "needs") {
-    const detail = s.state === "approval"
-      ? `<div class="approval"><span class="cmd">${s.cmd}</span>
-           <span class="btn ok" data-ok="${i}">ALLOW</span><span class="btn no" data-no="${i}">DENY</span></div>`
-      : `<div class="metrics" data-m="${i}"></div>`;
-    return `
-    <div class="row need-bg"><div class="top">
-      <span class="glyph" style="color:${st.color}">${a.glyph}</span>
-      <span class="name" style="color:${st.color}">${s.name}</span>
-      <span class="state" style="color:${st.color}">${st.label} <span class="pulse">${st.pulse}</span></span>
-      <span class="appicon" style="background:${a.icon}"></span>
-    </div>${detail}</div>`;
-  }
-  return `
-    <div class="row compact">
-      <span class="glyph" style="color:var(--text3)">${a.glyph}</span>
-      <span class="name">${s.name}</span><span class="model">${s.model}</span>
-      <span class="right"><span style="color:${st.color}">${st.label}</span>
-        <span style="color:var(--text3)" data-age="${i}">${fmtAge(s.age)}</span>
-        <span style="color:${st.color}">${st.mark}</span></span>
-    </div>`;
-}
-function rule(cls, label) {
-  return `<div class="rule ${cls}"><span class="lead"></span><span class="label">${label}</span><span class="line"></span></div>`;
-}
-
-function renderStructure() {
-  const groups = { active: [], needs: [], recent: [] };
-  sessions.forEach((s, i) => groups[STATES[s.state].kind].push([s, i]));
-  let html = "";
-  if (groups.active.length) html += rule("run", "RUNNING") + groups.active.map(([s, i]) => rowHTML(s, i)).join("");
-  if (groups.needs.length)  html += rule("need", "NEEDS YOU") + groups.needs.map(([s, i]) => rowHTML(s, i)).join("");
-  if (groups.recent.length) html += rule("rec", "RECENT") + groups.recent.map(([s, i]) => rowHTML(s, i)).join("");
-  document.getElementById("sessionGroups").innerHTML = html;
-  document.getElementById("stats").textContent =
-    `${sessions.length} sessions · ${new Set(sessions.map(x => x.agent)).size} agents · ${groups.active.length} running`;
-  dirty = false;
-}
-
-function renderTexts() {
-  document.querySelectorAll("[data-m]").forEach(el => {
-    const s = sessions[+el.dataset.m];
-    el.textContent = s.state === "asking"
-      ? `${s.model} · context ${s.ctx}% · ${fmtTok(s.tokens)} tokens · waiting ${s.wait}s`
-      : `${s.model} · context ${s.ctx}% · ${fmtTok(s.tokens)} tokens · ${fmtT(s.elapsed)}`;
+  notchWrap.addEventListener("mouseenter", () => setNotch(true));
+  notchWrap.addEventListener("mouseleave", () => { if (!notchPinned) setNotch(false); });
+  notchWrap.addEventListener("focusout", event => {
+    if (!notchWrap.contains(event.relatedTarget) && !notchPinned) setNotch(false);
   });
-  document.querySelectorAll("[data-age]").forEach(el => {
-    el.textContent = fmtAge(sessions[+el.dataset.age].age);
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+      notchPinned = false;
+      setNotch(false);
+      notchToggle.focus();
+    }
   });
-}
 
-function renderCapsule(now) {
-  const active = sessions.filter(isActive);
-  const nameEl = document.getElementById("capName"), glyphEl = document.getElementById("capGlyph"),
-        stEl = document.getElementById("capState"), elEl = document.getElementById("capElapsed");
-  if (active.length) {
-    const p = active[Math.floor(now / 3000) % active.length];  // 3 秒轮播,同真实 App
-    glyphEl.textContent = AGENTS[p.agent].glyph;
-    glyphEl.style.display = "";
-    nameEl.textContent = p.name;
-    elEl.textContent = fmtT(p.elapsed);
-    stEl.textContent = STATES[p.state].label;
-    stEl.style.color = STATES[p.state].color;
-  } else {
-    glyphEl.style.display = "none";
-    nameEl.textContent = `❯ ${sessions.length} sessions`;
-    elEl.textContent = "";
-    stEl.textContent = `${new Set(sessions.map(x => x.agent)).size} agents`;
-    stEl.style.color = "var(--text2)";
-  }
-  // 状态点:重要在前(等你处理 > 进行中 > 其他)
-  const rank = s => STATES[s.state].kind === "needs" ? 0 : isActive(s) ? 1 : 2;
-  document.getElementById("capDots").innerHTML =
-    [...sessions].sort((a, b) => rank(a) - rank(b))
-      .map(s => `<i style="background:${STATES[s.state].color}"></i>`).join("");
-}
-
-// ALLOW / DENY 可点:放行 → 继续跑;拒绝 → 回到思考
-document.getElementById("sessionGroups").addEventListener("click", e => {
-  const ok = e.target.dataset.ok, no = e.target.dataset.no;
-  if (ok !== undefined) setState(sessions[+ok], "running", rnd(5, 12));
-  if (no !== undefined) setState(sessions[+no], "thinking", rnd(4, 10));
-});
-
-setInterval(() => {
-  for (const s of sessions) {
-    const kind = STATES[s.state].kind;
-    if (kind === "active") { s.elapsed++; s.tokens += rnd(60, 900); if (Math.random() < .06) s.ctx = Math.min(96, s.ctx + 1); }
-    if (kind === "needs") s.wait++;
-    if (kind === "recent" && Math.random() < .017) s.age++;  // 约每分钟 +1
-    if (--s.t <= 0) transition(s);
-  }
-  if (dirty) renderStructure();
-  renderTexts();
-  renderCapsule(Date.now());
-}, 1000);
-renderStructure(); renderTexts(); renderCapsule(Date.now());
-
-// Dock magnification: width-driven so neighbours make room (no overlap)
-const dock = document.getElementById("dock");
-const icons = [...dock.querySelectorAll("img")];
-const BASE = 48, GROW = 34, RANGE = 160;
-dock.addEventListener("mousemove", e => {
-  for (const icon of icons) {
-    const r = icon.getBoundingClientRect();
-    const distance = Math.abs(e.clientX - (r.left + r.width / 2));
-    const boost = Math.max(0, 1 - distance / RANGE);
-    icon.style.width = `${BASE + GROW * boost * boost}px`;
-  }
-});
-dock.addEventListener("mouseleave", () => {
-  icons.forEach(icon => icon.style.width = `${BASE}px`);
-});
+  document.querySelectorAll(".approval-action").forEach(button => {
+    button.addEventListener("click", () => {
+      approvalPanel.classList.remove("approved", "denied");
+      if (button.dataset.action === "allow") {
+        approvalState = "approved";
+        approvalPanel.classList.add("approved");
+      } else if (button.dataset.action === "deny") {
+        approvalState = "deniedStatus";
+        approvalPanel.classList.add("denied");
+      } else {
+        approvalState = "reviewStatus";
+      }
+      approvalStatus.textContent = translations[language][approvalState];
+    });
+  });
 </script>
 </body>
 </html>
