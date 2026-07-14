@@ -28,9 +28,15 @@ public final class SessionStore {
                                      _ newState: SessionState?) -> Void)?
     /// token 变化观察者(历史记录用)
     public var tokenObserver: ((_ sessionId: String, _ kind: AgentKind, _ tokens: Int) -> Void)?
+    /// 工具调用观察者(库存页统计用):第三方工具 begin/end
+    public var toolCallObserver: ((_ sessionId: String, _ kind: AgentKind,
+                                   _ toolKey: String, _ toolRaw: String?,
+                                   _ phase: ToolCallPhase, _ at: Date) -> Void)?
     private var observedStates: [String: SessionState] = [:]
     private var observedTokens: [String: Int] = [:]
     private var observedMeta: [String: (kind: AgentKind, project: String)] = [:]
+    /// 去重 + 配对:会话当前进行中的第三方工具
+    private var openThirdPartyTool: [String: (key: String, at: Date)] = [:]
 
     /// 对比上次快照,把状态/token 变化通知观察者。
     /// 集中做 diff 而不是在每个修改点埋回调:mutation 入口多(事件/回填/清理/审批),
@@ -150,6 +156,7 @@ public final class SessionStore {
             }
             session.lastActivity = event.timestamp
             upsert(session)
+            recordToolCallIfNeeded(event)
         case .metrics(let sessionId, let kind, let metrics, let limits):
             if let limits {
                 switch kind {
@@ -282,6 +289,57 @@ public final class SessionStore {
             return current == .disconnected
         case .idle, .disconnected:
             return false
+        }
+    }
+
+    private static let toolBeginEvents: Set<String> = [
+        "PreToolUse", "preToolUse", "function_call", "custom_tool_call",
+        "web_search_call", "tool_search_call",
+        "exec_command_begin", "patch_apply_begin", "mcp_tool_call_begin"
+    ]
+
+    private static let toolEndEvents: Set<String> = [
+        "PostToolUse", "PostToolUseFailure", "postToolUse",
+        "function_call_output", "custom_tool_call_output", "tool_search_output",
+        "web_search_end", "exec_command_end", "mcp_tool_call_end", "patch_apply_end"
+    ]
+
+    private func recordToolCallIfNeeded(_ event: AgentEvent) {
+        guard let observer = toolCallObserver else { return }
+
+        if Self.toolEndEvents.contains(event.name) {
+            let key = thirdPartyKey(event) ?? openThirdPartyTool[event.sessionId]?.key
+            guard let key else { return }
+            openThirdPartyTool[event.sessionId] = nil
+            observer(event.sessionId, event.kind, key, event.tool ?? event.detail,
+                     .end, event.timestamp)
+            return
+        }
+
+        guard Self.toolBeginEvents.contains(event.name),
+              let key = thirdPartyKey(event) else { return }
+        let raw = event.tool ?? event.detail
+        // 3 秒内同 key 去重:假会话 keepalive / 重复 hook 不虚增次数
+        if let prev = openThirdPartyTool[event.sessionId],
+           prev.key == key,
+           event.timestamp.timeIntervalSince(prev.at) < 3 {
+            return
+        }
+        openThirdPartyTool[event.sessionId] = (key, event.timestamp)
+        observer(event.sessionId, event.kind, key, raw, .begin, event.timestamp)
+    }
+
+    /// 只统计第三方/MCP；内置 Read/Bash 等不入库存用量
+    private func thirdPartyKey(_ event: AgentEvent) -> String? {
+        if let label = ThirdPartyToolDisplay.label(tool: event.tool, detail: event.detail) {
+            return label
+        }
+        guard let tool = event.tool else { return nil }
+        switch tool {
+        case "CallMcpTool", "FetchMcpResource", "ListMcpResources", "GetMcpTools":
+            return event.detail ?? tool
+        default:
+            return nil
         }
     }
 

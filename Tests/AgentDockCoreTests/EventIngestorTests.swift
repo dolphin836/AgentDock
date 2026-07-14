@@ -87,6 +87,22 @@ private func data(_ s: String) -> Data { Data(s.utf8) }
         #expect(e.appPath == "/Applications/Cursor.app")
     }
 
+    @Test func cursorMcpHookKeepsServerToolDetail() {
+        let line = data("""
+        {"source":"cursor","type":"hook","payload":{
+          "conversation_id":"conv-mcp","hook_event_name":"preToolUse",
+          "tool_name":"CallMcpTool",
+          "tool_input":{"server":"plugin-notion-workspace-notion","toolName":"search"},
+          "workspace_roots":["/Users/eric/AgentDock"]}}
+        """)
+        guard case .event(let e) = EventIngestor.parseLine(line) else {
+            Issue.record("expected .event"); return
+        }
+        #expect(e.tool == "CallMcpTool")
+        #expect(e.detail == "plugin-notion-workspace-notion/search")
+        #expect(ThirdPartyToolDisplay.label(tool: e.tool, detail: e.detail) == "notion/search")
+    }
+
     @Test func cursorTranscriptLines() {
         func parse(_ s: String) -> IngestResult {
             EventIngestor.parseCursorTranscriptLine(sessionId: "c1", cwd: "/x/p", line: data(s))

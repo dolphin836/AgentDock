@@ -59,6 +59,15 @@ struct SessionRowView: View {
                     .font(Theme.mono(12.5, .semibold))
                     .foregroundStyle(nameColor)
                     .lineLimit(1)
+                // 第三方/MCP：跟在任务名后，字号更小、青色弱强调，不与任务名抢视觉
+                if let thirdParty = session.thirdPartyToolLabel {
+                    Text(thirdParty)
+                        .font(Theme.mono(10, .medium))
+                        .foregroundStyle(Theme.cyan.opacity(0.78))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .layoutPriority(-1)
+                }
                 Spacer(minLength: 8)
                 HStack(spacing: 5) {
                     Text(session.activityLabel(settings: settings))
@@ -214,19 +223,38 @@ extension AgentSession {
         return settings.label(for: state)
     }
 
+    /// 正在调用的第三方/MCP 短名（如 `notion/search`）；非 MCP 或解析不出时为 nil
+    @MainActor
+    var thirdPartyToolLabel: String? {
+        guard state == .runningTool, currentToolCategory == .mcp,
+              let event = currentToolEvent else { return nil }
+        return ThirdPartyToolDisplay.label(tool: event.tool, detail: event.detail)
+    }
+
     private enum ToolCategory { case search, edit, shell, verify, subtask, mcp }
 
     private var currentToolCategory: ToolCategory? {
-        // 最近一条工具开始事件:cursor/claude 带工具名,codex 新版是 function_call 系列
+        guard let event = currentToolEvent else { return nil }
+        switch event.name {
+        case "PreToolUse", "preToolUse", "function_call", "custom_tool_call",
+             "web_search_call", "tool_search_call":
+            guard let tool = event.tool else { return nil }
+            return Self.category(forTool: tool, detail: event.detail)
+        case "exec_command_begin": return Self.shellCategory(command: event.detail)
+        case "patch_apply_begin": return .edit
+        case "mcp_tool_call_begin": return .mcp
+        default: return nil
+        }
+    }
+
+    /// 最近一条「工具开始」事件
+    private var currentToolEvent: AgentEvent? {
         for event in recentEvents.reversed() {
             switch event.name {
             case "PreToolUse", "preToolUse", "function_call", "custom_tool_call",
-                 "web_search_call", "tool_search_call":
-                guard let tool = event.tool else { return nil }
-                return Self.category(forTool: tool, detail: event.detail)
-            case "exec_command_begin": return Self.shellCategory(command: event.detail)
-            case "patch_apply_begin": return .edit
-            case "mcp_tool_call_begin": return .mcp
+                 "web_search_call", "tool_search_call",
+                 "exec_command_begin", "patch_apply_begin", "mcp_tool_call_begin":
+                return event
             default: continue
             }
         }
@@ -248,10 +276,10 @@ extension AgentSession {
             return .shell
         case "Task", "Agent", "task_v2":
             return .subtask
-        case "CallMcpTool", "FetchMcpResource", "ListMcpResources":
+        case "CallMcpTool", "FetchMcpResource", "ListMcpResources", "GetMcpTools":
             return .mcp
         default:
-            return tool.hasPrefix("mcp_") ? .mcp : nil
+            return tool.hasPrefix("mcp_") || tool.hasPrefix("mcp__") ? .mcp : nil
         }
     }
 

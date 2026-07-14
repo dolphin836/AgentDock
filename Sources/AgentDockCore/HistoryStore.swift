@@ -56,7 +56,18 @@ public final class HistoryStore: @unchecked Sendable {
             sampled_at REAL NOT NULL,
             total_tokens INTEGER NOT NULL);
         CREATE INDEX IF NOT EXISTS idx_token_time ON token_sample(sampled_at);
+        CREATE TABLE IF NOT EXISTS tool_call(
+            session_id TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            tool_key TEXT NOT NULL,
+            tool_raw TEXT,
+            called_at REAL NOT NULL,
+            duration_sec REAL);
+        CREATE INDEX IF NOT EXISTS idx_tool_kind_key ON tool_call(kind, tool_key);
+        CREATE INDEX IF NOT EXISTS idx_tool_time ON tool_call(called_at);
         """)
+        // 旧库升级:补 duration_sec 列(已存在则忽略错误)
+        exec("ALTER TABLE tool_call ADD COLUMN duration_sec REAL")
         // 上次运行遗留的未闭合区间:真实时长未知,按零时长闭合(诚实地少计而不虚增)
         exec("UPDATE state_span SET ended_at = started_at WHERE ended_at IS NULL")
     }
@@ -87,6 +98,63 @@ public final class HistoryStore: @unchecked Sendable {
             run("INSERT INTO token_sample(session_id, kind, sampled_at, total_tokens) VALUES (?1, ?2, ?3, ?4)",
                 binds: [.text(sessionId), .text(kind.rawValue), .real(ts), .int(tokens)])
         }
+    }
+
+    /// 单次工具调用时长上限(秒):超过视为丢了 end 事件,按上限计入
+    static let toolCallCapSeconds = 600.0
+
+    /// 第三方工具调用开始:先闭合该会话未完调用,再插入新行
+    public func recordToolCallBegin(sessionId: String, kind: AgentKind,
+                                    toolKey: String, toolRaw: String?,
+                                    at date: Date = Date()) {
+        guard !toolKey.isEmpty else { return }
+        let ts = date.timeIntervalSince1970
+        queue.async { [self] in
+            closeOpenToolCalls(sessionId: sessionId, at: ts)
+            run("""
+            INSERT INTO tool_call(session_id, kind, tool_key, tool_raw, called_at, duration_sec)
+            VALUES (?1, ?2, ?3, ?4, ?5, NULL)
+            """, binds: [.text(sessionId), .text(kind.rawValue), .text(toolKey),
+                         .text(toolRaw ?? ""), .real(ts)])
+        }
+    }
+
+    /// 第三方工具调用结束:闭合该会话最近一条未完调用
+    public func recordToolCallEnd(sessionId: String, toolKey: String?,
+                                  at date: Date = Date()) {
+        let ts = date.timeIntervalSince1970
+        queue.async { [self] in
+            closeOpenToolCalls(sessionId: sessionId, preferredKey: toolKey, at: ts)
+        }
+    }
+
+    /// 兼容旧调用点:等价于 begin(无配对 end 时时长为 0)
+    public func recordToolCall(sessionId: String, kind: AgentKind,
+                               toolKey: String, toolRaw: String?,
+                               at date: Date = Date()) {
+        recordToolCallBegin(sessionId: sessionId, kind: kind,
+                            toolKey: toolKey, toolRaw: toolRaw, at: date)
+    }
+
+    private func closeOpenToolCalls(sessionId: String, preferredKey: String? = nil,
+                                    at ts: Double) {
+        // 优先闭合匹配 tool_key 的未完行;否则闭合该会话任意未完行
+        if let preferredKey, !preferredKey.isEmpty {
+            run("""
+            UPDATE tool_call
+            SET duration_sec = MIN(\(Self.toolCallCapSeconds), MAX(0, ?1 - called_at))
+            WHERE rowid = (
+                SELECT rowid FROM tool_call
+                WHERE session_id = ?2 AND tool_key = ?3 AND duration_sec IS NULL
+                ORDER BY called_at DESC LIMIT 1
+            )
+            """, binds: [.real(ts), .text(sessionId), .text(preferredKey)])
+        }
+        run("""
+        UPDATE tool_call
+        SET duration_sec = MIN(\(Self.toolCallCapSeconds), MAX(0, ?1 - called_at))
+        WHERE session_id = ?2 AND duration_sec IS NULL
+        """, binds: [.real(ts), .text(sessionId)])
     }
 
     /// 等待队列中的写入全部落盘(测试/退出前用)
@@ -130,6 +198,78 @@ public final class HistoryStore: @unchecked Sendable {
             """, start: start, end: end))
             return result
         }
+    }
+
+    /// 按 agent + tool_key 聚合调用次数、最近使用与累计时长
+    public func toolUsage(kind: AgentKind? = nil, since: Date? = nil) -> [ToolUsageStat] {
+        queue.sync {
+            var sql = """
+            SELECT tool_key, COUNT(*), MAX(called_at),
+                   COALESCE(SUM(duration_sec), 0)
+            FROM tool_call
+            WHERE 1=1
+            """
+            var binds: [Bind] = []
+            if let kind {
+                sql += " AND kind = ?\(binds.count + 1)"
+                binds.append(.text(kind.rawValue))
+            }
+            if let since {
+                sql += " AND called_at >= ?\(binds.count + 1)"
+                binds.append(.real(since.timeIntervalSince1970))
+            }
+            sql += " GROUP BY tool_key ORDER BY COUNT(*) DESC"
+            return queryToolUsage(sql, binds: binds)
+        }
+    }
+
+    /// 某 agent 在窗口内的总调用次数 + 累计时长 + 最近一次
+    public func toolUsageSummary(kind: AgentKind, since: Date? = nil)
+        -> (count: Int, lastUsedAt: Date?, totalDurationSeconds: Double) {
+        queue.sync {
+            var sql = """
+            SELECT COUNT(*), MAX(called_at), COALESCE(SUM(duration_sec), 0)
+            FROM tool_call WHERE kind = ?1
+            """
+            var binds: [Bind] = [.text(kind.rawValue)]
+            if let since {
+                sql += " AND called_at >= ?2"
+                binds.append(.real(since.timeIntervalSince1970))
+            }
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else {
+                return (0, nil, 0)
+            }
+            defer { sqlite3_finalize(stmt) }
+            bind(stmt, binds)
+            guard sqlite3_step(stmt) == SQLITE_ROW else { return (0, nil, 0) }
+            let count = Int(sqlite3_column_int64(stmt, 0))
+            let last = sqlite3_column_type(stmt, 1) == SQLITE_NULL
+                ? nil
+                : Date(timeIntervalSince1970: sqlite3_column_double(stmt, 1))
+            let duration = sqlite3_column_double(stmt, 2)
+            return (count, last, duration)
+        }
+    }
+
+    private func queryToolUsage(_ sql: String, binds: [Bind]) -> [ToolUsageStat] {
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else { return [] }
+        defer { sqlite3_finalize(stmt) }
+        bind(stmt, binds)
+        var rows: [ToolUsageStat] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            guard let cStr = sqlite3_column_text(stmt, 0) else { continue }
+            let key = String(cString: cStr)
+            let count = Int(sqlite3_column_int64(stmt, 1))
+            let last = sqlite3_column_type(stmt, 2) == SQLITE_NULL
+                ? nil
+                : Date(timeIntervalSince1970: sqlite3_column_double(stmt, 2))
+            let duration = sqlite3_column_double(stmt, 3)
+            rows.append(ToolUsageStat(toolKey: key, callCount: count,
+                                      lastUsedAt: last, totalDurationSeconds: duration))
+        }
+        return rows
     }
 
     // MARK: - SQLite 基础

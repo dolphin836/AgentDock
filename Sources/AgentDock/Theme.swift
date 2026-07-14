@@ -35,6 +35,10 @@ enum Theme {
     /// 面板底:极轻冷绿偏色,比纯黑多一点「仪表」质感
     static let panelFill = Color(red: 0.02, green: 0.035, blue: 0.028)
 
+    // MARK: 实验 · 面板点阵纹理
+    /// `false` = 恢复纯色底;整段 `PanelDotTexture` 也可直接删
+    static let panelDotTextureEnabled = true
+
     // MARK: 动效(短、软、少弹——高级感靠过渡而不是夸张)
 
     /// 展开/收起刘海
@@ -136,26 +140,95 @@ struct RobotGlyph: View {
     }
 }
 
-/// 自适应滚动:实测内容高度,不超上限时按自然高度渲染(顶对齐、面板贴合内容),
-/// 超上限才转为固定高度的滚动区
+/// 实验:极淡点阵叠在面板底上,终端仪表的「微纹理」感。
+/// 关掉 `Theme.panelDotTextureEnabled` 或删除本类型即可恢复。
+struct PanelDotTexture: View {
+    /// 点间距(越大越疏)
+    var spacing: CGFloat = 12
+    var radius: CGFloat = 0.7
+    /// 中心点最大不透明度;向外按径向衰减
+    var centerOpacity: Double = 0.18
+    /// 边缘保留的最低不透明度比例(相对中心)
+    var edgeOpacityRatio: Double = 0.35
+
+    var body: some View {
+        Canvas { context, size in
+            guard size.width > 1, size.height > 1 else { return }
+
+            // 用整网铺满(含四边),避免右侧/底边因 while x < width 漏一列
+            let cols = max(2, Int(ceil(size.width / spacing)))
+            let rows = max(2, Int(ceil(size.height / spacing)))
+            let cx = size.width * 0.5
+            let cy = size.height * 0.5
+            // 到角的距离作为 1.0,边缘渐隐更自然
+            let maxDist = hypot(cx, cy)
+
+            for row in 0..<rows {
+                for col in 0..<cols {
+                    let x = CGFloat(col) * (size.width - 1) / CGFloat(cols - 1)
+                    let y = CGFloat(row) * (size.height - 1) / CGFloat(rows - 1)
+                    let t = min(1, hypot(x - cx, y - cy) / maxDist)
+                    // 缓出一点即可:中心亮、边缘仍保留 edgeOpacityRatio,不要过早黑掉
+                    let falloff = 1 - t * t * (1 - edgeOpacityRatio)
+                    let alpha = centerOpacity * falloff
+                    guard alpha >= 0.01 else { continue }
+
+                    let rect = CGRect(x: x - radius, y: y - radius,
+                                      width: radius * 2, height: radius * 2)
+                    context.fill(Path(ellipseIn: rect),
+                                 with: .color(Color.white.opacity(alpha)))
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// 面板底色 + 可选点阵(实验开关)。
+struct PanelSurface<S: Shape>: View {
+    let shape: S
+
+    var body: some View {
+        shape.fill(Theme.panelFill)
+            .overlay {
+                if Theme.panelDotTextureEnabled {
+                    PanelDotTexture().clipShape(shape)
+                }
+            }
+    }
+}
+
+/// 自适应滚动:始终用 ScrollView,高度 = min(内容高, maxHeight)。
+/// 不用 GeometryReader 量高(它在 ScrollView 里会吃掉无限高度 → 页面被撑开 / 展开时闪一下)。
 struct AdaptiveScroll<Content: View>: View {
     let maxHeight: CGFloat
     @ViewBuilder let content: Content
     @State private var contentHeight: CGFloat = 0
 
     var body: some View {
-        if contentHeight > maxHeight {
-            ScrollView(.vertical, showsIndicators: false) { measured }
-                .frame(height: maxHeight)
-        } else {
-            measured
+        ScrollView(.vertical, showsIndicators: contentHeight > maxHeight + 0.5) {
+            content
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                // Color.clear 背景跟前景同尺寸,不会像 GeometryReader 那样贪婪撑开
+                .background {
+                    Color.clear
+                        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { height in
+                            applyHeight(height)
+                        }
+                }
         }
+        // 始终给明确高度并硬顶 maxHeight,避免短页/长页来回切换布局模式
+        .frame(height: min(contentHeight > 0 ? contentHeight : maxHeight, maxHeight),
+               alignment: .top)
     }
 
-    private var measured: some View {
-        content.onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { height in
-            contentHeight = height
-        }
+    private func applyHeight(_ height: CGFloat) {
+        guard height > 0, abs(contentHeight - height) > 1 else { return }
+        // 高度变化不带动画,否则工具分组展开时外层 frame 会闪一帧
+        var t = Transaction()
+        t.disablesAnimations = true
+        withTransaction(t) { contentHeight = height }
     }
 }
 

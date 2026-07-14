@@ -105,6 +105,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store.tokenObserver = { sessionId, kind, tokens in
             Self.history.recordTokens(sessionId: sessionId, kind: kind, tokens: tokens)
         }
+        store.toolCallObserver = { sessionId, kind, toolKey, toolRaw, phase, at in
+            switch phase {
+            case .begin:
+                Self.history.recordToolCallBegin(sessionId: sessionId, kind: kind,
+                                                 toolKey: toolKey, toolRaw: toolRaw, at: at)
+            case .end:
+                Self.history.recordToolCallEnd(sessionId: sessionId, toolKey: toolKey, at: at)
+            }
+        }
         installEmitScript()
         startServer()
         startCodexTailer()

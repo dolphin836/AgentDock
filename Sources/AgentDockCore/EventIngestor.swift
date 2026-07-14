@@ -40,14 +40,8 @@ public enum EventIngestor {
               let name = p["hook_event_name"] as? String
         else { return .ignored }
         let tool = p["tool_name"] as? String
-        var detail = tool
-        if let input = p["tool_input"] as? [String: Any] {
-            if let filePath = input["file_path"] as? String, !filePath.isEmpty {
-                detail = (filePath as NSString).lastPathComponent
-            } else if let command = input["command"] as? String, !command.isEmpty {
-                detail = command
-            }
-        }
+        let input = p["tool_input"] as? [String: Any]
+        let detail = toolDetail(tool: tool, input: input, fallback: tool)
         let cwd = (p["workspace_roots"] as? [String])?.first
         return .event(AgentEvent(
             sessionId: sessionId, kind: .cursor,
@@ -59,19 +53,30 @@ public enum EventIngestor {
         guard let sessionId = p["session_id"] as? String,
               let name = p["hook_event_name"] as? String
         else { return .ignored }
-        // detail 优先取操作的文件名(展示价值最高),其次工具名/消息
         let tool = p["tool_name"] as? String
-        var detail = tool ?? (p["message"] as? String)
-        if let input = p["tool_input"] as? [String: Any] {
-            if let filePath = input["file_path"] as? String, !filePath.isEmpty {
-                detail = (filePath as NSString).lastPathComponent
-            } else if let command = input["command"] as? String, !command.isEmpty {
-                detail = command  // Bash 等:命令文本供动作细分(检索/验证/命令)
-            }
-        }
+        let input = p["tool_input"] as? [String: Any]
+        let detail = toolDetail(tool: tool, input: input,
+                                fallback: tool ?? (p["message"] as? String))
         return .event(AgentEvent(
             sessionId: sessionId, kind: .claudeCode,
             cwd: p["cwd"] as? String, name: name, detail: detail, tool: tool, appPath: appPath))
+    }
+
+    /// detail 优先级:MCP server/tool → 文件名 → shell 命令 → fallback
+    private static func toolDetail(tool: String?, input: [String: Any]?,
+                                   fallback: String?) -> String? {
+        if let mcp = ThirdPartyToolDisplay.detailFromInput(input, tool: tool) {
+            return mcp
+        }
+        if let input {
+            if let filePath = input["file_path"] as? String, !filePath.isEmpty {
+                return (filePath as NSString).lastPathComponent
+            }
+            if let command = input["command"] as? String, !command.isEmpty {
+                return command
+            }
+        }
+        return fallback
     }
 
     private static func parseClaudeStatusline(_ p: [String: Any]) -> IngestResult {

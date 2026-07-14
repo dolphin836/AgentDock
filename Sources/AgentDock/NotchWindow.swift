@@ -5,7 +5,7 @@ import AgentDockCore
 /// 悬停状态:由窗口层的全局鼠标监听驱动,视图层只读
 /// 展开面板的页面
 enum PanelTab {
-    case sessions, usage, settings
+    case sessions, usage, tools, settings
 }
 
 @MainActor
@@ -38,6 +38,8 @@ final class NotchWindow {
     var onHoverBegan: (() -> Void)?
     /// 菜单栏模式下用于定位的状态栏按钮(由 AppDelegate 注入)
     weak var statusButton: NSStatusBarButton?
+    /// 延迟收起:避免命中区边界上展开/收起来回抖
+    private var collapseWorkItem: DispatchWorkItem?
 
     init(store: SessionStore, settings: AppSettings) {
         self.store = store
@@ -103,6 +105,8 @@ final class NotchWindow {
 
     /// 菜单栏模式:左键切换固定展开
     func togglePinned() {
+        collapseWorkItem?.cancel()
+        collapseWorkItem = nil
         hoverState.pinnedOpen.toggle()
         if hoverState.pinnedOpen {
             onHoverBegan?()
@@ -135,25 +139,55 @@ final class NotchWindow {
         case .menuBar:
             inside = menuBarHitRect()?.contains(point) ?? false
         }
-        if hoverState.hovering != inside {
-            hoverState.hovering = inside
-            if inside { onHoverBegan?() }
-            position()
-            applyVisibility()
-        } else if placement == .menuBar, isExpanded {
+
+        if inside {
+            collapseWorkItem?.cancel()
+            collapseWorkItem = nil
+            if !hoverState.hovering {
+                hoverState.hovering = true
+                onHoverBegan?()
+                applyVisibility()
+            }
+        } else if hoverState.hovering {
+            // 延迟收起,避免指针在刘海条边缘时展开↔收起互踢导致画面乱晃
+            guard collapseWorkItem == nil else { return }
+            let work = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                self.hoverState.hovering = false
+                self.collapseWorkItem = nil
+                self.applyVisibility()
+            }
+            collapseWorkItem = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
+        }
+
+        if placement == .menuBar, isExpanded {
             // 图标可能随菜单栏布局漂移,展开时持续对齐
             position()
         }
     }
 
-    /// 刘海模式:内容贴屏幕顶端水平居中
+    /// 刘海模式命中区。
+    /// - 收起:只用刘海条固定几何(不用 contentSize,避免展开残留把下方算进去)
+    /// - 展开:用内容尺寸,水平与屏幕中心对齐(与居中后的视觉一致)
     private func notchHitRect() -> NSRect? {
         guard let screen = AppSettings.shared.targetScreen else { return nil }
-        let size = hoverState.contentSize
-        guard size.width > 1, size.height > 1 else { return nil }
-        return NSRect(x: screen.frame.midX - size.width / 2,
-                      y: screen.frame.maxY - size.height,
-                      width: size.width, height: size.height)
+        // 注意:这里用「当前是否已因悬停展开」,不要用 isExpanded 里的 waiting——
+        // 否则等待审批时命中区一直很大,和收起态判定纠缠。
+        let hoveringOpen = hoverState.hovering || hoverState.pinnedOpen || hasWaitingSessions
+        let width: CGFloat
+        let height: CGFloat
+        if hoveringOpen {
+            let size = hoverState.contentSize
+            width = size.width > 1 ? size.width : NotchLayout.totalWidth
+            height = size.height > 1 ? size.height : (NotchLayout.barHeight + 120)
+        } else {
+            width = NotchLayout.totalWidth
+            height = NotchLayout.barHeight
+        }
+        return NSRect(x: screen.frame.midX - width / 2,
+                      y: screen.frame.maxY - height,
+                      width: width, height: height)
     }
 
     /// 菜单栏模式:状态栏按钮 ∪ 已展开面板内容
@@ -191,11 +225,15 @@ final class NotchWindow {
 
     private func positionForNotch() {
         guard let screen = AppSettings.shared.targetScreen else { return }
+        // 窗口尺寸固定:收起/展开只换内容,不改 frame——改尺寸会导致刘海条左右乱跳
         let width: CGFloat = 900
         let height: CGFloat = 600
         let x = screen.frame.midX - width / 2
         let y = screen.frame.maxY - height
-        panel.setFrame(NSRect(x: x, y: y, width: width, height: height), display: true)
+        let next = NSRect(x: x, y: y, width: width, height: height)
+        if panel.frame != next {
+            panel.setFrame(next, display: true)
+        }
     }
 
     private func positionForMenuBar() {
@@ -231,7 +269,11 @@ final class NotchWindow {
         switch AppSettings.shared.panelPlacement {
         case .notch:
             panel.orderFrontRegardless()
+            // 收起:忽略鼠标,点击穿透到下方 App;悬停仍靠全局 mouseMoved
+            // 展开:接收鼠标,才能点面板里的按钮
+            panel.ignoresMouseEvents = !isExpanded
         case .menuBar:
+            panel.ignoresMouseEvents = false
             if isExpanded || hoverState.pinnedOpen || hoverState.hovering || hasWaitingSessions {
                 panel.orderFrontRegardless()
             } else {

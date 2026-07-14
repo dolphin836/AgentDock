@@ -53,6 +53,11 @@ struct PanelView: View {
                 UsagePanelView(store: store, settings: settings)
                     .padding(.bottom, 8))
                 .transition(.opacity)
+        case .tools:
+            scrollable(
+                ToolsPanelView(settings: settings)
+                    .padding(.bottom, 8))
+                .transition(.opacity)
         case .settings:
             scrollable(
                 SettingsPanelView(settings: settings)
@@ -161,6 +166,10 @@ struct PanelView: View {
                 tab("chart.bar", active: hoverState.activeTab == .usage,
                     help: settings.t("Usage", "用量")) {
                     hoverState.activeTab = .usage
+                }
+                tab("wrench.and.screwdriver", active: hoverState.activeTab == .tools,
+                    help: settings.t("Tools", "工具")) {
+                    hoverState.activeTab = .tools
                 }
                 tab("gearshape", active: hoverState.activeTab == .settings,
                     help: settings.t("Settings", "设置")) {

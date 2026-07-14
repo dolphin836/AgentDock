@@ -4,6 +4,7 @@
 # 用法:
 #   ./scripts/fake-session.sh           # 默认:多会话停在进行中约 45 秒
 #   ./scripts/fake-session.sh running   # 同上
+#   ./scripts/fake-session.sh mcp       # 第三方/MCP 调用(任务名后显示短名)
 #   ./scripts/fake-session.sh approval  # 2 个需要审批(黄机器人眨眼),保持约 30 秒
 #   ./scripts/fake-session.sh cycle     # 完整生命周期(含审批→完成)
 #   ./scripts/fake-session.sh clear     # 发 Stop 清掉演示会话
@@ -17,6 +18,13 @@ emit() {
   local sid="$1" event="$2" tool="${3:-}" cwd="${4:-/tmp/agentdock-demo}"
   printf '{"source":"claude-code","type":"hook","payload":{"session_id":"%s","hook_event_name":"%s","cwd":"%s","tool_name":"%s"}}\n' \
     "$sid" "$event" "$cwd" "$tool" | nc -U -w 1 "$SOCK" >/dev/null || true
+}
+
+# Cursor 风格 CallMcpTool:带 server + toolName,展示名走 ingest 抽取
+emit_cursor_mcp() {
+  local sid="$1" cwd="$2" server="$3" tool_name="$4"
+  printf '{"source":"cursor","type":"hook","payload":{"conversation_id":"%s","hook_event_name":"preToolUse","cwd":"%s","workspace_roots":["%s"],"tool_name":"CallMcpTool","tool_input":{"server":"%s","toolName":"%s"},"model":"composer-2"}}\n' \
+    "$sid" "$cwd" "$cwd" "$server" "$tool_name" | nc -U -w 1 "$SOCK" >/dev/null || true
 }
 
 metrics() {
@@ -39,9 +47,80 @@ case "$MODE" in
   clear)
     echo "停止演示会话…"
     for sid in agentdock-demo-a agentdock-demo-b agentdock-demo-c agentdock-demo \
-               agentdock-demo-appr-a agentdock-demo-appr-b; do
+               agentdock-demo-appr-a agentdock-demo-appr-b \
+               agentdock-demo-mcp-a agentdock-demo-mcp-b agentdock-demo-mcp-c; do
       emit "$sid" Stop ""
     done
+    echo "done"
+    ;;
+
+  mcp)
+    echo "模拟 3 个第三方/MCP 调用(悬停刘海看任务名后的青色短名)…"
+    echo "  A  notion/search     ·  Claude mcp__… 风格"
+    echo "  B  telegram/send…    ·  Cursor CallMcpTool"
+    echo "  C  claude-mem/…    ·  Claude mcp__… 风格"
+    # A: Claude dunder 命名
+    emit agentdock-demo-mcp-a SessionStart "" /tmp/agentdock-notion
+    sleep 0.1
+    emit agentdock-demo-mcp-a UserPromptSubmit "" /tmp/agentdock-notion
+    metrics agentdock-demo-mcp-a Opus 44
+    sleep 0.1
+    emit agentdock-demo-mcp-a PreToolUse "mcp__plugin-notion-workspace-notion__search" /tmp/agentdock-notion
+    sleep 1.2
+    emit agentdock-demo-mcp-a PostToolUse "mcp__plugin-notion-workspace-notion__search" /tmp/agentdock-notion
+
+    # B: Cursor CallMcpTool + tool_input
+    printf '{"source":"cursor","type":"hook","payload":{"conversation_id":"agentdock-demo-mcp-b","hook_event_name":"sessionStart","workspace_roots":["/tmp/agentdock-telegram"],"model":"composer-2"}}\n' \
+      | nc -U -w 1 "$SOCK" >/dev/null || true
+    sleep 0.1
+    printf '{"source":"cursor","type":"hook","payload":{"conversation_id":"agentdock-demo-mcp-b","hook_event_name":"beforeSubmitPrompt","workspace_roots":["/tmp/agentdock-telegram"],"model":"composer-2"}}\n' \
+      | nc -U -w 1 "$SOCK" >/dev/null || true
+    sleep 0.1
+    emit_cursor_mcp agentdock-demo-mcp-b /tmp/agentdock-telegram \
+      plugin-telegram-telegram send_message
+    sleep 0.8
+    printf '{"source":"cursor","type":"hook","payload":{"conversation_id":"agentdock-demo-mcp-b","hook_event_name":"postToolUse","workspace_roots":["/tmp/agentdock-telegram"],"tool_name":"CallMcpTool","tool_input":{"server":"plugin-telegram-telegram","toolName":"send_message"},"model":"composer-2"}}\n' \
+      | nc -U -w 1 "$SOCK" >/dev/null || true
+
+    # C: 另一个 Claude MCP
+    emit agentdock-demo-mcp-c SessionStart "" /tmp/agentdock-mem
+    sleep 0.1
+    emit agentdock-demo-mcp-c UserPromptSubmit "" /tmp/agentdock-mem
+    metrics agentdock-demo-mcp-c Sonnet 61
+    sleep 0.1
+    emit agentdock-demo-mcp-c PreToolUse "mcp__claude-mem__smart_search" /tmp/agentdock-mem
+    sleep 1.0
+    emit agentdock-demo-mcp-c PostToolUse "mcp__claude-mem__smart_search" /tmp/agentdock-mem
+
+    echo "保持 MCP 调用约 45 秒(Ctrl+C 可提前结束;结束后自动 Stop)…"
+    for i in $(seq 1 15); do
+      sleep 2
+      case $((i % 3)) in
+        1)
+          emit agentdock-demo-mcp-a PreToolUse "mcp__plugin-notion-workspace-notion__search" /tmp/agentdock-notion
+          sleep 1
+          emit agentdock-demo-mcp-a PostToolUse "mcp__plugin-notion-workspace-notion__search" /tmp/agentdock-notion
+          ;;
+        2)
+          emit_cursor_mcp agentdock-demo-mcp-b /tmp/agentdock-telegram \
+            plugin-telegram-telegram send_message
+          sleep 1
+          printf '{"source":"cursor","type":"hook","payload":{"conversation_id":"agentdock-demo-mcp-b","hook_event_name":"postToolUse","workspace_roots":["/tmp/agentdock-telegram"],"tool_name":"CallMcpTool","tool_input":{"server":"plugin-telegram-telegram","toolName":"send_message"},"model":"composer-2"}}\n' \
+            | nc -U -w 1 "$SOCK" >/dev/null || true
+          ;;
+        0)
+          emit agentdock-demo-mcp-c PreToolUse "mcp__claude-mem__smart_search" /tmp/agentdock-mem
+          sleep 1
+          emit agentdock-demo-mcp-c PostToolUse "mcp__claude-mem__smart_search" /tmp/agentdock-mem
+          ;;
+      esac
+      printf "  …%ss\n" $((i * 3))
+    done
+
+    echo "收尾 → Stop"
+    emit agentdock-demo-mcp-a Stop "" /tmp/agentdock-notion
+    emit agentdock-demo-mcp-b Stop "" /tmp/agentdock-telegram
+    emit agentdock-demo-mcp-c Stop "" /tmp/agentdock-mem
     echo "done"
     ;;
 

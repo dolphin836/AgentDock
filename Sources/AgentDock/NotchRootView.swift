@@ -26,26 +26,30 @@ struct NotchRootView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Group {
-                if expanded {
-                    panelChrome
-                } else if !menuBarMode {
-                    // 收起态仅刘海模式显示三段条;菜单栏模式收起时窗口隐藏
-                    CapsuleView(sessions: store.sessions, settings: settings)
-                } else {
-                    Color.clear.frame(width: 1, height: 1)
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                Group {
+                    if expanded {
+                        panelChrome
+                    } else if !menuBarMode {
+                        // 收起态仅刘海模式显示三段条;菜单栏模式收起时窗口隐藏
+                        CapsuleView(sessions: store.sessions, settings: settings)
+                    } else {
+                        Color.clear.frame(width: 1, height: 1)
+                    }
                 }
+                .onChange(of: expanded) { _, isExpanded in
+                    // 收起后回到会话 tab,下次展开优先看任务
+                    if !isExpanded { hoverState.activeTab = .sessions }
+                }
+                .onGeometryChange(for: CGSize.self, of: { $0.size }, action: { size in
+                    hoverState.contentSize = size
+                })
+                Spacer(minLength: 0)
             }
-            .onChange(of: expanded) { _, isExpanded in
-                // 收起后回到会话 tab,下次展开优先看任务
-                if !isExpanded { hoverState.activeTab = .sessions }
-            }
-            .onGeometryChange(for: CGSize.self, of: { $0.size }, action: { size in
-                hoverState.contentSize = size
-            })
             Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .animation(Theme.expandSpring, value: expanded)
     }
 
@@ -76,7 +80,7 @@ struct NotchRootView: View {
                     .zIndex(1)
 
                 panel
-                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.panelFill))
+                    .background(PanelSurface(shape: RoundedRectangle(cornerRadius: 14, style: .continuous)))
                     .overlay {
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .stroke(Theme.borderSubtle, lineWidth: 1)
@@ -86,7 +90,7 @@ struct NotchRootView: View {
             .frame(width: NotchLayout.totalWidth)
         } else {
             panel
-                .background(NotchShape(topRadius: 8, bottomRadius: 18).fill(Theme.panelFill))
+                .background(PanelSurface(shape: NotchShape(topRadius: 8, bottomRadius: 18)))
                 .overlay {
                     NotchShape(topRadius: 8, bottomRadius: 18)
                         .stroke(edge, lineWidth: 1)

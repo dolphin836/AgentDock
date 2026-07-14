@@ -30,6 +30,14 @@ struct CapsuleView: View {
                                 .foregroundStyle(Theme.text1)
                                 .lineLimit(1)
                                 .truncationMode(.tail)
+                            if let thirdParty = primary.thirdPartyToolLabel {
+                                Text(thirdParty)
+                                    .font(Theme.mono(9.5, .medium))
+                                    .foregroundStyle(Theme.cyan.opacity(0.78))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .layoutPriority(-1)
+                            }
                         }
                         .id(primary.id)
                         .transition(.opacity.combined(with: .offset(y: 2)))
@@ -129,7 +137,7 @@ struct CapsuleView: View {
                 .frame(maxHeight: .infinity)
         }
         .frame(width: NotchLayout.totalWidth, height: NotchLayout.barHeight)
-        .background(NotchShape().fill(Theme.panelFill))
+        .background(PanelSurface(shape: NotchShape()))
         .overlay {
             NotchShape()
                 .stroke(

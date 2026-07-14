@@ -110,7 +110,7 @@ struct SettingsPanelView: View {
                     title: "agentdockstatus.app",
                     url: "https://agentdockstatus.app")
             linkRow(label: settings.t("more apps", "更多应用"),
-                    title: "Wallpaper Exchange · wallpaperexchange.com",
+                    title: "Wallpaper Exchange",
                     url: "https://www.wallpaperexchange.com")
 
             HStack {
