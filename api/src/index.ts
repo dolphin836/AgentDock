@@ -170,27 +170,39 @@ async function adminLogin(request: Request, env: Env): Promise<Response> {
     return json({ error: "invalid_credentials" }, 401);
   }
 
-  const token = await mintSession(env.SESSION_SECRET, env.ADMIN_USER);
-  const res = json({ ok: true });
+  const token = await mintSession(env.SESSION_SECRET.trim(), env.ADMIN_USER.trim());
+  const res = json({ ok: true, token });
   res.headers.append(
     "Set-Cookie",
-    cookie("ad_session", token, { maxAge: SESSION_TTL_SEC, httpOnly: true }),
+    // 同源站(apex ↔ api 子域)用 Lax 即可;比 None 更不易被浏览器拦
+    cookie("ad_session", token, { maxAge: SESSION_TTL_SEC, httpOnly: true, sameSite: "Lax" }),
   );
   return res;
 }
 
 async function adminLogout(_request: Request, env: Env): Promise<Response> {
   const res = json({ ok: true });
-  res.headers.append("Set-Cookie", cookie("ad_session", "", { maxAge: 0, httpOnly: true }));
-  // env 引用避免 unused 警告(logout 不需要 DB)
+  res.headers.append(
+    "Set-Cookie",
+    cookie("ad_session", "", { maxAge: 0, httpOnly: true, sameSite: "Lax" }),
+  );
   void env;
   return res;
 }
 
 async function requireAdmin(request: Request, env: Env): Promise<Response | null> {
-  if (!env.SESSION_SECRET) return json({ error: "admin_not_configured" }, 503);
-  const token = parseCookie(request.headers.get("Cookie") ?? "").ad_session;
-  if (!token || !(await verifySession(env.SESSION_SECRET, token, env.ADMIN_USER))) {
+  const secret = (env.SESSION_SECRET ?? "").trim();
+  const adminUser = (env.ADMIN_USER ?? "").trim();
+  if (!secret || !adminUser) return json({ error: "admin_not_configured" }, 503);
+
+  // 优先 cookie;Authorization Bearer 作刷新兜底(跨站 cookie 被拦时仍可用)
+  const cookieToken = parseCookie(request.headers.get("Cookie") ?? "").ad_session;
+  const auth = request.headers.get("Authorization") ?? "";
+  const bearer = auth.toLowerCase().startsWith("bearer ")
+    ? auth.slice(7).trim()
+    : "";
+  const token = cookieToken || bearer;
+  if (!token || !(await verifySession(secret, token, adminUser))) {
     return json({ error: "unauthorized" }, 401);
   }
   return null;
@@ -328,15 +340,16 @@ function cors(res: Response, request: Request, env: Env): Response {
     "http://127.0.0.1:5500",
     "http://localhost:5500",
   ]);
-  const headers = new Headers(res.headers);
+  // 直接改原 Response 的 headers,不要 new Headers(res.headers):
+  // Fetch Headers 构造会丢掉 Set-Cookie,导致登录 cookie 永远种不上 → 刷新必掉线、看板无数据。
   if (origin && allowed.has(origin)) {
-    headers.set("Access-Control-Allow-Origin", origin);
-    headers.set("Access-Control-Allow-Credentials", "true");
-    headers.set("Access-Control-Allow-Headers", "Content-Type");
-    headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    headers.set("Vary", "Origin");
+    res.headers.set("Access-Control-Allow-Origin", origin);
+    res.headers.set("Access-Control-Allow-Credentials", "true");
+    res.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.headers.set("Vary", "Origin");
   }
-  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+  return res;
 }
 
 function json(data: Json | unknown, status = 200): Response {
@@ -377,15 +390,17 @@ function clip(v: string | null, max: number): string | null {
 function cookie(
   name: string,
   value: string,
-  opts: { maxAge: number; httpOnly: boolean },
+  opts: { maxAge: number; httpOnly: boolean; sameSite?: "Lax" | "None" | "Strict" },
 ): string {
+  const sameSite = opts.sameSite ?? "Lax";
   const parts = [
     `${name}=${encodeURIComponent(value)}`,
     "Path=/",
     `Max-Age=${opts.maxAge}`,
-    "SameSite=None",
+    `SameSite=${sameSite}`,
     "Secure",
   ];
+  // None 必须 Secure(已加);跨站场景才需要 None
   if (opts.httpOnly) parts.push("HttpOnly");
   return parts.join("; ");
 }

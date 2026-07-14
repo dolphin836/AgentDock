@@ -121,19 +121,33 @@
 </div>
 
 <script>
-  // 独立 API 域名;看板页在 agentdockstatus.app(apex),跨域带 cookie
+  // 独立 API 域名;看板页在 agentdockstatus.app(apex),跨域带 cookie + Bearer 兜底
   const API = "https://api.agentdockstatus.app";
+  const TOKEN_KEY = "ad_admin_token";
 
   const $ = (id) => document.getElementById(id);
   const loginCard = $("loginCard");
   const dash = $("dash");
   const loginErr = $("loginErr");
 
+  function savedToken() {
+    try { return localStorage.getItem(TOKEN_KEY) || ""; } catch (_) { return ""; }
+  }
+  function saveToken(token) {
+    try {
+      if (token) localStorage.setItem(TOKEN_KEY, token);
+      else localStorage.removeItem(TOKEN_KEY);
+    } catch (_) {}
+  }
+
   async function api(path, opts = {}) {
+    const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
+    const token = savedToken();
+    if (token) headers.Authorization = "Bearer " + token;
     const res = await fetch(API + path, {
       credentials: "include",
-      headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
       ...opts,
+      headers,
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -206,16 +220,19 @@
     e.preventDefault();
     loginErr.classList.add("hidden");
     try {
-      await api("/v1/admin/login", {
+      const data = await api("/v1/admin/login", {
         method: "POST",
         body: JSON.stringify({
           username: $("username").value,
           password: $("password").value,
         }),
       });
-      showLoggedIn(true);
+      if (data.token) saveToken(data.token);
       await load();
+      showLoggedIn(true);
     } catch (err) {
+      saveToken("");
+      showLoggedIn(false);
       loginErr.textContent = err.message || "login failed";
       loginErr.classList.remove("hidden");
     }
@@ -223,15 +240,28 @@
 
   $("logoutBtn").addEventListener("click", async () => {
     try { await api("/v1/admin/logout", { method: "POST", body: "{}" }); } catch (_) {}
+    saveToken("");
     showLoggedIn(false);
   });
 
-  $("refreshBtn").addEventListener("click", () => load().catch(console.error));
+  $("refreshBtn").addEventListener("click", () => {
+    load().catch((err) => {
+      if (err.status === 401) {
+        saveToken("");
+        showLoggedIn(false);
+      } else {
+        console.error(err);
+      }
+    });
+  });
 
-  // 已有 cookie 则直接进看板
+  // cookie 或 localStorage token 任一有效则直接进看板
   api("/v1/admin/stats")
-    .then(() => { showLoggedIn(true); return load(); })
-    .catch(() => showLoggedIn(false));
+    .then(() => load().then(() => showLoggedIn(true)))
+    .catch(() => {
+      saveToken("");
+      showLoggedIn(false);
+    });
 </script>
 </body>
 </html>
