@@ -36,7 +36,7 @@ export default {
     try {
       return await handle(request, env);
     } catch (err) {
-      console.error("unhandled", err);
+      console.error("unhandled", err instanceof Error ? err.message : err, err);
       return json({ error: "internal_error" }, 500);
     }
   },
@@ -212,49 +212,56 @@ async function adminStats(request: Request, env: Env): Promise<Response> {
   const denied = await requireAdmin(request, env);
   if (denied) return denied;
 
-  const [
-    downloadsTotal,
-    downloadsToday,
-    downloads7d,
-    launchesTotal,
-    activeToday,
-    active7d,
-    active30d,
-    crashesTotal,
-    crashesToday,
-    downloadsByFile,
-    launchesByVersion,
-  ] = await Promise.all([
-    count(env, `SELECT COUNT(*) AS n FROM downloads`),
-    count(env, `SELECT COUNT(*) AS n FROM downloads WHERE created_at >= datetime('now', '-1 day')`),
-    count(env, `SELECT COUNT(*) AS n FROM downloads WHERE created_at >= datetime('now', '-7 day')`),
-    count(env, `SELECT COUNT(*) AS n FROM events WHERE event = 'launch'`),
-    count(env, `SELECT COUNT(DISTINCT install_id) AS n FROM events WHERE created_at >= datetime('now', '-1 day')`),
-    count(env, `SELECT COUNT(DISTINCT install_id) AS n FROM events WHERE created_at >= datetime('now', '-7 day')`),
-    count(env, `SELECT COUNT(DISTINCT install_id) AS n FROM events WHERE created_at >= datetime('now', '-30 day')`),
-    count(env, `SELECT COUNT(*) AS n FROM crashes`),
-    count(env, `SELECT COUNT(*) AS n FROM crashes WHERE created_at >= datetime('now', '-1 day')`),
+  // D1 单库单线程:不要 Promise.all 并发打一堆 prepare,容易 overloaded → 500。
+  // 用 batch 一次往返、顺序执行。
+  const results = await env.DB.batch([
+    env.DB.prepare(`SELECT COUNT(*) AS n FROM downloads`),
+    env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM downloads WHERE created_at >= datetime('now', '-1 day')`,
+    ),
+    env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM downloads WHERE created_at >= datetime('now', '-7 day')`,
+    ),
+    env.DB.prepare(`SELECT COUNT(*) AS n FROM events WHERE event = 'launch'`),
+    env.DB.prepare(
+      `SELECT COUNT(DISTINCT install_id) AS n FROM events WHERE created_at >= datetime('now', '-1 day')`,
+    ),
+    env.DB.prepare(
+      `SELECT COUNT(DISTINCT install_id) AS n FROM events WHERE created_at >= datetime('now', '-7 day')`,
+    ),
+    env.DB.prepare(
+      `SELECT COUNT(DISTINCT install_id) AS n FROM events WHERE created_at >= datetime('now', '-30 day')`,
+    ),
+    env.DB.prepare(`SELECT COUNT(*) AS n FROM crashes`),
+    env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM crashes WHERE created_at >= datetime('now', '-1 day')`,
+    ),
     env.DB.prepare(
       `SELECT filename, COUNT(*) AS n FROM downloads GROUP BY filename ORDER BY n DESC LIMIT 20`,
-    ).all<{ filename: string; n: number }>(),
+    ),
     env.DB.prepare(
       `SELECT app_version, COUNT(DISTINCT install_id) AS n
        FROM events WHERE event = 'launch' AND app_version IS NOT NULL
        GROUP BY app_version ORDER BY n DESC LIMIT 20`,
-    ).all<{ app_version: string; n: number }>(),
+    ),
   ]);
 
+  const num = (i: number): number => {
+    const row = results[i]?.results?.[0] as { n?: number | string } | undefined;
+    return Number(row?.n ?? 0);
+  };
+
   return json({
-    downloads: { total: downloadsTotal, today: downloadsToday, last_7d: downloads7d },
+    downloads: { total: num(0), today: num(1), last_7d: num(2) },
     usage: {
-      launches_total: launchesTotal,
-      active_today: activeToday,
-      active_7d: active7d,
-      active_30d: active30d,
+      launches_total: num(3),
+      active_today: num(4),
+      active_7d: num(5),
+      active_30d: num(6),
     },
-    crashes: { total: crashesTotal, today: crashesToday },
-    downloads_by_file: downloadsByFile.results ?? [],
-    launches_by_version: launchesByVersion.results ?? [],
+    crashes: { total: num(7), today: num(8) },
+    downloads_by_file: results[9]?.results ?? [],
+    launches_by_version: results[10]?.results ?? [],
   });
 }
 
@@ -415,9 +422,4 @@ function parseCookie(header: string): Record<string, string> {
     if (k) out[k] = decodeURIComponent(v);
   }
   return out;
-}
-
-async function count(env: Env, sql: string): Promise<number> {
-  const row = await env.DB.prepare(sql).first<{ n: number }>();
-  return Number(row?.n ?? 0);
 }
