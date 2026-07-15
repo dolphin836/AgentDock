@@ -70,6 +70,8 @@ public final class SessionStore {
     public var claudeRateLimits: RateLimits?
     public var codexRateLimits: RateLimits?
     public var cursorUsage: CursorUsage?
+    /// Cursor 用量拉取失败原因(有用量数据时清空)
+    public var cursorUsageError: String?
 
     /// 等待用户 Yes/No 的权限审批请求
     public struct PendingApproval: Identifiable {

@@ -43,6 +43,16 @@ struct UsagePanelView: View {
             }
             if let u = store.cursorUsage {
                 cursorGroup(u)
+            } else if let err = store.cursorUsageError {
+                VStack(alignment: .leading, spacing: 4) {
+                    groupHeader(name: "CURSOR", note: settings.t("unavailable", "不可用"))
+                    Text(err)
+                        .font(Theme.mono(10))
+                        .foregroundStyle(Theme.amber.opacity(0.9))
+                        .padding(.vertical, 3)
+                }
+                .padding(.horizontal, 14)
+                .padding(.bottom, 4)
             }
 
             statsSection
@@ -184,7 +194,13 @@ struct UsagePanelView: View {
     /// Cursor 组:套餐用量刻度条 + 计划内/按需花费(美元,来自 usage-summary)
     private func cursorGroup(_ usage: AgentDockCore.CursorUsage) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            groupHeader(name: "CURSOR", note: freshness(usage.updatedAt))
+            let titleNote: String = {
+                if let m = usage.membershipType, !m.isEmpty {
+                    return "\(m) · \(freshness(usage.updatedAt))"
+                }
+                return freshness(usage.updatedAt)
+            }()
+            groupHeader(name: "CURSOR", note: titleNote)
             if let pct = usage.planPct {
                 usageLine(label: settings.t("plan", "套餐"), pct: pct,
                           resetAt: usage.billingCycleEnd)
@@ -198,9 +214,15 @@ struct UsagePanelView: View {
                     Text(spend)
                         .font(Theme.mono(10))
                         .foregroundStyle(Theme.text2)
+                        .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
                 }
                 .padding(.vertical, 3)
+            } else {
+                Text(settings.t("no spend figures in response", "响应里没有可展示的花费字段"))
+                    .font(Theme.mono(10))
+                    .foregroundStyle(Theme.text3)
+                    .padding(.vertical, 3)
             }
         }
         .padding(.horizontal, 14)

@@ -7,16 +7,38 @@ import SQLite3
 public enum CursorUsageProber {
     public static let usageURL = URL(string: "https://cursor.com/api/usage-summary")!
 
+    public struct ProbeResult: Sendable, Equatable {
+        public var usage: CursorUsage?
+        /// 失败原因(给用量页展示,不含 token)
+        public var error: String?
+
+        public init(usage: CursorUsage? = nil, error: String? = nil) {
+            self.usage = usage
+            self.error = error
+        }
+    }
+
     // MARK: 凭证(state.vscdb → JWT)
 
     static func accessToken(dbPath: String) -> String? {
+        // Cursor 自己常占着写锁;只读也要多等一会,否则 busy 直接空
+        for attempt in 0..<4 {
+            if let token = readAccessTokenOnce(dbPath: dbPath) { return token }
+            if attempt < 3 {
+                Thread.sleep(forTimeInterval: 0.15 * Double(attempt + 1))
+            }
+        }
+        return nil
+    }
+
+    private static func readAccessTokenOnce(dbPath: String) -> String? {
         var db: OpaquePointer?
         guard sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db else {
             sqlite3_close(db)
             return nil
         }
         defer { sqlite3_close(db) }
-        sqlite3_busy_timeout(db, 200)
+        sqlite3_busy_timeout(db, 3_000)
         var stmt: OpaquePointer?
         let sql = "SELECT value FROM ItemTable WHERE key = 'cursorAuth/accessToken' LIMIT 1;"
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else { return nil }
@@ -54,16 +76,35 @@ public enum CursorUsageProber {
     // MARK: 拉取
 
     public static func fetch(home: String = NSHomeDirectory()) async -> CursorUsage? {
+        await probe(home: home).usage
+    }
+
+    public static func probe(home: String = NSHomeDirectory()) async -> ProbeResult {
         let dbPath = CursorStateReader.defaultDatabasePath(home: home)
-        guard let cookie = cookieHeader(dbPath: dbPath) else { return nil }
+        guard FileManager.default.fileExists(atPath: dbPath) else {
+            return ProbeResult(error: "no Cursor state.vscdb")
+        }
+        guard let cookie = cookieHeader(dbPath: dbPath) else {
+            return ProbeResult(error: "not signed in to Cursor (no accessToken)")
+        }
         var request = URLRequest(url: usageURL)
-        request.timeoutInterval = 15
+        request.timeoutInterval = 20
         request.setValue(cookie, forHTTPHeaderField: "Cookie")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        guard let (data, response) = try? await URLSession.shared.data(for: request),
-              (response as? HTTPURLResponse)?.statusCode == 200
-        else { return nil }
-        return parseUsage(data)
+        request.setValue("AgentDock/1.0", forHTTPHeaderField: "User-Agent")
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+            guard code == 200 else {
+                return ProbeResult(error: "usage-summary HTTP \(code)")
+            }
+            guard let usage = parseUsage(data) else {
+                return ProbeResult(error: "unrecognized usage-summary shape")
+            }
+            return ProbeResult(usage: usage)
+        } catch {
+            return ProbeResult(error: "network: \(error.localizedDescription)")
+        }
     }
 
     /// 响应几种形状(金额多为「分」,JSON 里常是整数):
@@ -95,6 +136,7 @@ public enum CursorUsageProber {
             pct = Int((used / limit * 100).rounded())
         }
         let cycleEnd = (root["billingCycleEnd"] as? String).flatMap(ClaudeUsageProber.parseISO8601)
+        let membership = root["membershipType"] as? String
 
         // 无 plan/pooled 时,把 overall 金额也映到 planUsed(方便 UI 显示主花费)
         let planUsed = cents(plan, "used") ?? (plan == nil ? cents(overall, "used") : nil)
@@ -105,6 +147,7 @@ public enum CursorUsageProber {
                                 onDemandUsedUSD: cents(onDemand, "used"),
                                 onDemandLimitUSD: cents(onDemand, "limit"),
                                 personalUsedUSD: cents(overall, "used"),
+                                membershipType: membership,
                                 billingCycleEnd: cycleEnd, updatedAt: now)
         // 全空说明响应形状不认识,不落一个空壳进 UI
         let hasData = usage.planPct != nil || usage.planUsedUSD != nil
@@ -114,11 +157,17 @@ public enum CursorUsageProber {
 
     /// JSONSerialization 数字可能是 Int / Double / NSNumber,不能只 `as? Double`
     static func jsonNumber(_ value: Any?) -> Double? {
+        if value == nil || value is NSNull { return nil }
+        // NSNumber 优先:JSON 整数在 Apple 平台上就是它,as? Double 会失败
+        if let n = value as? NSNumber {
+            // Bool 也是 NSNumber,用量字段不应是 bool
+            if CFGetTypeID(n) == CFBooleanGetTypeID() { return nil }
+            return n.doubleValue
+        }
         switch value {
         case let d as Double: return d
         case let i as Int: return Double(i)
         case let i as Int64: return Double(i)
-        case let n as NSNumber: return n.doubleValue
         default: return nil
         }
     }

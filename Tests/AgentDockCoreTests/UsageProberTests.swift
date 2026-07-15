@@ -142,6 +142,7 @@ import Foundation
         #expect(usage?.onDemandUsedUSD == 0)
         #expect(usage?.onDemandLimitUSD == 20000.00)
         #expect(usage?.planPct == nil)
+        #expect(usage?.membershipType == "enterprise")
     }
 
     @Test func unknownShapeIsNil() {

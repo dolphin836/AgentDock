@@ -197,7 +197,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         codexLimitsTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.pollAccountUsage() }
         }
-        // 首次启动(pkg 安装后自动拉起):弹出分步安装设置向导
+        // 首次启动:弹出分步设置向导(拖拽安装后首次打开 App 时)
         SetupWizard.showIfNeeded()
         // 匿名遥测:崩溃 handler + 每日一次启动活跃(不采集会话/路径/token)
         Telemetry.installCrashReporting(appVersion: AppInfo.version)
@@ -422,9 +422,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.store.claudeRateLimits = (self.store.claudeRateLimits ?? limits).merging(limits)
             }
         }
-        Task.detached(priority: .utility) { [weak self] in
-            guard let usage = await CursorUsageProber.fetch() else { return }
-            await MainActor.run { [weak self] in self?.store.cursorUsage = usage }
+        Task(priority: .utility) { [weak self] in
+            let result = await CursorUsageProber.probe()
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                if let usage = result.usage {
+                    self.store.cursorUsage = usage
+                    self.store.cursorUsageError = nil
+                } else {
+                    // 保留上次成功数据,只更新错误提示
+                    self.store.cursorUsageError = result.error
+                }
+            }
         }
     }
 

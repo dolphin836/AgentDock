@@ -94,6 +94,7 @@ public struct CursorUsage: Sendable, Equatable {
     public var onDemandLimitUSD: Double?
     /// 企业/团队版:本人在共享池里的花费
     public var personalUsedUSD: Double?
+    public var membershipType: String?
     public var billingCycleEnd: Date?
     public var updatedAt: Date
 
@@ -101,6 +102,7 @@ public struct CursorUsage: Sendable, Equatable {
                 planUsedUSD: Double? = nil, planLimitUSD: Double? = nil,
                 onDemandUsedUSD: Double? = nil, onDemandLimitUSD: Double? = nil,
                 personalUsedUSD: Double? = nil,
+                membershipType: String? = nil,
                 billingCycleEnd: Date? = nil, updatedAt: Date = Date()) {
         self.planPct = planPct
         self.planUsedUSD = planUsedUSD
@@ -108,6 +110,7 @@ public struct CursorUsage: Sendable, Equatable {
         self.onDemandUsedUSD = onDemandUsedUSD
         self.onDemandLimitUSD = onDemandLimitUSD
         self.personalUsedUSD = personalUsedUSD
+        self.membershipType = membershipType
         self.billingCycleEnd = billingCycleEnd
         self.updatedAt = updatedAt
     }
