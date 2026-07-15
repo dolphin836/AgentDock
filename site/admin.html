@@ -121,7 +121,7 @@
 </div>
 
 <script>
-  // 独立 API 域名;看板页在 agentdockstatus.app(apex),跨域带 cookie + Bearer 兜底
+  // 独立 API 域名;看板页在 agentdockstatus.app(apex),跨域带 cookie + Bearer
   const API = "https://api.agentdockstatus.app";
   const TOKEN_KEY = "ad_admin_token";
 
@@ -130,10 +130,15 @@
   const dash = $("dash");
   const loginErr = $("loginErr");
 
+  // 内存优先,避免 localStorage 写入失败或尚未可见时 stats 空手出去
+  let memoryToken = "";
+
   function savedToken() {
+    if (memoryToken) return memoryToken;
     try { return localStorage.getItem(TOKEN_KEY) || ""; } catch (_) { return ""; }
   }
   function saveToken(token) {
+    memoryToken = token || "";
     try {
       if (token) localStorage.setItem(TOKEN_KEY, token);
       else localStorage.removeItem(TOKEN_KEY);
@@ -141,19 +146,20 @@
   }
 
   async function api(path, opts = {}) {
-    const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
-    // 登录接口不要带旧 Bearer,否则脏 token 可能干扰排查
+    const { token: tokenOverride, headers: extraHeaders, ...fetchOpts } = opts;
+    const headers = { "Content-Type": "application/json", ...(extraHeaders || {}) };
+    // 登录不要带旧 Bearer;其它请求用 override → 内存/localStorage
     const isLogin = path === "/v1/admin/login";
-    const token = isLogin ? "" : savedToken();
+    const token = isLogin ? "" : (tokenOverride || savedToken());
     if (token) headers.Authorization = "Bearer " + token;
     const res = await fetch(API + path, {
-      credentials: isLogin ? "omit" : "include",
-      ...opts,
+      credentials: "include",
+      ...fetchOpts,
       headers,
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const msg = [data.error, data.detail].filter(Boolean).join(": ") || ("http_" + res.status);
+      const msg = [data.error, data.reason, data.detail].filter(Boolean).join(": ") || ("http_" + res.status);
       const err = new Error(msg);
       err.status = res.status;
       err.payload = data;
@@ -172,10 +178,11 @@
     return `<div class="metric"><div class="n">${n ?? 0}</div><div class="l">${label}</div></div>`;
   }
 
-  async function load() {
+  async function load(token) {
+    const auth = token ? { token } : {};
     const [stats, crashRes] = await Promise.all([
-      api("/v1/admin/stats"),
-      api("/v1/admin/crashes?limit=40"),
+      api("/v1/admin/stats", auth),
+      api("/v1/admin/crashes?limit=40", auth),
     ]);
 
     $("metrics").innerHTML = [
@@ -231,8 +238,11 @@
           password: $("password").value,
         }),
       });
-      if (data.token) saveToken(data.token);
-      await load();
+      if (!data.token || typeof data.token !== "string") {
+        throw new Error("login_ok_but_no_token");
+      }
+      saveToken(data.token);
+      await load(data.token);
       showLoggedIn(true);
     } catch (err) {
       saveToken("");

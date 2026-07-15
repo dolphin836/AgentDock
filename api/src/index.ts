@@ -205,7 +205,6 @@ async function requireAdmin(request: Request, env: Env): Promise<Response | null
   if (!secret || !adminUser) return json({ error: "admin_not_configured" }, 503);
 
   // Authorization Bearer 优先(看板存在 localStorage);cookie 作兼容
-  // 解析 Cookie 失败时不能拖垮整请求
   let cookieToken = "";
   try {
     cookieToken = parseCookie(request.headers.get("Cookie") ?? "").ad_session ?? "";
@@ -217,18 +216,18 @@ async function requireAdmin(request: Request, env: Env): Promise<Response | null
     ? auth.slice(7).trim()
     : "";
   const token = bearer || cookieToken;
-  if (!token) return json({ error: "unauthorized" }, 401);
+  if (!token) return json({ error: "unauthorized", reason: "missing_token" }, 401);
 
-  let ok = false;
+  let reason = "invalid_token";
   try {
-    ok = await verifySession(secret, token, adminUser);
+    const result = await verifySessionDetailed(secret, token, adminUser);
+    if (result.ok) return null;
+    reason = result.reason;
   } catch (err) {
-    // 校验抛错一律当未登录,避免 residual token 把整页打成 internal_error
     console.error("verifySession", err instanceof Error ? err.message : err);
-    return json({ error: "unauthorized" }, 401);
+    return json({ error: "unauthorized", reason: "verify_threw" }, 401);
   }
-  if (!ok) return json({ error: "unauthorized" }, 401);
-  return null;
+  return json({ error: "unauthorized", reason }, 401);
 }
 
 async function adminStats(request: Request, env: Env): Promise<Response> {
@@ -336,17 +335,31 @@ async function mintSession(secret: string, user: string): Promise<string> {
 }
 
 async function verifySession(secret: string, token: string, user: string): Promise<boolean> {
+  return (await verifySessionDetailed(secret, token, user)).ok;
+}
+
+async function verifySessionDetailed(
+  secret: string,
+  token: string,
+  user: string,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
   const parts = token.split(".");
-  if (parts.length !== 3) return false;
+  if (parts.length !== 3) return { ok: false, reason: "malformed_token" };
   const [u, expStr, sig] = parts;
-  if (!u || !expStr || !sig) return false;
-  if (u !== user) return false;
+  if (!u || !expStr || !sig) return { ok: false, reason: "malformed_token" };
+  if (u !== user) return { ok: false, reason: "user_mismatch" };
   // 签名必须是 SHA-256 hex,否则直接拒绝(避免脏 localStorage 走进 crypto)
-  if (!/^[0-9a-f]+$/i.test(sig) || sig.length !== 64) return false;
+  if (!/^[0-9a-f]+$/i.test(sig) || sig.length !== 64) {
+    return { ok: false, reason: "bad_sig_format" };
+  }
   const exp = Number(expStr);
-  if (!Number.isFinite(exp) || exp < Math.floor(Date.now() / 1000)) return false;
+  if (!Number.isFinite(exp)) return { ok: false, reason: "bad_exp" };
+  if (exp < Math.floor(Date.now() / 1000)) return { ok: false, reason: "expired" };
   const expect = await hmacHex(secret, `${u}.${expStr}`);
-  return timingSafeEqual(sig.toLowerCase(), expect);
+  if (!timingSafeEqual(sig.toLowerCase(), expect)) {
+    return { ok: false, reason: "bad_sig" };
+  }
+  return { ok: true };
 }
 
 async function hmacHex(secret: string, message: string): Promise<string> {
