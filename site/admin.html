@@ -263,11 +263,16 @@
   api("/v1/admin/stats")
     .then(() => load().then(() => showLoggedIn(true)))
     .catch((err) => {
-      if (err && err.status && err.status !== 401) {
-        console.error("admin bootstrap", err);
+      if (err && err.status === 401) {
+        saveToken("");
+        showLoggedIn(false);
+        return;
       }
-      saveToken("");
+      // 非 401(例如仍 500)不要清 token,把原因亮出来便于排查
+      console.error("admin bootstrap", err);
       showLoggedIn(false);
+      loginErr.textContent = (err && err.message) || "load failed";
+      loginErr.classList.remove("hidden");
     });
 </script>
 </body>
