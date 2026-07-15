@@ -271,8 +271,24 @@
     });
   });
 
-  // 未登录不打 stats/crashes;等登录成功后再 load()
-  showLoggedIn(false);
+  // 有本地 token 才恢复会话;没有则只显示登录,不打 stats
+  const existing = savedToken();
+  if (existing) {
+    load(existing)
+      .then(() => showLoggedIn(true))
+      .catch((err) => {
+        if (err && err.status === 401) {
+          saveToken("");
+        } else {
+          console.error("admin restore", err);
+          loginErr.textContent = (err && err.message) || "restore failed";
+          loginErr.classList.remove("hidden");
+        }
+        showLoggedIn(false);
+      });
+  } else {
+    showLoggedIn(false);
+  }
 </script>
 </body>
 </html>
