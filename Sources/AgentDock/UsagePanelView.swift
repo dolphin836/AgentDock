@@ -209,9 +209,14 @@ struct UsagePanelView: View {
 
     private func spendText(_ usage: AgentDockCore.CursorUsage) -> String? {
         var parts: [String] = []
-        if let used = usage.planUsedUSD, let limit = usage.planLimitUSD {
-            parts.append(settings.t("plan $\(money(used)) / $\(money(limit))",
-                                    "计划内 $\(money(used)) / $\(money(limit))"))
+        if let used = usage.planUsedUSD {
+            if let limit = usage.planLimitUSD {
+                parts.append(settings.t("plan $\(money(used)) / $\(money(limit))",
+                                        "计划内 $\(money(used)) / $\(money(limit))"))
+            } else if usage.personalUsedUSD == nil {
+                // 无上限的主花费(新企业 overall 且未单独展示本人)
+                parts.append(settings.t("plan $\(money(used))", "计划内 $\(money(used))"))
+            }
         }
         if let personal = usage.personalUsedUSD {
             parts.append(settings.t("you $\(money(personal))", "本人 $\(money(personal))"))

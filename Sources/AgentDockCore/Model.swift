@@ -84,8 +84,8 @@ public struct RateLimits: Sendable, Equatable {
 }
 
 /// Cursor 账号用量(usage-summary):套餐/团队池用量百分比 + 花费(美元)。
-/// 个人版数据在 individualUsage.plan;企业/团队版在 teamUsage.pooled(共享池)
-/// + individualUsage.overall(个人花费),统一映射到同一组字段。
+/// 个人版在 individualUsage.plan;企业旧形状在 teamUsage.pooled + overall;
+/// 企业新形状可能只有 overall + onDemand。
 public struct CursorUsage: Sendable, Equatable {
     public var planPct: Int?
     public var planUsedUSD: Double?

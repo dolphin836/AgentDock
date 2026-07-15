@@ -128,6 +128,22 @@ import Foundation
         #expect(usage?.onDemandLimitUSD == 20000.00)
     }
 
+    /// 新企业形状:无 pooled/plan,只有 overall + onDemand,且金额为整数分
+    @Test func parsesTeamOverallOnlyShape() {
+        let json = Data("""
+        {"billingCycleEnd": "2026-08-01T00:00:00.000Z", "membershipType": "enterprise",
+         "individualUsage": {"overall": {"enabled": false, "used": 134670, "limit": null}},
+         "teamUsage": {"onDemand": {"enabled": true, "used": 0, "limit": 2000000}}}
+        """.utf8)
+        let usage = CursorUsageProber.parseUsage(json)
+        #expect(usage?.personalUsedUSD == 1346.70)
+        #expect(usage?.planUsedUSD == 1346.70)
+        #expect(usage?.planLimitUSD == nil)
+        #expect(usage?.onDemandUsedUSD == 0)
+        #expect(usage?.onDemandLimitUSD == 20000.00)
+        #expect(usage?.planPct == nil)
+    }
+
     @Test func unknownShapeIsNil() {
         #expect(CursorUsageProber.parseUsage(Data(#"{"foo":1}"#.utf8)) == nil)
     }

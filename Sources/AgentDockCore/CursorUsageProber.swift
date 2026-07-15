@@ -66,10 +66,10 @@ public enum CursorUsageProber {
         return parseUsage(data)
     }
 
-    /// 响应两种形状(金额均为「分」):
+    /// 响应几种形状(金额多为「分」,JSON 里常是整数):
     /// - 个人版:individualUsage.plan {used, limit, totalPercentUsed} + individualUsage.onDemand
-    /// - 企业/团队版:teamUsage.pooled {used, limit}(共享池,作套餐主指标)
-    ///   + individualUsage.overall.used(本人花费) + teamUsage.onDemand
+    /// - 企业/团队版(旧):teamUsage.pooled + individualUsage.overall + teamUsage.onDemand
+    /// - 企业/团队版(新):仅 individualUsage.overall + teamUsage.onDemand(无 pooled/plan)
     static func parseUsage(_ data: Data, now: Date = Date()) -> CursorUsage? {
         guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         else { return nil }
@@ -82,19 +82,26 @@ public enum CursorUsageProber {
         let overall = individual?["overall"] as? [String: Any]
 
         func cents(_ dict: [String: Any]?, _ key: String) -> Double? {
-            guard let dict else { return nil }
-            if let d = dict[key] as? Double { return d / 100 }
-            return nil
+            guard let dict, let n = jsonNumber(dict[key]) else { return nil }
+            return n / 100
         }
-        var pct = (plan?["totalPercentUsed"] as? Double).map { Int($0.rounded()) }
+        var pct = jsonNumber(plan?["totalPercentUsed"]).map { Int($0.rounded()) }
         // 没有直接百分比时从花费/上限推导(团队池只有金额)
         if pct == nil, let used = cents(plan, "used"), let limit = cents(plan, "limit"), limit > 0 {
             pct = Int((used / limit * 100).rounded())
         }
+        // 新企业形状无 pooled:用 overall 花费/上限凑套餐条(若有 limit)
+        if pct == nil, let used = cents(overall, "used"), let limit = cents(overall, "limit"), limit > 0 {
+            pct = Int((used / limit * 100).rounded())
+        }
         let cycleEnd = (root["billingCycleEnd"] as? String).flatMap(ClaudeUsageProber.parseISO8601)
 
+        // 无 plan/pooled 时,把 overall 金额也映到 planUsed(方便 UI 显示主花费)
+        let planUsed = cents(plan, "used") ?? (plan == nil ? cents(overall, "used") : nil)
+        let planLimit = cents(plan, "limit") ?? (plan == nil ? cents(overall, "limit") : nil)
+
         let usage = CursorUsage(planPct: pct,
-                                planUsedUSD: cents(plan, "used"), planLimitUSD: cents(plan, "limit"),
+                                planUsedUSD: planUsed, planLimitUSD: planLimit,
                                 onDemandUsedUSD: cents(onDemand, "used"),
                                 onDemandLimitUSD: cents(onDemand, "limit"),
                                 personalUsedUSD: cents(overall, "used"),
@@ -103,5 +110,16 @@ public enum CursorUsageProber {
         let hasData = usage.planPct != nil || usage.planUsedUSD != nil
             || usage.onDemandUsedUSD != nil || usage.personalUsedUSD != nil
         return hasData ? usage : nil
+    }
+
+    /// JSONSerialization 数字可能是 Int / Double / NSNumber,不能只 `as? Double`
+    static func jsonNumber(_ value: Any?) -> Double? {
+        switch value {
+        case let d as Double: return d
+        case let i as Int: return Double(i)
+        case let i as Int64: return Double(i)
+        case let n as NSNumber: return n.doubleValue
+        default: return nil
+        }
     }
 }
