@@ -65,7 +65,7 @@ public enum CodexRateLimitProber {
         func send(_ json: String) {
             stdin.fileHandleForWriting.write(Data((json + "\n").utf8))
         }
-        send(#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"agentdock","title":"AgentDock","version":"0.2.3"}}}"#)
+        send(#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"agentdock","title":"AgentDock","version":"0.2.4"}}}"#)
         send(#"{"jsonrpc":"2.0","method":"initialized"}"#)
         Thread.sleep(forTimeInterval: 0.8)  // handshake 后需等片刻,否则返回空
         send(#"{"jsonrpc":"2.0","id":2,"method":"account/rateLimits/read","params":{}}"#)

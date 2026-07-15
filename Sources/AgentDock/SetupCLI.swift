@@ -1,7 +1,7 @@
 import AppKit
 import AgentDockCore
 
-/// 无头安装模式:`AgentDock --setup key=value ...`,供 pkg 的 postinstall 在安装时调用。
+/// 无头安装模式:`AgentDock --setup key=value ...`,供开发安装脚本或自动化调用。
 /// 支持的参数:
 ///   language=en|zh|auto   默认语言(auto=按系统区域)
 ///   autostart=yes|no      开机自启(LaunchAgent)

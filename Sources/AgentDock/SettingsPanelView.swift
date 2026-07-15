@@ -15,10 +15,17 @@ struct SettingsPanelView: View {
     @State private var integrationsRefresh = 0
     @State private var permissionsRefresh = 0
     @State private var updateStatus: UpdateStatus = .idle
+    /// 发现新版本后暂存,供「立即更新」使用(状态机切到 downloading 后仍能拿到 info)
+    @State private var pendingUpdate: UpdateInfo?
 
     enum UpdateStatus: Equatable {
-        case idle, checking, upToDate, failed
+        case idle, checking, upToDate
+        case checkFailed
         case available(UpdateInfo)
+        case downloading(fraction: Double?, detail: String)
+        case installing
+        case restarting
+        case failed(String)
     }
     /// 设置页可见期间周期性复查权限/集成状态(用户可能刚在系统设置里授权完回来)
     private let statusPoll = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
@@ -73,38 +80,26 @@ struct SettingsPanelView: View {
                     .font(Theme.mono(10, .semibold))
                     .foregroundStyle(Theme.text1)
                 Spacer()
-                switch updateStatus {
-                case .idle:
-                    EmptyView()
-                case .checking:
-                    Text(settings.t("checking…", "检查中…"))
-                        .font(Theme.mono(9))
-                        .foregroundStyle(Theme.text3)
-                case .upToDate:
-                    Text(settings.t("up to date", "已是最新版本"))
-                        .font(Theme.mono(9))
-                        .foregroundStyle(Theme.text3)
-                case .failed:
-                    Text(settings.t("check failed", "检查失败"))
-                        .font(Theme.mono(9))
-                        .foregroundStyle(Theme.text4)
-                case .available(let info):
-                    Text(settings.t("new version v\(info.version)", "发现新版本 v\(info.version)"))
-                        .font(Theme.mono(9, .semibold))
-                        .foregroundStyle(Theme.amber)
-                }
-                if case .available(let info) = updateStatus {
-                    TermButton(title: settings.t("UPDATE", "立即更新"), color: Theme.amber.opacity(0.9)) {
-                        if let url = URL(string: info.download) { NSWorkspace.shared.open(url) }
-                    }
-                } else {
-                    TermButton(title: settings.t("CHECK UPDATES", "检查更新"), color: Theme.phosphor.opacity(0.85)) {
-                        checkForUpdates()
-                    }
-                }
+                updateStatusLabel
+                updateActionButton
             }
             .padding(.horizontal, 9)
             .padding(.vertical, 4)
+
+            if case .downloading(_, let detail) = updateStatus {
+                Text(detail)
+                    .font(Theme.mono(9))
+                    .foregroundStyle(Theme.text3)
+                    .padding(.horizontal, 9)
+                    .padding(.bottom, 2)
+            } else if case .failed(let msg) = updateStatus {
+                Text(msg)
+                    .font(Theme.mono(9))
+                    .foregroundStyle(Theme.red.opacity(0.85))
+                    .lineLimit(2)
+                    .padding(.horizontal, 9)
+                    .padding(.bottom, 2)
+            }
 
             linkRow(label: settings.t("website", "官网"),
                     title: "agentdockstatus.app",
@@ -137,17 +132,121 @@ struct SettingsPanelView: View {
 
     // MARK: 检查更新
 
-    /// 拉官网 version.json 与当前版本比较;已发现新版后不再重复检查(避免覆盖提示)
-    private func checkForUpdates() {
-        if case .available = updateStatus { return }
+    @ViewBuilder private var updateStatusLabel: some View {
+        switch updateStatus {
+        case .idle:
+            EmptyView()
+        case .checking:
+            Text(settings.t("checking…", "检查中…"))
+                .font(Theme.mono(9))
+                .foregroundStyle(Theme.text3)
+        case .upToDate:
+            Text(settings.t("up to date", "已是最新版本"))
+                .font(Theme.mono(9))
+                .foregroundStyle(Theme.text3)
+        case .checkFailed:
+            Text(settings.t("check failed", "检查失败"))
+                .font(Theme.mono(9))
+                .foregroundStyle(Theme.text4)
+        case .available(let info):
+            Text(settings.t("new version v\(info.version)", "发现新版本 v\(info.version)"))
+                .font(Theme.mono(9, .semibold))
+                .foregroundStyle(Theme.amber)
+        case .downloading(let fraction, _):
+            let pct = fraction.map { String(format: "%.0f%%", $0 * 100) } ?? "…"
+            Text(settings.t("downloading \(pct)", "下载中 \(pct)"))
+                .font(Theme.mono(9, .semibold))
+                .foregroundStyle(Theme.cyan.opacity(0.9))
+        case .installing:
+            Text(settings.t("installing…", "安装中…"))
+                .font(Theme.mono(9, .semibold))
+                .foregroundStyle(Theme.phosphor.opacity(0.9))
+        case .restarting:
+            Text(settings.t("restarting…", "即将重启…"))
+                .font(Theme.mono(9, .semibold))
+                .foregroundStyle(Theme.phosphor.opacity(0.9))
+        case .failed:
+            Text(settings.t("update failed", "更新失败"))
+                .font(Theme.mono(9, .semibold))
+                .foregroundStyle(Theme.red.opacity(0.9))
+        }
+    }
+
+    @ViewBuilder private var updateActionButton: some View {
+        switch updateStatus {
+        case .available(let info):
+            TermButton(title: settings.t("UPDATE", "立即更新"), color: Theme.amber.opacity(0.9)) {
+                startInAppUpdate(info)
+            }
+        case .downloading:
+            TermButton(title: settings.t("CANCEL", "取消"), color: Theme.text3) {
+                AppUpdater.cancel()
+                if let pending = pendingUpdate {
+                    updateStatus = .available(pending)
+                } else {
+                    updateStatus = .idle
+                }
+            }
+        case .installing, .restarting:
+            EmptyView()
+        case .failed:
+            TermButton(title: settings.t("RETRY", "重试"), color: Theme.amber.opacity(0.9)) {
+                if let pending = pendingUpdate {
+                    startInAppUpdate(pending)
+                } else {
+                    checkForUpdates(force: true)
+                }
+            }
+        default:
+            TermButton(title: settings.t("CHECK UPDATES", "检查更新"), color: Theme.phosphor.opacity(0.85)) {
+                checkForUpdates(force: true)
+            }
+        }
+    }
+
+    /// 拉官网 version.json 与当前版本比较;已发现新版后默认不再重复检查(force 可强制)
+    private func checkForUpdates(force: Bool = false) {
+        if !force, case .available = updateStatus { return }
+        if case .downloading = updateStatus { return }
+        if case .installing = updateStatus { return }
+        if case .restarting = updateStatus { return }
         updateStatus = .checking
         Task {
             do {
                 let info = try await UpdateChecker.fetchLatest()
-                updateStatus = UpdateChecker.isNewer(info.version, than: AppInfo.version)
-                    ? .available(info) : .upToDate
+                if UpdateChecker.isNewer(info.version, than: AppInfo.version) {
+                    pendingUpdate = info
+                    updateStatus = .available(info)
+                } else {
+                    pendingUpdate = nil
+                    updateStatus = .upToDate
+                }
             } catch {
-                updateStatus = .failed
+                updateStatus = .checkFailed
+            }
+        }
+    }
+
+    private func startInAppUpdate(_ info: UpdateInfo) {
+        pendingUpdate = info
+        // 无可用 DMG:回退浏览器打开 download(兼容旧 pkg feed)
+        let started = AppUpdater.install(info) { phase in
+            switch phase {
+            case .idle:
+                updateStatus = .available(info)
+            case .downloading(let fraction, let detail):
+                updateStatus = .downloading(fraction: fraction, detail: detail)
+            case .installing:
+                updateStatus = .installing
+            case .restarting:
+                updateStatus = .restarting
+            case .failed(let message):
+                updateStatus = .failed(message)
+            }
+        }
+        if !started {
+            if let url = URL(string: info.download) {
+                NSWorkspace.shared.open(url)
             }
         }
     }

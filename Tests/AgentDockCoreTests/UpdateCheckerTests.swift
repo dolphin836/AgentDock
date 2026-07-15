@@ -26,10 +26,36 @@ import Foundation
 
     @Test func decodesFeedJSON() throws {
         let json = Data("""
-        {"version": "0.2.3", "download": "https://api.agentdockstatus.app/v1/download/AgentDock-0.2.3.pkg"}
+        {"version": "0.2.3", "download": "https://api.agentdockstatus.app/v1/download/AgentDock-0.2.3.dmg"}
         """.utf8)
         let info = try JSONDecoder().decode(UpdateInfo.self, from: json)
         #expect(info.version == "0.2.3")
-        #expect(info.download == "https://api.agentdockstatus.app/v1/download/AgentDock-0.2.3.pkg")
+        #expect(info.download == "https://api.agentdockstatus.app/v1/download/AgentDock-0.2.3.dmg")
+        #expect(info.dmg == nil)
+        #expect(info.inAppUpdateURL?.absoluteString
+               == "https://api.agentdockstatus.app/v1/download/AgentDock-0.2.3.dmg")
+    }
+
+    @Test func decodesFeedJSONWithDmg() throws {
+        let json = Data("""
+        {
+          "version": "0.2.4",
+          "download": "https://api.agentdockstatus.app/v1/download/AgentDock-0.2.4.dmg",
+          "dmg": "https://api.agentdockstatus.app/v1/download/AgentDock-0.2.4.dmg"
+        }
+        """.utf8)
+        let info = try JSONDecoder().decode(UpdateInfo.self, from: json)
+        #expect(info.version == "0.2.4")
+        #expect(info.dmg == "https://api.agentdockstatus.app/v1/download/AgentDock-0.2.4.dmg")
+        #expect(info.inAppUpdateURL?.absoluteString
+               == "https://api.agentdockstatus.app/v1/download/AgentDock-0.2.4.dmg")
+    }
+
+    @Test func legacyPkgFeedHasNoInAppURL() throws {
+        let json = Data("""
+        {"version": "0.2.2", "download": "https://api.agentdockstatus.app/v1/download/AgentDock-0.2.2.pkg"}
+        """.utf8)
+        let info = try JSONDecoder().decode(UpdateInfo.self, from: json)
+        #expect(info.inAppUpdateURL == nil)
     }
 }

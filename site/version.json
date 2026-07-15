@@ -1,4 +1,5 @@
 {
-  "version": "0.2.3",
-  "download": "https://api.agentdockstatus.app/v1/download/AgentDock-0.2.3.pkg"
+  "version": "0.2.4",
+  "download": "https://api.agentdockstatus.app/v1/download/AgentDock-0.2.4.dmg",
+  "dmg": "https://api.agentdockstatus.app/v1/download/AgentDock-0.2.4.dmg"
 }

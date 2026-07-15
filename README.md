@@ -9,12 +9,22 @@ macOS 刘海扩展应用:实时显示本机 AI Agent(Claude Code / Codex CLI)的
 
 ## 安装
 
+官网下载 DMG，打开后把 **AgentDock** 拖进 **Applications**，再从启动台 / Applications 打开。
+
+开发机本地安装：
+
 ```bash
 ./scripts/install.sh
 ```
 
 交互式完成:语言 / 开机自启 / 三家 Agent 集成 / 系统权限授权,并以 launchd 启动。
 开发调试直接 `swift run AgentDock`;无头配置模式 `AgentDock --setup key=value ...`。
+
+分发打包：
+
+```bash
+./scripts/package.sh   # 产出 dist/AgentDock-<ver>.dmg 并更新 site/
+```
 
 ## 接入 Agent
 

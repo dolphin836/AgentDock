@@ -3,11 +3,25 @@ import Foundation
 /// 官网更新源(version.json)的内容
 public struct UpdateInfo: Codable, Equatable, Sendable {
     public let version: String
+    /// 官网下载链接(现为 DMG;旧版可能仍是 pkg)
     public let download: String
+    /// 应用内一键更新用的 DMG;缺省时可回退到 download(若本身是 .dmg)
+    public let dmg: String?
 
-    public init(version: String, download: String) {
+    public init(version: String, download: String, dmg: String? = nil) {
         self.version = version
         self.download = download
+        self.dmg = dmg
+    }
+
+    /// 应用内更新 URL:优先 dmg,否则 download 以 .dmg 结尾时也可用
+    public var inAppUpdateURL: URL? {
+        if let dmg, let url = URL(string: dmg), url.scheme != nil { return url }
+        if download.lowercased().hasSuffix(".dmg"),
+           let url = URL(string: download), url.scheme != nil {
+            return url
+        }
+        return nil
     }
 }
 

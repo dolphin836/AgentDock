@@ -8,7 +8,7 @@
 |------|------|
 | `POST /v1/event` | App 启动 / 心跳（匿名 `install_id`） |
 | `POST /v1/crash` | 崩溃上报 |
-| `GET /v1/download/:file` | 记下载后 302 到官网 pkg |
+| `GET /v1/download/:file` | 记下载后 302 到官网安装包(DMG) |
 | `POST /v1/admin/login` | 看板登录（账号密码只在 Worker 后端） |
 | `GET /v1/admin/stats` | 汇总数据（需登录 cookie） |
 | `GET /v1/admin/crashes` | 最近崩溃列表 |

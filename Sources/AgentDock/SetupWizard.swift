@@ -2,7 +2,8 @@ import SwiftUI
 import AppKit
 import AgentDockCore
 
-/// 首次启动的安装设置向导:pkg 装完自动启动 App 时弹出,分步完成
+/// 首次启动的安装设置向导:首次打开 App 时弹出,分步完成
+/// 语言 / 开机自启 / Agent 集成 / 可选系统权限。
 /// 语言 → 开机自启 → Agent 集成 → 系统权限。完成后不再出现。
 @MainActor
 enum SetupWizard {
