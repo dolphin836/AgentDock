@@ -37,8 +37,9 @@ export default {
       return await handle(request, env);
     } catch (err) {
       // 必须也过 cors:否则 500 无 ACAO,浏览器只显示 CORS 失败,掩盖真实错误
-      console.error("unhandled", err instanceof Error ? err.message : err, err);
-      return cors(json({ error: "internal_error" }, 500), request, env);
+      const detail = err instanceof Error ? err.message : String(err);
+      console.error("unhandled", detail, err);
+      return cors(json({ error: "internal_error", detail }, 500), request, env);
     }
   },
 };
@@ -171,7 +172,14 @@ async function adminLogin(request: Request, env: Env): Promise<Response> {
     return json({ error: "invalid_credentials" }, 401);
   }
 
-  const token = await mintSession(env.SESSION_SECRET.trim(), env.ADMIN_USER.trim());
+  let token: string;
+  try {
+    token = await mintSession(env.SESSION_SECRET.trim(), env.ADMIN_USER.trim());
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error("mintSession", detail, err);
+    return json({ error: "session_mint_failed", detail }, 500);
+  }
   const res = json({ ok: true, token });
   res.headers.append(
     "Set-Cookie",
@@ -209,9 +217,17 @@ async function requireAdmin(request: Request, env: Env): Promise<Response | null
     ? auth.slice(7).trim()
     : "";
   const token = bearer || cookieToken;
-  if (!token || !(await verifySession(secret, token, adminUser))) {
+  if (!token) return json({ error: "unauthorized" }, 401);
+
+  let ok = false;
+  try {
+    ok = await verifySession(secret, token, adminUser);
+  } catch (err) {
+    // 校验抛错一律当未登录,避免 residual token 把整页打成 internal_error
+    console.error("verifySession", err instanceof Error ? err.message : err);
     return json({ error: "unauthorized" }, 401);
   }
+  if (!ok) return json({ error: "unauthorized" }, 401);
   return null;
 }
 
@@ -323,11 +339,14 @@ async function verifySession(secret: string, token: string, user: string): Promi
   const parts = token.split(".");
   if (parts.length !== 3) return false;
   const [u, expStr, sig] = parts;
+  if (!u || !expStr || !sig) return false;
   if (u !== user) return false;
+  // 签名必须是 SHA-256 hex,否则直接拒绝(避免脏 localStorage 走进 crypto)
+  if (!/^[0-9a-f]+$/i.test(sig) || sig.length !== 64) return false;
   const exp = Number(expStr);
   if (!Number.isFinite(exp) || exp < Math.floor(Date.now() / 1000)) return false;
   const expect = await hmacHex(secret, `${u}.${expStr}`);
-  return timingSafeEqual(sig, expect);
+  return timingSafeEqual(sig.toLowerCase(), expect);
 }
 
 async function hmacHex(secret: string, message: string): Promise<string> {
@@ -339,12 +358,21 @@ async function hmacHex(secret: string, message: string): Promise<string> {
     ["sign"],
   );
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode(message));
-  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return bufferToHex(sig);
 }
 
 async function sha256Hex(input: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", enc.encode(input));
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return bufferToHex(buf);
+}
+
+function bufferToHex(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  let out = "";
+  for (let i = 0; i < bytes.length; i++) {
+    out += bytes[i]!.toString(16).padStart(2, "0");
+  }
+  return out;
 }
 
 const enc = new TextEncoder();
@@ -362,7 +390,7 @@ const timingSafe = {
 
 function cors(res: Response, request: Request, env: Env): Response {
   const origin = (request.headers.get("Origin") ?? "").replace(/\/+$/, "");
-  const site = env.SITE_ORIGIN.replace(/\/+$/, "");
+  const site = (env.SITE_ORIGIN ?? "").replace(/\/+$/, "");
   // 官网实际挂在 apex;www 可能未解析。两者都放行,避免看板跨域登录被拦。
   const allowed = new Set([
     site,

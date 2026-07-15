@@ -142,10 +142,12 @@
 
   async function api(path, opts = {}) {
     const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
-    const token = savedToken();
+    // 登录接口不要带旧 Bearer,否则脏 token 可能干扰排查
+    const isLogin = path === "/v1/admin/login";
+    const token = isLogin ? "" : savedToken();
     if (token) headers.Authorization = "Bearer " + token;
     const res = await fetch(API + path, {
-      credentials: "include",
+      credentials: isLogin ? "omit" : "include",
       ...opts,
       headers,
     });
@@ -259,21 +261,8 @@
     });
   });
 
-  // cookie 或 localStorage token 任一有效则直接进看板
-  api("/v1/admin/stats")
-    .then(() => load().then(() => showLoggedIn(true)))
-    .catch((err) => {
-      if (err && err.status === 401) {
-        saveToken("");
-        showLoggedIn(false);
-        return;
-      }
-      // 非 401(例如仍 500)不要清 token,把原因亮出来便于排查
-      console.error("admin bootstrap", err);
-      showLoggedIn(false);
-      loginErr.textContent = (err && err.message) || "load failed";
-      loginErr.classList.remove("hidden");
-    });
+  // 未登录不打 stats/crashes;等登录成功后再 load()
+  showLoggedIn(false);
 </script>
 </body>
 </html>
