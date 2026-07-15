@@ -36,8 +36,9 @@ export default {
     try {
       return await handle(request, env);
     } catch (err) {
+      // 必须也过 cors:否则 500 无 ACAO,浏览器只显示 CORS 失败,掩盖真实错误
       console.error("unhandled", err instanceof Error ? err.message : err, err);
-      return json({ error: "internal_error" }, 500);
+      return cors(json({ error: "internal_error" }, 500), request, env);
     }
   },
 };
@@ -212,57 +213,70 @@ async function adminStats(request: Request, env: Env): Promise<Response> {
   const denied = await requireAdmin(request, env);
   if (denied) return denied;
 
-  // D1 单库单线程:不要 Promise.all 并发打一堆 prepare,容易 overloaded → 500。
-  // 用 batch 一次往返、顺序执行。
-  const results = await env.DB.batch([
-    env.DB.prepare(`SELECT COUNT(*) AS n FROM downloads`),
-    env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM downloads WHERE created_at >= datetime('now', '-1 day')`,
-    ),
-    env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM downloads WHERE created_at >= datetime('now', '-7 day')`,
-    ),
-    env.DB.prepare(`SELECT COUNT(*) AS n FROM events WHERE event = 'launch'`),
-    env.DB.prepare(
-      `SELECT COUNT(DISTINCT install_id) AS n FROM events WHERE created_at >= datetime('now', '-1 day')`,
-    ),
-    env.DB.prepare(
-      `SELECT COUNT(DISTINCT install_id) AS n FROM events WHERE created_at >= datetime('now', '-7 day')`,
-    ),
-    env.DB.prepare(
-      `SELECT COUNT(DISTINCT install_id) AS n FROM events WHERE created_at >= datetime('now', '-30 day')`,
-    ),
-    env.DB.prepare(`SELECT COUNT(*) AS n FROM crashes`),
-    env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM crashes WHERE created_at >= datetime('now', '-1 day')`,
-    ),
-    env.DB.prepare(
-      `SELECT filename, COUNT(*) AS n FROM downloads GROUP BY filename ORDER BY n DESC LIMIT 20`,
-    ),
-    env.DB.prepare(
-      `SELECT app_version, COUNT(DISTINCT install_id) AS n
-       FROM events WHERE event = 'launch' AND app_version IS NOT NULL
-       GROUP BY app_version ORDER BY n DESC LIMIT 20`,
-    ),
-  ]);
+  try {
+    // D1 单库单线程:用 batch 一次往返顺序执行,避免 Promise.all 并发打爆连接。
+    const results = await env.DB.batch([
+      env.DB.prepare(`SELECT COUNT(*) AS n FROM downloads`),
+      env.DB.prepare(
+        `SELECT COUNT(*) AS n FROM downloads WHERE created_at >= datetime('now', '-1 day')`,
+      ),
+      env.DB.prepare(
+        `SELECT COUNT(*) AS n FROM downloads WHERE created_at >= datetime('now', '-7 day')`,
+      ),
+      env.DB.prepare(`SELECT COUNT(*) AS n FROM events WHERE event = 'launch'`),
+      env.DB.prepare(
+        `SELECT COUNT(DISTINCT install_id) AS n FROM events WHERE created_at >= datetime('now', '-1 day')`,
+      ),
+      env.DB.prepare(
+        `SELECT COUNT(DISTINCT install_id) AS n FROM events WHERE created_at >= datetime('now', '-7 day')`,
+      ),
+      env.DB.prepare(
+        `SELECT COUNT(DISTINCT install_id) AS n FROM events WHERE created_at >= datetime('now', '-30 day')`,
+      ),
+      env.DB.prepare(`SELECT COUNT(*) AS n FROM crashes`),
+      env.DB.prepare(
+        `SELECT COUNT(*) AS n FROM crashes WHERE created_at >= datetime('now', '-1 day')`,
+      ),
+      env.DB.prepare(
+        `SELECT filename, COUNT(*) AS n FROM downloads GROUP BY filename ORDER BY n DESC LIMIT 20`,
+      ),
+      env.DB.prepare(
+        `SELECT app_version, COUNT(DISTINCT install_id) AS n
+         FROM events WHERE event = 'launch' AND app_version IS NOT NULL
+         GROUP BY app_version ORDER BY n DESC LIMIT 20`,
+      ),
+    ]);
 
-  const num = (i: number): number => {
-    const row = results[i]?.results?.[0] as { n?: number | string } | undefined;
-    return Number(row?.n ?? 0);
-  };
+    for (let i = 0; i < results.length; i++) {
+      if (results[i] && results[i].success === false) {
+        console.error("adminStats batch step failed", i, results[i].error);
+        return json({ error: "stats_query_failed", step: i }, 500);
+      }
+    }
 
-  return json({
-    downloads: { total: num(0), today: num(1), last_7d: num(2) },
-    usage: {
-      launches_total: num(3),
-      active_today: num(4),
-      active_7d: num(5),
-      active_30d: num(6),
-    },
-    crashes: { total: num(7), today: num(8) },
-    downloads_by_file: results[9]?.results ?? [],
-    launches_by_version: results[10]?.results ?? [],
-  });
+    const num = (i: number): number => {
+      const row = results[i]?.results?.[0] as { n?: number | string } | undefined;
+      return Number(row?.n ?? 0);
+    };
+
+    return json({
+      downloads: { total: num(0), today: num(1), last_7d: num(2) },
+      usage: {
+        launches_total: num(3),
+        active_today: num(4),
+        active_7d: num(5),
+        active_30d: num(6),
+      },
+      crashes: { total: num(7), today: num(8) },
+      downloads_by_file: results[9]?.results ?? [],
+      launches_by_version: results[10]?.results ?? [],
+    });
+  } catch (err) {
+    // 已登录管理员可见简短原因,便于排查(仍过外层 cors)
+    const detail = err instanceof Error ? err.message : "unknown";
+    console.error("adminStats", detail, err);
+    return json({ error: "stats_failed", detail }, 500);
+  }
 }
 
 async function adminCrashes(
@@ -273,15 +287,21 @@ async function adminCrashes(
   const denied = await requireAdmin(request, env);
   if (denied) return denied;
 
-  const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") ?? "30") || 30));
-  const rows = await env.DB.prepare(
-    `SELECT id, install_id, app_version, os_version, arch, name, reason, stack, created_at
-     FROM crashes ORDER BY id DESC LIMIT ?`,
-  )
-    .bind(limit)
-    .all();
+  try {
+    const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") ?? "30") || 30));
+    const rows = await env.DB.prepare(
+      `SELECT id, install_id, app_version, os_version, arch, name, reason, stack, created_at
+       FROM crashes ORDER BY id DESC LIMIT ?`,
+    )
+      .bind(limit)
+      .all();
 
-  return json({ crashes: rows.results ?? [] });
+    return json({ crashes: rows.results ?? [] });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "unknown";
+    console.error("adminCrashes", detail, err);
+    return json({ error: "crashes_failed", detail }, 500);
+  }
 }
 
 // ─── Session (HMAC, no DB) ───────────────────────────────────────────
