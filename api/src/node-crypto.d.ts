@@ -1,0 +1,9 @@
+/** Runtime provided by wrangler compatibility_flags = ["nodejs_compat"]. */
+declare module "node:crypto" {
+  interface Hash {
+    update(data: string, encoding?: string): Hash;
+    digest(encoding: "hex"): string;
+  }
+  export function createHmac(algorithm: string, key: string): Hash;
+  export function createHash(algorithm: string): Hash;
+}

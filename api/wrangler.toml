@@ -1,6 +1,8 @@
 name = "agent-dock"
 main = "src/index.ts"
 compatibility_date = "2025-06-01"
+# node:crypto createHmac — Web Crypto importKey(HMAC) 在该 Worker 上会抛错(verify_threw)
+compatibility_flags = ["nodejs_compat"]
 
 # 独立子域(与官网静态站分离)。部署前确认该域名 DNS 已在 Cloudflare。
 [[routes]]

@@ -15,6 +15,8 @@
  *   GET  /v1/admin/crashes
  */
 
+import { createHash, createHmac } from "node:crypto";
+
 export interface Env {
   DB: D1Database;
   SITE_ORIGIN: string;
@@ -144,7 +146,7 @@ async function getDownload(
 
   const ip = request.headers.get("CF-Connecting-IP") ?? "";
   const ua = request.headers.get("User-Agent") ?? "";
-  const ipHash = ip ? await sha256Hex(`${ip}:${env.SESSION_SECRET}`).then((h) => h.slice(0, 32)) : null;
+  const ipHash = ip ? sha256Hex(`${ip}:${env.SESSION_SECRET}`).slice(0, 32) : null;
 
   await env.DB.prepare(
     `INSERT INTO downloads (filename, ip_hash, user_agent) VALUES (?, ?, ?)`,
@@ -174,7 +176,7 @@ async function adminLogin(request: Request, env: Env): Promise<Response> {
 
   let token: string;
   try {
-    token = await mintSession(env.SESSION_SECRET.trim(), env.ADMIN_USER.trim());
+    token = mintSession(env.SESSION_SECRET.trim(), env.ADMIN_USER.trim());
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     console.error("mintSession", detail, err);
@@ -220,12 +222,13 @@ async function requireAdmin(request: Request, env: Env): Promise<Response | null
 
   let reason = "invalid_token";
   try {
-    const result = await verifySessionDetailed(secret, token, adminUser);
+    const result = verifySessionDetailed(secret, token, adminUser);
     if (result.ok) return null;
     reason = result.reason;
   } catch (err) {
-    console.error("verifySession", err instanceof Error ? err.message : err);
-    return json({ error: "unauthorized", reason: "verify_threw" }, 401);
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error("verifySession", detail, err);
+    return json({ error: "unauthorized", reason: "verify_threw", detail }, 401);
   }
   return json({ error: "unauthorized", reason }, 401);
 }
@@ -269,8 +272,9 @@ async function adminStats(request: Request, env: Env): Promise<Response> {
     ]);
 
     for (let i = 0; i < results.length; i++) {
-      if (results[i] && results[i].success === false) {
-        console.error("adminStats batch step failed", i, results[i].error);
+      const step = results[i] as { success?: boolean; error?: string } | undefined;
+      if (step && step.success === false) {
+        console.error("adminStats batch step failed", i, step.error);
         return json({ error: "stats_query_failed", step: i }, 500);
       }
     }
@@ -327,22 +331,22 @@ async function adminCrashes(
 
 // ─── Session (HMAC, no DB) ───────────────────────────────────────────
 
-async function mintSession(secret: string, user: string): Promise<string> {
+function mintSession(secret: string, user: string): string {
   const exp = Math.floor(Date.now() / 1000) + SESSION_TTL_SEC;
   const payload = `${user}.${exp}`;
-  const sig = await hmacHex(secret, payload);
+  const sig = hmacHex(secret, payload);
   return `${payload}.${sig}`;
 }
 
-async function verifySession(secret: string, token: string, user: string): Promise<boolean> {
-  return (await verifySessionDetailed(secret, token, user)).ok;
+function verifySession(secret: string, token: string, user: string): boolean {
+  return verifySessionDetailed(secret, token, user).ok;
 }
 
-async function verifySessionDetailed(
+function verifySessionDetailed(
   secret: string,
   token: string,
   user: string,
-): Promise<{ ok: true } | { ok: false; reason: string }> {
+): { ok: true } | { ok: false; reason: string } {
   const parts = token.split(".");
   if (parts.length !== 3) return { ok: false, reason: "malformed_token" };
   const [u, expStr, sig] = parts;
@@ -355,40 +359,21 @@ async function verifySessionDetailed(
   const exp = Number(expStr);
   if (!Number.isFinite(exp)) return { ok: false, reason: "bad_exp" };
   if (exp < Math.floor(Date.now() / 1000)) return { ok: false, reason: "expired" };
-  const expect = await hmacHex(secret, `${u}.${expStr}`);
-  if (!timingSafeEqual(sig.toLowerCase(), expect)) {
+  const expect = hmacHex(secret, `${u}.${expStr}`);
+  if (!timingSafe.equal(sig.toLowerCase(), expect)) {
     return { ok: false, reason: "bad_sig" };
   }
   return { ok: true };
 }
 
-async function hmacHex(secret: string, message: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    enc.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(message));
-  return bufferToHex(sig);
+/** HMAC-SHA256 hex — 用 node:crypto,避开 Web Crypto importKey 在本 Worker 上的异常 */
+function hmacHex(secret: string, message: string): string {
+  return createHmac("sha256", secret).update(message, "utf8").digest("hex");
 }
 
-async function sha256Hex(input: string): Promise<string> {
-  const buf = await crypto.subtle.digest("SHA-256", enc.encode(input));
-  return bufferToHex(buf);
+function sha256Hex(input: string): string {
+  return createHash("sha256").update(input, "utf8").digest("hex");
 }
-
-function bufferToHex(buf: ArrayBuffer): string {
-  const bytes = new Uint8Array(buf);
-  let out = "";
-  for (let i = 0; i < bytes.length; i++) {
-    out += bytes[i]!.toString(16).padStart(2, "0");
-  }
-  return out;
-}
-
-const enc = new TextEncoder();
 
 const timingSafe = {
   equal(a: string, b: string): boolean {
