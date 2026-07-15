@@ -669,13 +669,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.toolTip = summary.tooltip
             syncBlinkTimer(enabled: summary.blink)
         } else {
-            // 刘海模式:经典模板图标,不占宽度、不眨眼
-            button.image = MenuBarIcon.robot()
+            // 刘海模式:不显示数量占位,但仍按运行/审批状态着色眨眼
+            if summary.blink {
+                button.image = MenuBarIcon.robot(tint: summary.tint,
+                                                 eyesOpen: statusEyesOpen)
+                button.toolTip = summary.tooltip
+                syncBlinkTimer(enabled: true)
+            } else {
+                button.image = MenuBarIcon.robot()
+                button.toolTip = nil
+                syncBlinkTimer(enabled: false)
+                statusEyesOpen = true
+            }
             button.title = ""
             button.contentTintColor = nil
-            button.toolTip = nil
-            syncBlinkTimer(enabled: false)
-            statusEyesOpen = true
         }
         notchWindow?.statusButton = button
     }
@@ -725,13 +732,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if enabled {
             if statusBlinkTimer == nil {
                 statusEyesOpen = true
-                statusBlinkTimer = Timer.scheduledTimer(withTimeInterval: 0.55, repeats: true) { [weak self] _ in
+                // common mode:菜单跟踪/滚动时 default 模式定时器会卡住
+                let timer = Timer(timeInterval: 0.55, repeats: true) { [weak self] _ in
                     Task { @MainActor in
                         guard let self else { return }
                         self.statusEyesOpen.toggle()
                         self.refreshStatusItem()
                     }
                 }
+                RunLoop.main.add(timer, forMode: .common)
+                statusBlinkTimer = timer
             }
         } else if let timer = statusBlinkTimer {
             timer.invalidate()

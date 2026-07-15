@@ -114,29 +114,32 @@ struct RobotBody: Shape {
     }
 }
 
-/// 品牌机器人图标:实心头 + 会左右张望的眼睛(面板头部用)
+/// 品牌机器人图标:实心头 + 会左右张望的眼睛(面板头部用)。
+/// 用 TimelineView 驱动,不受父级 `.transaction { animation = nil }` 影响
+/// (0.2.2 起标题行禁动画防 tab 晃动,曾把 withAnimation 张望一并掐死)。
 struct RobotGlyph: View {
     var size: CGFloat = 15
     var tint: Color = Theme.text1
-    @State private var glance = false
 
     var body: some View {
         let s = size / 18
-        ZStack(alignment: .topLeading) {
-            RobotBody().fill(tint)
-            ForEach([5.0, 9.8], id: \.self) { eyeX in
-                Circle()
-                    .fill(.black)
-                    .frame(width: 3.2 * s, height: 3.2 * s)
-                    .offset(x: (eyeX + (glance ? 0.7 : -0.7)) * s, y: 8.2 * s)
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: false)) { context in
+            // 周期 ≈ 2.8s(来回各 1.4s),与原先 easeInOut 往复接近
+            let t = context.date.timeIntervalSinceReferenceDate
+            let phase = (sin(t * .pi / 1.4) + 1) / 2  // 0...1
+            let glance = -0.7 + 1.4 * phase
+            ZStack(alignment: .topLeading) {
+                RobotBody().fill(tint)
+                ForEach([5.0, 9.8], id: \.self) { eyeX in
+                    Circle()
+                        .fill(.black)
+                        .frame(width: 3.2 * s, height: 3.2 * s)
+                        .offset(x: (eyeX + glance) * s, y: 8.2 * s)
+                }
             }
+            .frame(width: size, height: size)
         }
         .frame(width: size, height: size)
-        .onAppear {
-            withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) {
-                glance = true
-            }
-        }
     }
 }
 

@@ -26,7 +26,7 @@ struct PanelView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // 标题行固定:不参与 tab 切换动画,避免切到设置时整行跟着晃
+            // 标题行几何不参与 tab 切换动画;RobotGlyph 自带 TimelineView,不受影响
             header
                 .transaction { $0.animation = nil }
 
