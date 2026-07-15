@@ -196,13 +196,19 @@ async function requireAdmin(request: Request, env: Env): Promise<Response | null
   const adminUser = (env.ADMIN_USER ?? "").trim();
   if (!secret || !adminUser) return json({ error: "admin_not_configured" }, 503);
 
-  // 优先 cookie;Authorization Bearer 作刷新兜底(跨站 cookie 被拦时仍可用)
-  const cookieToken = parseCookie(request.headers.get("Cookie") ?? "").ad_session;
+  // Authorization Bearer 优先(看板存在 localStorage);cookie 作兼容
+  // 解析 Cookie 失败时不能拖垮整请求
+  let cookieToken = "";
+  try {
+    cookieToken = parseCookie(request.headers.get("Cookie") ?? "").ad_session ?? "";
+  } catch (err) {
+    console.error("parseCookie", err instanceof Error ? err.message : err);
+  }
   const auth = request.headers.get("Authorization") ?? "";
   const bearer = auth.toLowerCase().startsWith("bearer ")
     ? auth.slice(7).trim()
     : "";
-  const token = cookieToken || bearer;
+  const token = bearer || cookieToken;
   if (!token || !(await verifySession(secret, token, adminUser))) {
     return json({ error: "unauthorized" }, 401);
   }
@@ -439,7 +445,13 @@ function parseCookie(header: string): Record<string, string> {
     if (i < 0) continue;
     const k = part.slice(0, i).trim();
     const v = part.slice(i + 1).trim();
-    if (k) out[k] = decodeURIComponent(v);
+    if (!k) continue;
+    try {
+      out[k] = decodeURIComponent(v);
+    } catch {
+      // 非法 % 编码的 cookie 值直接跳过,避免整请求 500
+      out[k] = v;
+    }
   }
   return out;
 }
