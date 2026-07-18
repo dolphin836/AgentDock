@@ -7,7 +7,7 @@ The target is Vokie-inspired editorial rhythm—dark ink field, warm copper
 attention, oversized type, and a calm native-utility stage—not pixel copying.
 The route under review is `site/index.html`.
 
-## Evidence captured on 2026-07-19
+## Evidence captured on 2026-07-18
 
 - Desktop English: `/tmp/agentdock-task6-desktop-en.png` at 1440 × 1000.
 - Desktop Simplified Chinese: `/tmp/agentdock-task6-desktop-zh.png` at
