@@ -13,6 +13,7 @@ REQUIRED_IDS = {
     "return", "integrations", "privacy", "download",
     "notchToggle", "notchPanel", "approvalPanel", "approvalStatus",
 }
+REQUIRED_IDS.update({"siteHeader", "heroStage"})
 
 
 class SiteParser(HTMLParser):
@@ -24,11 +25,20 @@ class SiteParser(HTMLParser):
         self.lang_buttons = set()
         self.i18n_keys = set()
         self.images_without_alt = []
+        self.h1_count = 0
+        self.skip_link_target = None
+        self.notch_toggle_controls = None
 
     def handle_starttag(self, tag, attrs):
         values = dict(attrs)
         if values.get("id"):
             self.ids.add(values["id"])
+        if tag == "h1":
+            self.h1_count += 1
+        if tag == "a" and values.get("href") == "#main":
+            self.skip_link_target = "#main"
+        if values.get("id") == "notchToggle":
+            self.notch_toggle_controls = values.get("aria-controls")
         if values.get("data-i18n"):
             self.i18n_keys.add(values["data-i18n"])
         if values.get("data-lang"):
@@ -68,6 +78,13 @@ def main():
         ok = fail("language controls must provide en and zh") and ok
     if parser.images_without_alt:
         ok = fail(f"images missing alt: {parser.images_without_alt}") and ok
+
+    if parser.h1_count != 1:
+        ok = fail(f"exactly one <h1> is required, found {parser.h1_count}") and ok
+    if parser.skip_link_target != "#main":
+        ok = fail("a skip link targeting #main is required") and ok
+    if parser.notch_toggle_controls != "notchPanel":
+        ok = fail('#notchToggle must set aria-controls="notchPanel"') and ok
 
     downloads = re.findall(
         r"https://api\.agentdockstatus\.app/v1/download/AgentDock-[0-9.]+\.dmg",

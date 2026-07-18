@@ -5,47 +5,80 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AgentDock | Every AI agent, at a glance</title>
   <meta name="description" content="AgentDock keeps live agent status, approvals, and usage visible in your macOS notch.">
+  <meta name="theme-color" content="#181413">
   <link rel="icon" type="image/png" href="./favicon.png">
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-  <a href="#main">Skip to content</a>
+  <a class="skip-link" href="#main" data-i18n="skip">Skip to content</a>
 
-  <header>
-    <a href="#top" aria-label="AgentDock home">
-      <img src="./favicon.png" alt="">
-      <span>AgentDock</span>
-    </a>
-    <nav aria-label="Primary navigation">
-      <button type="button" data-lang="en" aria-pressed="true">EN</button>
-      <button type="button" data-lang="zh" aria-pressed="false">中文</button>
-      <a href="https://api.agentdockstatus.app/v1/download/AgentDock-0.2.4.dmg" data-i18n="downloadShort">Download</a>
+  <header class="site-header" id="siteHeader">
+    <nav class="site-nav shell" aria-label="Primary navigation">
+      <a class="brand-link" href="#top" aria-label="AgentDock home">
+        <img src="./favicon.png" alt="">
+        <span>AgentDock</span>
+      </a>
+      <div class="header-actions">
+        <div class="language-toggle" aria-label="Language">
+          <button type="button" data-lang="en" aria-pressed="true">EN</button>
+          <button type="button" data-lang="zh" aria-pressed="false">中文</button>
+        </div>
+        <a class="bracket-link download" href="https://api.agentdockstatus.app/v1/download/AgentDock-0.2.4.dmg" data-i18n="downloadShort">Download</a>
+      </div>
     </nav>
   </header>
 
   <main id="main">
     <section id="top" class="hero dark-section">
-      <p data-i18n="heroEyebrow">Every agent, at a glance</p>
-      <h1>
-        <span data-i18n="heroLine1">Your agents are working.</span>
-        <span data-i18n="heroLine2">You stay in flow.</span>
-      </h1>
-      <p data-i18n="heroDescription">Live status, approvals, and usage in your macOS notch.</p>
-      <a href="https://api.agentdockstatus.app/v1/download/AgentDock-0.2.4.dmg" data-i18n="download">Download for Mac</a>
-      <p>macOS 14+ · Universal · Free · <b>v0.2.4</b></p>
+      <div class="hero-inner shell">
+        <p class="eyebrow reveal" data-i18n="heroEyebrow">Every agent, at a glance</p>
+        <h1 class="hero-title reveal">
+          <span data-i18n="heroLine1">Your agents are working.</span>
+          <span class="accent" data-i18n="heroLine2">You stay in flow.</span>
+        </h1>
+        <div class="hero-bottom reveal">
+          <a class="primary-cta download" href="https://api.agentdockstatus.app/v1/download/AgentDock-0.2.4.dmg" data-i18n="download">Download for Mac</a>
+          <p class="hero-description" data-i18n="heroDescription">Live status, approvals, and usage in your macOS notch.</p>
+        </div>
+        <div class="hero-stage reveal" id="heroStage">
+          <div class="notch-shell" aria-label="Interactive AgentDock preview">
+            <div class="menu-bar">
+              <span class="menu-brand"><img src="./favicon.png" alt="">AgentDock</span>
+              <span class="menu-meta"><span>MacBook Pro</span><span>9:41</span></span>
+            </div>
+            <div class="notch-wrap" id="notchWrap">
+              <button class="notch-trigger" id="notchToggle" type="button" aria-expanded="false" aria-controls="notchPanel">
+                <span class="notch-chip run"><i class="state-dot run" aria-hidden="true"></i><span data-i18n="running">Running</span></span>
+                <span class="notch-chip need"><i class="state-dot need" aria-hidden="true"></i><span data-i18n="needsYou">Needs you</span></span>
+                <span class="notch-chip usage"><i class="state-dot usage" aria-hidden="true"></i><span data-i18n="usage">Usage</span></span>
+              </button>
+              <div class="notch-panel" id="notchPanel">
+                <div class="panel-title"><strong>AGENTDOCK</strong><span data-i18n="panelHint">Click to pin</span></div>
+                <div class="session-list">
+                  <div class="session-row">
+                    <div><div class="session-name">Claude Code</div><div class="session-detail">api-gateway · opus-4.1</div></div>
+                    <span class="session-status run" data-i18n="running">Running</span>
+                  </div>
+                  <div class="session-row">
+                    <div><div class="session-name">Codex</div><div class="session-detail">checkout-flow · gpt-5</div></div>
+                    <span class="session-status need" data-i18n="needsYou">Needs you</span>
+                  </div>
+                  <div class="session-row">
+                    <div><div class="session-name">Cursor</div><div class="session-detail">weekly · 38% used</div></div>
+                    <span class="session-status usage" data-i18n="usage">Usage</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p class="stage-note" data-i18n="stageNote">Hover, click, or focus the notch to open the live panel.</p>
+          </div>
+        </div>
+      </div>
     </section>
 
     <section id="value" class="value light-section"></section>
-
-    <section id="status" class="status dark-section">
-      <button id="notchToggle" type="button" aria-expanded="false" aria-controls="notchPanel">Agent status</button>
-      <div id="notchPanel" hidden>
-        <p>Claude Code · Running</p>
-        <p>Codex · Needs you</p>
-        <p>Cursor · Usage</p>
-      </div>
-    </section>
+    <section id="status" class="status dark-section"></section>
 
     <section id="approval" class="approval light-section">
       <div id="approvalPanel">
