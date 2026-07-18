@@ -20,6 +20,34 @@ PRODUCT_SECTIONS = {
 }
 REQUIRED_ACTIONS = {"allow", "review", "deny"}
 MIN_AGENT_ROWS = 3
+# [skill: go-team-standards · 文案事实契约] 防止集成恢复与遥测边界被再次过度概括
+REQUIRED_COPY = {
+    "index.html": (
+        "backs up integration settings before installation",
+        "removes AgentDock's own entries",
+        "restores prior settings where they can be recovered",
+        "uses an installation-level identifier",
+        "does not include session content or file paths",
+    ),
+    "main.js": (
+        "backs up integration settings before installation",
+        "removes AgentDock's own entries",
+        "restores prior settings where they can be recovered",
+        "安装前备份集成配置",
+        "只移除 AgentDock 自身写入的配置",
+        "仅在原设置可恢复时还原",
+        "uses an installation-level identifier",
+        "does not include session content or file paths",
+        "使用安装级标识",
+        "不包含会话内容或文件路径",
+    ),
+}
+FORBIDDEN_COPY = (
+    "restores it on uninstall",
+    "并在卸载时还原",
+    "anonymous launch",
+    "匿名的启动",
+)
 
 
 class SiteParser(HTMLParser):
@@ -139,6 +167,16 @@ def main():
         ) and ok
 
     js = (SITE / "main.js").read_text(encoding="utf-8") if (SITE / "main.js").exists() else ""
+    copy_files = {"index.html": text, "main.js": js}
+    for name, required_snippets in REQUIRED_COPY.items():
+        for snippet in required_snippets:
+            if snippet not in copy_files[name]:
+                ok = fail(f"{name} missing required factual copy: {snippet!r}") and ok
+    for snippet in FORBIDDEN_COPY:
+        for name, content in copy_files.items():
+            if snippet in content:
+                ok = fail(f"{name} contains forbidden copy: {snippet!r}") and ok
+
     js_keys = set(re.findall(r"^\s+([A-Za-z][A-Za-z0-9]+):", js, re.MULTILINE))
     missing_keys = parser.i18n_keys - js_keys
     if missing_keys:
