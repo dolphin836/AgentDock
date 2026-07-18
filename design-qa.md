@@ -1,72 +1,59 @@
+<!-- [skill: go-team-standards · 部署发布 · QA 记录] AgentDock homepage verification evidence -->
 # AgentDock Website Design QA
 
-## Comparison Target
+## Comparison target
 
-- Source visual truth: `/Users/eric/.codex/generated_images/019f4fba-23df-7a03-8051-bbd6e5a2e313/exec-17d643e4-7a55-4032-b779-dc616104a813.png`
-- Desktop hero implementation: `/tmp/agentdock-build/06-desktop-hero-final.jpg`
-- Desktop workflow implementation: `/tmp/agentdock-build/07-workflow-final.jpg`
-- Mobile implementation: `/tmp/agentdock-build/05-mobile-hero.jpg`
-- Route: `site/index.html`
-- Desktop viewport: 1440 x 1000 browser viewport, browser capture area 1265 x 712
-- Mobile viewport: 390 x 844, browser capture area 375 x 812
-- State: English, default notch state, approval waiting; additional tests covered Chinese, expanded notch, and approved state
+The target is Vokie-inspired editorial rhythm—dark ink field, warm copper
+attention, oversized type, and a calm native-utility stage—not pixel copying.
+The route under review is `site/index.html`.
 
-## Full-view Comparison Evidence
+## Evidence captured on 2026-07-19
 
-The full source mockup and the desktop hero, desktop workflow, and mobile captures were opened together in the same comparison input. The implementation preserves the source direction's major composition: ink-blue field, warm copper attention color, oversized left-aligned headline, supported-agent system on the right, dark macOS stage, approval interaction, and local-data facts.
+- Desktop English: `/tmp/agentdock-task6-desktop-en.png` at 1440 × 1000.
+- Desktop Simplified Chinese: `/tmp/agentdock-task6-desktop-zh.png` at
+  1440 × 1000.
+- Tablet English: `/tmp/agentdock-task6-tablet-en.png` at 834 × 1194.
+- Mobile Simplified Chinese: `/tmp/agentdock-task6-mobile-zh.png` at
+  390 × 844.
 
-The browser's stitched full-page capture duplicated a page segment and was rejected as evidence. Two stable viewport captures cover the complete design-critical regions instead: the hero and the workflow/privacy section.
+The captured desktop and mobile hero views retain the intended headline,
+copper action, dark macOS stage, and notch hierarchy. The viewport checks
+reported no document-level horizontal overflow for all four captures.
 
-## Focused Region Comparison Evidence
+## Browser matrix
 
-- Hero: source and implementation use the same headline hierarchy, split composition, restrained system labels, copper primary action, and three-agent grouping.
-- Product stage: implementation uses the generated dark dune wallpaper and an interactive macOS notch with collapsed and expanded states.
-- Approval/privacy: source and implementation retain the three-column rhythm, copper approval emphasis, dark request panel, and numbered local-data facts.
-- Mobile: the desktop split composition becomes a readable single column with no horizontal overflow or clipped primary action.
+| Surface | Evidence-backed result |
+| --- | --- |
+| Desktop, 1440 × 1000 | English and Simplified Chinese rendered; no horizontal overflow. |
+| Tablet, 834 × 1194 | English rendered; no horizontal overflow. |
+| Mobile, 390 × 844 | Simplified Chinese rendered; no horizontal overflow. |
+| Language control | Selecting 中文 set `document.documentElement.lang` to `zh-CN` and updated the hero copy. |
+| Notch | Pointer hover opened it; click/focus set `aria-expanded="true"`; an actual pointer click followed by Escape left `aria-expanded="false"`. |
+| Approval demo | Allow, Review, and Deny produced `approved`, `review`, and `denied` states respectively, with the selected button pressed. |
+| Reduced motion | Emulated `prefers-reduced-motion: reduce` matched; reveal opacity was `1` and transition duration was `1e-05s`. |
+| JavaScript disabled | `has-js` was absent; the English heading and approval text remained present and reveal content had opacity `1`. |
+| Resources and console | Three raster images had non-zero natural widths; stylesheet and script loaded; no Runtime or Log error entries were captured. |
+| Download links | The three `.download` links resolved to one URL: `https://api.agentdockstatus.app/v1/download/AgentDock-0.2.4.dmg`. |
 
-## Required Fidelity Surfaces
+## Release substitution check
 
-### Fonts and typography
+Using a temporary copy of `site/index.html`, the same two Python regex
+substitutions in `scripts/package.sh` changed all three versioned download URLs
+to the test DMG URL and updated the visible `v9.9.9` label. A byte comparison
+confirmed the real `site/index.html` was unchanged.
 
-Passed. The implementation uses the macOS system sans family for the native utility voice and SF Mono-compatible fallbacks only for status data. Display weight, compressed line height, and copper emphasis match the selected direction. Mobile wrapping remains intentional and readable.
+## Critique and correction
 
-### Spacing and layout rhythm
+The first interaction pass found a material Escape defect: the handler closed
+the notch and then refocused its trigger, whose `focusin` listener reopened the
+panel. A regression contract was added to `scripts/check_site.py` first; it
+failed against that behavior. Removing the unnecessary refocus is the minimal
+fix. The contract then passed, and the actual-click/Escape retest reported a
+collapsed notch (`aria-expanded="false"`).
 
-Passed. Desktop preserves the wide split hero, large negative space, framed product stage, and three-part workflow. Mobile collapses cleanly to one column. No horizontal overflow was detected at the tested desktop or mobile sizes.
+## Remaining polish
 
-### Colors and visual tokens
-
-Passed. OKLCH tokens map to the source's ink navy, mineral off-white, copper attention color, green running state, and cyan usage state. State meaning is also communicated with text, not color alone.
-
-### Image quality and asset fidelity
-
-Passed. The supplied AgentDock raster icon is used for brand marks. A dedicated 1680 x 945 dune wallpaper was generated for the hero stage and saved as `site/hero-wallpaper.jpg`. No placeholder imagery, inline SVG, or handcrafted icon art is present.
-
-### Copy and content
-
-Passed. Product claims were checked against the repository. Unsupported source-mock content such as automatic approval rules was omitted. Privacy copy accurately distinguishes local session data from limited anonymous launch and crash telemetry. English and Simplified Chinese are both complete and selectable.
-
-### Interaction and accessibility
-
-Passed. Language switching, notch expand/collapse, Escape close, approval allow/review/deny states, focus indicators, reduced-motion behavior, skip link, and download URLs were tested. Console errors: none. Missing images: none.
-
-## Findings
-
-No actionable P0, P1, or P2 issues remain.
-
-Accepted intentional differences:
-
-- The source shows both languages simultaneously; the implementation uses a functional EN/中文 switch to preserve hierarchy and mobile readability.
-- The source's decorative agent connector illustration is expressed as a semantic agent-status system so it remains localizable and accessible without invented brand glyphs.
-- The source's speculative auto-approval control and absolute privacy wording were replaced with behavior and disclosures supported by the current codebase.
-
-## Comparison History
-
-- Pass 1: no P0, P1, or P2 mismatch found after comparing the source with the final hero, workflow, and mobile captures. No visual fixes were required after this pass.
-
-## Follow-up Polish
-
-- P3: official Claude Code, Codex, and Cursor brand assets could be added later if licensed source files are provided.
-- P3: a notarization or code-signing trust badge should only be added after release status is confirmed.
-
-final result: passed
+- P3: add official third-party agent brand assets only if licensed source files
+  are supplied.
+- P3: add a notarization or signing trust badge only after release status is
+  independently confirmed.

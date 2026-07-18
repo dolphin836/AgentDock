@@ -216,7 +216,6 @@
       if (event.key === "Escape" && (notchPinned || notchWrap.classList.contains("is-open"))) {
         notchPinned = false;
         setNotch(false);
-        notchToggle.focus();
       }
     });
   }

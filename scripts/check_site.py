@@ -293,6 +293,21 @@ def main():
             "stage note claims focus opens the notch, but main.js has no focusin handler"
         ) and ok
 
+    # [skill: go-team-standards · 可及性回归] Escape 关闭刘海后不得重新触发 focusin 打开面板。
+    escape_handler = re.search(
+        r'document\.addEventListener\("keydown", \(event\) => \{(?P<body>.*?)\n    \}\);',
+        js,
+        re.DOTALL,
+    )
+    if not escape_handler or 'event.key === "Escape"' not in escape_handler.group("body"):
+        ok = fail("a keydown Escape handler is required to close the notch") and ok
+    elif "setNotch(false)" not in escape_handler.group("body"):
+        ok = fail("Escape notch handler must close the notch") and ok
+    elif "notchToggle.focus()" in escape_handler.group("body"):
+        ok = fail(
+            "Escape notch handler must not refocus #notchToggle after closing it"
+        ) and ok
+
     if ok:
         print("PASS: site contract")
         return 0
