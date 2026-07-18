@@ -19,6 +19,7 @@ PRODUCT_SECTIONS = {
     "return", "integrations", "privacy", "download",
 }
 REQUIRED_ACTIONS = {"allow", "review", "deny"}
+DEMO_STATES = {"running", "waiting", "usage"}
 MIN_AGENT_ROWS = 3
 # [skill: go-team-standards · 文案事实契约] 防止集成恢复与遥测边界被再次过度概括
 REQUIRED_COPY = {
@@ -66,6 +67,8 @@ class SiteParser(HTMLParser):
         self.section_headings = {}
         self.section_i18n = {}
         self.data_actions = set()
+        self.demo_views = set()
+        self.demo_views_with_text = set()
         self.agent_rows = 0
 
     def handle_starttag(self, tag, attrs):
@@ -82,6 +85,11 @@ class SiteParser(HTMLParser):
             self.section_headings[self.section_stack[-1]] += 1
         if values.get("data-action"):
             self.data_actions.add(values["data-action"])
+        if values.get("data-demo-view"):
+            state = values["data-demo-view"]
+            self.demo_views.add(state)
+            if values.get("data-i18n"):
+                self.demo_views_with_text.add(state)
         if "agent-row" in classes:
             self.agent_rows += 1
         if tag == "h1":
@@ -185,6 +193,7 @@ def main():
         ) and ok
 
     js = (SITE / "main.js").read_text(encoding="utf-8") if (SITE / "main.js").exists() else ""
+    css = (SITE / "styles.css").read_text(encoding="utf-8") if (SITE / "styles.css").exists() else ""
     copy_files = {"index.html": text, "main.js": js}
     for name, required_snippets in REQUIRED_COPY.items():
         for snippet in required_snippets:
@@ -214,6 +223,25 @@ def main():
     missing_keys = parser.i18n_keys - (en_keys & zh_keys)
     if missing_keys:
         ok = fail(f"translation keys missing from main.js: {sorted(missing_keys)}") and ok
+
+    if parser.demo_views != DEMO_STATES:
+        ok = fail(
+            f"visible demo states must be {sorted(DEMO_STATES)}, "
+            f"found {sorted(parser.demo_views)}"
+        ) and ok
+    missing_text_states = DEMO_STATES - parser.demo_views_with_text
+    if missing_text_states:
+        ok = fail(
+            "demo states need visible translated text, missing: "
+            f"{sorted(missing_text_states)}"
+        ) and ok
+    for state in sorted(DEMO_STATES):
+        selector = (
+            f'[data-active-state="{state}"] '
+            f'[data-demo-view="{state}"]'
+        )
+        if selector not in css:
+            ok = fail(f"styles.css missing visible demo state selector: {selector}") and ok
 
     if ok:
         print("PASS: site contract")

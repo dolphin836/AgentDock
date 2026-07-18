@@ -223,6 +223,21 @@ img { display: block; }
 .notch-chip.run { color: var(--run); }
 .notch-chip.need { color: var(--need); }
 .notch-chip.usage { color: var(--track); }
+[data-demo-view] {
+  opacity: 0.42;
+  font-weight: 400;
+  text-decoration: none;
+  transition: opacity 180ms var(--ease-out), font-weight 180ms var(--ease-out);
+}
+[data-active-state="running"] [data-demo-view="running"],
+[data-active-state="waiting"] [data-demo-view="waiting"],
+[data-active-state="usage"] [data-demo-view="usage"] {
+  opacity: 1;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.28em;
+}
 .notch-panel {
   visibility: hidden;
   position: absolute;

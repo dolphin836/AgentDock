@@ -49,9 +49,9 @@
             </div>
             <div class="notch-wrap" id="notchWrap" data-demo-state data-active-state="running">
               <button class="notch-trigger" id="notchToggle" type="button" aria-expanded="false" aria-controls="notchPanel">
-                <span class="notch-chip run"><i class="state-dot run" aria-hidden="true"></i><span data-i18n="running">Running</span></span>
-                <span class="notch-chip need"><i class="state-dot need" aria-hidden="true"></i><span data-i18n="needsYou">Needs you</span></span>
-                <span class="notch-chip usage"><i class="state-dot usage" aria-hidden="true"></i><span data-i18n="usage">Usage</span></span>
+                <span class="notch-chip run"><i class="state-dot run" aria-hidden="true"></i><span data-demo-view="running" data-i18n="running">Running</span></span>
+                <span class="notch-chip need"><i class="state-dot need" aria-hidden="true"></i><span data-demo-view="waiting" data-i18n="needsYou">Needs you</span></span>
+                <span class="notch-chip usage"><i class="state-dot usage" aria-hidden="true"></i><span data-demo-view="usage" data-i18n="usage">Usage</span></span>
               </button>
               <div class="notch-panel" id="notchPanel">
                 <div class="panel-title"><strong>AGENTDOCK</strong><span data-i18n="panelHint">Click to pin</span></div>
@@ -113,21 +113,21 @@
             <h3 class="agent-name">Claude Code</h3>
             <p class="agent-note" data-i18n="statusClaude">Hooks and a status line report each session as it moves.</p>
           </div>
-          <span class="agent-state run"><i class="state-dot run" aria-hidden="true"></i><span data-i18n="running">Running</span></span>
+          <span class="agent-state run"><i class="state-dot run" aria-hidden="true"></i><span data-demo-view="running" data-i18n="running">Running</span></span>
         </article>
         <article class="agent-row reveal">
           <div class="agent-id">
             <h3 class="agent-name">Codex</h3>
             <p class="agent-note" data-i18n="statusCodex">A notify hook and the local session log together infer progress.</p>
           </div>
-          <span class="agent-state need"><i class="state-dot need" aria-hidden="true"></i><span data-i18n="needsYou">Needs you</span></span>
+          <span class="agent-state need"><i class="state-dot need" aria-hidden="true"></i><span data-demo-view="waiting" data-i18n="needsYou">Needs you</span></span>
         </article>
         <article class="agent-row reveal">
           <div class="agent-id">
             <h3 class="agent-name">Cursor</h3>
             <p class="agent-note" data-i18n="statusCursor">Hooks, the live transcript, and local storage keep status current.</p>
           </div>
-          <span class="agent-state usage"><i class="state-dot usage" aria-hidden="true"></i><span data-i18n="usage">Usage</span></span>
+          <span class="agent-state usage"><i class="state-dot usage" aria-hidden="true"></i><span data-demo-view="usage" data-i18n="usage">Usage</span></span>
         </article>
       </div>
     </section>
