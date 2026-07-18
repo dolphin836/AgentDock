@@ -47,7 +47,7 @@
               <span class="menu-brand"><img src="./favicon.png" alt="">AgentDock</span>
               <span class="menu-meta"><span>MacBook Pro</span><span>9:41</span></span>
             </div>
-            <div class="notch-wrap" id="notchWrap">
+            <div class="notch-wrap" id="notchWrap" data-demo-state data-active-state="running">
               <button class="notch-trigger" id="notchToggle" type="button" aria-expanded="false" aria-controls="notchPanel">
                 <span class="notch-chip run"><i class="state-dot run" aria-hidden="true"></i><span data-i18n="running">Running</span></span>
                 <span class="notch-chip need"><i class="state-dot need" aria-hidden="true"></i><span data-i18n="needsYou">Needs you</span></span>
@@ -107,7 +107,7 @@
         <h2 class="chapter-title" data-i18n="statusTitle">Three agents, read from where they already run.</h2>
         <p class="chapter-lede" data-i18n="statusLede">AgentDock listens to each tool on its own terms — no shared dashboard to keep open.</p>
       </div>
-      <div class="shell agent-list">
+      <div class="shell agent-list" data-demo-state data-active-state="running">
         <article class="agent-row reveal">
           <div class="agent-id">
             <h3 class="agent-name">Claude Code</h3>
@@ -149,7 +149,7 @@
             <p id="approvalStatus" class="approval-status" aria-live="polite" data-i18n="approvalWaiting">Waiting for your decision</p>
             <div class="approval-actions">
               <button type="button" class="approval-btn allow" data-action="allow" data-i18n="approvalAllow">Allow</button>
-              <button type="button" class="approval-btn review" data-action="review" data-i18n="approvalReview">Review</button>
+              <button type="button" class="approval-btn review" data-action="review" data-i18n="approvalReviewAction">Review</button>
               <button type="button" class="approval-btn deny" data-action="deny" data-i18n="approvalDeny">Deny</button>
             </div>
           </div>

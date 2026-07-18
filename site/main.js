@@ -1,6 +1,9 @@
 (() => {
   "use strict";
 
+  // [skill: go-team-standards · dev-dna] 双语状态交互与渐进增强
+  document.documentElement.classList.add("has-js");
+
   const translations = {
     en: {
       skip: "Skip to content",
@@ -36,10 +39,10 @@
       approvalAsk: "Run the test suite in this workspace?",
       approvalWaiting: "Waiting for your decision",
       approvalAllow: "Allow",
-      approvalReview: "Review",
+      approvalReviewAction: "Review",
       approvalDeny: "Deny",
-      approvalAllowed: "Allowed — sent to the session",
-      approvalReviewing: "Opening the session to review",
+      approvalApproved: "Approved — sent to the session",
+      approvalReview: "Opening the session to review",
       approvalDenied: "Denied — sent to the session",
       usageIndex: "04 / Usage",
       usageTitle: "Usage you can read, never guess.",
@@ -111,10 +114,10 @@
       approvalAsk: "在该工作区运行测试套件？",
       approvalWaiting: "等待你的决定",
       approvalAllow: "允许",
-      approvalReview: "查看",
+      approvalReviewAction: "查看",
       approvalDeny: "拒绝",
-      approvalAllowed: "已允许——已发送到会话",
-      approvalReviewing: "正在打开会话以便查看",
+      approvalApproved: "已批准——已发送到会话",
+      approvalReview: "正在打开会话以便查看",
       approvalDenied: "已拒绝——已发送到会话",
       usageIndex: "04 / 用量",
       usageTitle: "用量看得清，不用猜。",
@@ -154,29 +157,34 @@
     },
   };
 
-  let language = "en";
-  try {
-    language = localStorage.getItem("agentdock-language") ||
-      (navigator.language.startsWith("zh") ? "zh" : "en");
-  } catch (_) {
-    language = navigator.language.startsWith("zh") ? "zh" : "en";
+  function detectLanguage() {
+    const browserLanguage = navigator.language.startsWith("zh") ? "zh" : "en";
+    try {
+      return localStorage.getItem("agentdock-language") || browserLanguage;
+    } catch {
+      return browserLanguage;
+    }
   }
 
+  let currentLanguage = detectLanguage();
   const langButtons = document.querySelectorAll("[data-lang]");
   const i18nNodes = document.querySelectorAll("[data-i18n]");
 
-  function setLanguage(next) {
-    language = next === "zh" ? "zh" : "en";
-    const dict = translations[language];
-    document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
+  function setLanguage(nextLanguage) {
+    const language = nextLanguage === "zh" ? "zh" : "en";
+    currentLanguage = language;
+    const dict = translations[currentLanguage];
+    document.documentElement.lang = currentLanguage === "zh" ? "zh-CN" : "en";
     i18nNodes.forEach((node) => {
       const value = dict[node.dataset.i18n];
       if (value) node.textContent = value;
     });
     langButtons.forEach((button) =>
-      button.setAttribute("aria-pressed", String(button.dataset.lang === language))
+      button.setAttribute("aria-pressed", String(button.dataset.lang === currentLanguage))
     );
-    try { localStorage.setItem("agentdock-language", language); } catch (_) {}
+    try {
+      localStorage.setItem("agentdock-language", currentLanguage);
+    } catch {}
   }
 
   langButtons.forEach((button) =>
@@ -212,38 +220,76 @@
     });
   }
 
+  const approvalPanel = document.getElementById("approvalPanel");
   const approvalStatus = document.getElementById("approvalStatus");
   const approvalButtons = document.querySelectorAll("#approvalPanel [data-action]");
-  const approvalMessages = {
-    allow: "approvalAllowed",
-    review: "approvalReviewing",
-    deny: "approvalDenied",
+  const approvalKeyByState = {
+    waiting: "approvalWaiting",
+    approved: "approvalApproved",
+    review: "approvalReview",
+    denied: "approvalDenied",
+  };
+  const approvalStateByAction = {
+    allow: "approved",
+    review: "review",
+    deny: "denied",
   };
 
-  function setApproval(action) {
+  function setApproval(state) {
+    const nextState = approvalKeyByState[state] ? state : "waiting";
+    const key = approvalKeyByState[nextState];
+    if (approvalPanel) approvalPanel.dataset.state = nextState;
     if (!approvalStatus) return;
-    const key = approvalMessages[action] || "approvalWaiting";
     approvalStatus.dataset.i18n = key;
-    approvalStatus.textContent = translations[language][key];
+    approvalStatus.textContent = translations[currentLanguage][key];
     approvalButtons.forEach((button) =>
-      button.setAttribute("aria-pressed", String(button.dataset.action === action))
+      button.setAttribute(
+        "aria-pressed",
+        String(approvalStateByAction[button.dataset.action] === nextState)
+      )
     );
   }
 
   approvalButtons.forEach((button) =>
-    button.addEventListener("click", () => setApproval(button.dataset.action))
+    button.addEventListener("click", () =>
+      setApproval(approvalStateByAction[button.dataset.action])
+    )
   );
 
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const demoStates = ["running", "waiting", "usage"];
+  const demoStateNodes = document.querySelectorAll("[data-demo-state]");
+  let demoStatusIndex = 0;
+  let statusTimer = null;
+
+  function advanceDemoStatus() {
+    demoStatusIndex = (demoStatusIndex + 1) % demoStates.length;
+    demoStateNodes.forEach((node) => {
+      node.dataset.activeState = demoStates[demoStatusIndex];
+    });
+  }
+
+  function syncStatusCycle() {
+    window.clearInterval(statusTimer);
+    statusTimer = null;
+    if (document.hidden || reducedMotion.matches) return;
+    statusTimer = window.setInterval(advanceDemoStatus, 4200);
+  }
+
+  document.addEventListener("visibilitychange", syncStatusCycle);
+  reducedMotion.addEventListener("change", syncStatusCycle);
+  syncStatusCycle();
+
   const revealNodes = document.querySelectorAll(".reveal");
-  if ("IntersectionObserver" in window && revealNodes.length) {
-    const observer = new IntersectionObserver((entries, obs) => {
+  if ("IntersectionObserver" in window && !reducedMotion.matches) {
+    const observer = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
           entry.target.classList.add("is-visible");
-          obs.unobserve(entry.target);
+          observer.unobserve(entry.target);
         }
       });
-    }, { rootMargin: "0px 0px -10% 0px", threshold: 0.05 });
+    }, { threshold: 0.16 });
     revealNodes.forEach((node) => observer.observe(node));
   } else {
     revealNodes.forEach((node) => node.classList.add("is-visible"));
@@ -257,5 +303,6 @@
 
   window.AgentDockSite = AgentDockSite;
 
-  setLanguage(language);
+  setLanguage(currentLanguage);
+  setApproval("waiting");
 })();

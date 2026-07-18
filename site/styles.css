@@ -427,12 +427,13 @@ img { display: block; }
 .final-meta b { color: var(--text-on-dark); }
 
 /* Scroll reveal */
-.reveal {
+/* [skill: go-team-standards · dev-dna] 仅在脚本启用后隐藏待揭示内容 */
+.has-js .reveal {
   opacity: 0;
   transform: translateY(18px);
   transition: opacity 620ms var(--ease-out), transform 620ms var(--ease-out);
 }
-.reveal.is-visible { opacity: 1; transform: none; }
+.has-js .reveal.is-visible { opacity: 1; transform: none; }
 
 footer {
   display: flex;
@@ -482,5 +483,5 @@ footer img { width: 20px; height: 20px; border-radius: 5px; }
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-  .reveal { opacity: 1; transform: none; }
+  .has-js .reveal { opacity: 1; transform: none; }
 }

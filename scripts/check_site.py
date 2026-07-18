@@ -113,6 +113,24 @@ def fail(message):
     return False
 
 
+# [skill: go-team-standards · dev-dna] 分语言提取翻译键，确保双语契约对称
+def extract_translation_keys(js, language):
+    match = re.search(
+        rf"^    {language}: \{{\n(?P<body>.*?)^    \}},?$",
+        js,
+        re.MULTILINE | re.DOTALL,
+    )
+    if not match:
+        return None
+    return set(
+        re.findall(
+            r"^      ([A-Za-z][A-Za-z0-9]+):",
+            match.group("body"),
+            re.MULTILINE,
+        )
+    )
+
+
 def main():
     ok = True
     text = HTML.read_text(encoding="utf-8")
@@ -177,8 +195,23 @@ def main():
             if snippet in content:
                 ok = fail(f"{name} contains forbidden copy: {snippet!r}") and ok
 
-    js_keys = set(re.findall(r"^\s+([A-Za-z][A-Za-z0-9]+):", js, re.MULTILINE))
-    missing_keys = parser.i18n_keys - js_keys
+    en_keys = extract_translation_keys(js, "en")
+    zh_keys = extract_translation_keys(js, "zh")
+    if en_keys is None:
+        ok = fail("could not extract en translation keys from main.js") and ok
+        en_keys = set()
+    if zh_keys is None:
+        ok = fail("could not extract zh translation keys from main.js") and ok
+        zh_keys = set()
+
+    missing_from_zh = en_keys - zh_keys
+    if missing_from_zh:
+        ok = fail(f"translation keys missing from zh: {sorted(missing_from_zh)}") and ok
+    missing_from_en = zh_keys - en_keys
+    if missing_from_en:
+        ok = fail(f"translation keys missing from en: {sorted(missing_from_en)}") and ok
+
+    missing_keys = parser.i18n_keys - (en_keys & zh_keys)
     if missing_keys:
         ok = fail(f"translation keys missing from main.js: {sorted(missing_keys)}") and ok
 
