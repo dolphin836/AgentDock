@@ -9,7 +9,7 @@
   --text-on-dark: oklch(0.94 0.012 76);
   --text-on-light: oklch(0.22 0.018 25);
   --text-dim: oklch(0.72 0.014 76);
-  --text-faint: oklch(0.58 0.016 74);
+  --text-faint: oklch(0.69 0.016 74);
   --line-dark: oklch(0.4 0.02 25 / 0.5);
   --line-light: oklch(0.72 0.02 70 / 0.6);
   --run: oklch(0.78 0.16 148);
@@ -311,6 +311,8 @@ img { display: block; }
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
+.light-section .chapter-index { color: var(--coral-deep); }
+.dark-section .chapter-index { color: var(--coral); }
 .chapter-title {
   margin: 0;
   font-size: clamp(2rem, 4.4vw, 3.4rem);
@@ -344,6 +346,8 @@ img { display: block; }
 }
 .value-statement:last-child { border-bottom: 1px solid var(--line-light); }
 .value-num { grid-column: 1; grid-row: 1 / span 2; font-family: var(--font-mono); font-size: 13px; color: var(--coral); }
+.light-section .value-num { color: var(--coral-deep); }
+.dark-section .value-num { color: var(--coral); }
 .value-statement h3 { grid-column: 2; grid-row: 1; margin: 0; font-size: clamp(1.3rem, 2.4vw, 1.9rem); font-weight: 600; letter-spacing: -0.02em; }
 .value-statement p { grid-column: 2; grid-row: 2; margin: 10px 0 0; max-width: 52ch; color: oklch(0.4 0.02 25); font-size: 1.05rem; line-height: 1.5; }
 

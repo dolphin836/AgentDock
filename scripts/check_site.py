@@ -71,6 +71,8 @@ class SiteParser(HTMLParser):
         self.demo_views_with_text = set()
         self.agent_rows = 0
         self.notch_toggle_expanded = None
+        self.notch_toggle_label = None
+        self.language_toggle_group_role = None
         self.approval_status_live = None
         self.lang_buttons_pressed = set()
         self.buttons_without_text = []
@@ -104,6 +106,9 @@ class SiteParser(HTMLParser):
         if values.get("id") == "notchToggle":
             self.notch_toggle_controls = values.get("aria-controls")
             self.notch_toggle_expanded = values.get("aria-expanded")
+            self.notch_toggle_label = values.get("aria-label")
+        if "language-toggle" in classes:
+            self.language_toggle_group_role = values.get("role")
         if values.get("id") == "approvalStatus":
             self.approval_status_live = values.get("aria-live")
         if values.get("data-i18n"):
@@ -147,7 +152,7 @@ def fail(message):
 # [skill: go-team-standards · dev-dna] 分语言提取翻译键，确保双语契约对称
 def extract_translation_keys(js, language):
     match = re.search(
-        rf"^    {language}: \{{\n(?P<body>.*?)^    \}},?$",
+        rf"^[ \t]{{4}}{language}: \{{\n(?P<body>.*?)^[ \t]{{4}}\}},?$",
         js,
         re.MULTILINE | re.DOTALL,
     )
@@ -155,7 +160,7 @@ def extract_translation_keys(js, language):
         return None
     return set(
         re.findall(
-            r"^      ([A-Za-z][A-Za-z0-9]+):",
+            r"^[ \t]{6}([A-Za-z][A-Za-z0-9]+):",
             match.group("body"),
             re.MULTILINE,
         )
@@ -193,6 +198,10 @@ def main():
         ok = fail('#notchToggle must set aria-controls="notchPanel"') and ok
     if parser.notch_toggle_expanded is None:
         ok = fail("#notchToggle must expose aria-expanded state") and ok
+    if not parser.notch_toggle_label:
+        ok = fail("#notchToggle must have an accessible name") and ok
+    if parser.language_toggle_group_role != "group":
+        ok = fail(".language-toggle must set role=\"group\"") and ok
     if parser.approval_status_live != "polite":
         ok = fail('#approvalStatus must set aria-live="polite"') and ok
     if parser.lang_buttons_pressed != {"en", "zh"}:
@@ -256,6 +265,18 @@ def main():
     missing_keys = parser.i18n_keys - (en_keys & zh_keys)
     if missing_keys:
         ok = fail(f"translation keys missing from main.js: {sorted(missing_keys)}") and ok
+    required_accessibility_keys = {"notchToggleLabel"}
+    missing_accessibility_keys = required_accessibility_keys - (en_keys & zh_keys)
+    if missing_accessibility_keys:
+        ok = fail(
+            "accessibility translation keys missing from main.js: "
+            f"{sorted(missing_accessibility_keys)}"
+        ) and ok
+    if (
+        'notchToggle.setAttribute("aria-label", translations[currentLanguage].notchToggleLabel)'
+        not in js
+    ):
+        ok = fail("language changes must update #notchToggle aria-label") and ok
 
     if parser.demo_views != DEMO_STATES:
         ok = fail(
@@ -281,6 +302,16 @@ def main():
             ok = fail(f"styles.css missing responsive breakpoint: {query}") and ok
     if "@media (prefers-reduced-motion: reduce)" not in css:
         ok = fail("styles.css missing prefers-reduced-motion overrides") and ok
+    required_css_contracts = (
+        ".light-section .chapter-index { color: var(--coral-deep); }",
+        ".dark-section .chapter-index { color: var(--coral); }",
+        ".light-section .value-num { color: var(--coral-deep); }",
+        ".dark-section .value-num { color: var(--coral); }",
+        "--text-faint: oklch(0.69 0.016 74);",
+    )
+    for contract in required_css_contracts:
+        if contract not in css:
+            ok = fail(f"styles.css missing accessibility contract: {contract}") and ok
 
     # [skill: go-team-standards · 文案事实契约] stageNote 声称"聚焦刘海即可展开"，
     # 行为必须以 focusin 兜住该可及性承诺，避免文案与交互不一致（已知 Minor）。

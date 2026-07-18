@@ -17,6 +17,7 @@
       needsYou: "Needs you",
       usage: "Usage",
       panelHint: "Click to pin",
+      notchToggleLabel: "Show AgentDock status",
       stageNote: "Hover, click, or focus the notch to open the live panel.",
       valueIndex: "01 / Focus",
       valueTitle: "Know what needs you, without checking every window.",
@@ -92,6 +93,7 @@
       needsYou: "需要你",
       usage: "用量",
       panelHint: "点击固定",
+      notchToggleLabel: "显示 AgentDock 状态",
       stageNote: "悬停、点击或聚焦刘海，展开实时面板。",
       valueIndex: "01 / 专注",
       valueTitle: "不用切遍每个窗口，也知道哪件事需要你。",
@@ -182,6 +184,9 @@
     langButtons.forEach((button) =>
       button.setAttribute("aria-pressed", String(button.dataset.lang === currentLanguage))
     );
+    if (notchToggle) {
+      notchToggle.setAttribute("aria-label", translations[currentLanguage].notchToggleLabel);
+    }
     try {
       localStorage.setItem("agentdock-language", currentLanguage);
     } catch {}

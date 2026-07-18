@@ -15,10 +15,16 @@ The route under review is `site/index.html`.
 - Tablet English: `/tmp/agentdock-task6-tablet-en.png` at 834 × 1194.
 - Mobile Simplified Chinese: `/tmp/agentdock-task6-mobile-zh.png` at
   390 × 844.
+- Task 5 recorded zero horizontal overflow at 768 × 1024 and 360 × 800 in
+  both English and Simplified Chinese. At 360 × 800, all tap targets were at
+  least 44px; the Task 5 visual spot-check covered English at that size and
+  English at 768 × 1024.
 
 The captured desktop and mobile hero views retain the intended headline,
 copper action, dark macOS stage, and notch hierarchy. The viewport checks
 reported no document-level horizontal overflow for all four captures.
+The Task 5 measurements above are recorded QA evidence only; this document
+does not claim new or retained screenshots for those two viewport entries.
 
 ## Browser matrix
 
@@ -26,7 +32,9 @@ reported no document-level horizontal overflow for all four captures.
 | --- | --- |
 | Desktop, 1440 × 1000 | English and Simplified Chinese rendered; no horizontal overflow. |
 | Tablet, 834 × 1194 | English rendered; no horizontal overflow. |
+| Tablet, 768 × 1024 (Task 5) | English and Simplified Chinese: no horizontal overflow; English visual spot-check found legible notch/status labels and full-width tablet demos. |
 | Mobile, 390 × 844 | Simplified Chinese rendered; no horizontal overflow. |
+| Mobile, 360 × 800 (Task 5) | English and Simplified Chinese: no horizontal overflow and all tap targets ≥44px; English visual spot-check found no clipped controls. |
 | Language control | Selecting 中文 set `document.documentElement.lang` to `zh-CN` and updated the hero copy. |
 | Notch | Pointer hover opened it; click/focus set `aria-expanded="true"`; an actual pointer click followed by Escape left `aria-expanded="false"`. |
 | Approval demo | Allow, Review, and Deny produced `approved`, `review`, and `denied` states respectively, with the selected button pressed. |
