@@ -312,6 +312,14 @@ def main():
     for contract in required_css_contracts:
         if contract not in css:
             ok = fail(f"styles.css missing accessibility contract: {contract}") and ok
+    if not re.search(
+        r"\.approval-agent\s*\{[^}]*color:\s*var\(--coral-deep\)",
+        css,
+        re.DOTALL,
+    ):
+        ok = fail(
+            "styles.css must give .approval-agent a light-surface contrast color"
+        ) and ok
 
     # [skill: go-team-standards · 文案事实契约] stageNote 声称"聚焦刘海即可展开"，
     # 行为必须以 focusin 兜住该可及性承诺，避免文案与交互不一致（已知 Minor）。

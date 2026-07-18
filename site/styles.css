@@ -378,7 +378,7 @@ img { display: block; }
   box-shadow: 0 24px 60px oklch(0.5 0.03 40 / 0.12);
 }
 .approval-request { padding-bottom: 16px; border-bottom: 1px solid var(--line-light); }
-.approval-agent { margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint); }
+.approval-agent { margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--coral-deep); }
 .approval-ask { margin: 10px 0 0; font-size: 1.15rem; font-weight: 600; }
 .approval-status { min-height: 1.4em; margin: 16px 0; font-family: var(--font-mono); font-size: 13px; color: oklch(0.42 0.02 25); }
 .approval-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
