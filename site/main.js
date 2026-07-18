@@ -208,6 +208,7 @@
     });
     notchWrap.addEventListener("mouseenter", () => setNotch(true));
     notchWrap.addEventListener("mouseleave", () => { if (!notchPinned) setNotch(false); });
+    notchWrap.addEventListener("focusin", () => setNotch(true));
     notchWrap.addEventListener("focusout", (event) => {
       if (!notchWrap.contains(event.relatedTarget) && !notchPinned) setNotch(false);
     });

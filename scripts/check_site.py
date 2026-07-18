@@ -70,6 +70,11 @@ class SiteParser(HTMLParser):
         self.demo_views = set()
         self.demo_views_with_text = set()
         self.agent_rows = 0
+        self.notch_toggle_expanded = None
+        self.approval_status_live = None
+        self.lang_buttons_pressed = set()
+        self.buttons_without_text = []
+        self._button_stack = []
 
     def handle_starttag(self, tag, attrs):
         values = dict(attrs)
@@ -98,12 +103,21 @@ class SiteParser(HTMLParser):
             self.skip_link_target = "#main"
         if values.get("id") == "notchToggle":
             self.notch_toggle_controls = values.get("aria-controls")
+            self.notch_toggle_expanded = values.get("aria-expanded")
+        if values.get("id") == "approvalStatus":
+            self.approval_status_live = values.get("aria-live")
         if values.get("data-i18n"):
             self.i18n_keys.add(values["data-i18n"])
             if self.section_stack:
                 self.section_i18n[self.section_stack[-1]] += 1
         if values.get("data-lang"):
             self.lang_buttons.add(values["data-lang"])
+            if "aria-pressed" in values:
+                self.lang_buttons_pressed.add(values["data-lang"])
+        if tag == "button":
+            self._button_stack.append(
+                {"label": bool(values.get("aria-label")), "text": []}
+            )
         if tag == "link" and values.get("rel") == "stylesheet":
             self.links.append(values.get("href", ""))
         if tag == "script" and values.get("src"):
@@ -111,9 +125,18 @@ class SiteParser(HTMLParser):
         if tag == "img" and "alt" not in values:
             self.images_without_alt.append(values.get("src", "<unknown>"))
 
+    def handle_data(self, data):
+        if self._button_stack:
+            self._button_stack[-1]["text"].append(data)
+
     def handle_endtag(self, tag):
         if tag == "section" and self.section_stack:
             self.section_stack.pop()
+        if tag == "button" and self._button_stack:
+            button = self._button_stack.pop()
+            accessible = button["label"] or "".join(button["text"]).strip()
+            if not accessible:
+                self.buttons_without_text.append("<button>")
 
 
 def fail(message):
@@ -168,6 +191,16 @@ def main():
         ok = fail("a skip link targeting #main is required") and ok
     if parser.notch_toggle_controls != "notchPanel":
         ok = fail('#notchToggle must set aria-controls="notchPanel"') and ok
+    if parser.notch_toggle_expanded is None:
+        ok = fail("#notchToggle must expose aria-expanded state") and ok
+    if parser.approval_status_live != "polite":
+        ok = fail('#approvalStatus must set aria-live="polite"') and ok
+    if parser.lang_buttons_pressed != {"en", "zh"}:
+        ok = fail("both language buttons must expose aria-pressed state") and ok
+    if parser.buttons_without_text:
+        ok = fail(
+            f"buttons without accessible text: {parser.buttons_without_text}"
+        ) and ok
 
     downloads = re.findall(
         r"https://api\.agentdockstatus\.app/v1/download/AgentDock-[0-9.]+\.dmg",
@@ -242,6 +275,23 @@ def main():
         )
         if selector not in css:
             ok = fail(f"styles.css missing visible demo state selector: {selector}") and ok
+
+    for query in ("@media (max-width: 980px)", "@media (max-width: 700px)"):
+        if query not in css:
+            ok = fail(f"styles.css missing responsive breakpoint: {query}") and ok
+    if "@media (prefers-reduced-motion: reduce)" not in css:
+        ok = fail("styles.css missing prefers-reduced-motion overrides") and ok
+
+    # [skill: go-team-standards · 文案事实契约] stageNote 声称"聚焦刘海即可展开"，
+    # 行为必须以 focusin 兜住该可及性承诺，避免文案与交互不一致（已知 Minor）。
+    stage_notes = re.findall(r'stageNote:\s*"([^"]*)"', js)
+    stage_note_claims_focus = any(
+        ("focus" in note or "聚焦" in note) for note in stage_notes
+    )
+    if stage_note_claims_focus and "focusin" not in js:
+        ok = fail(
+            "stage note claims focus opens the notch, but main.js has no focusin handler"
+        ) and ok
 
     if ok:
         print("PASS: site contract")
