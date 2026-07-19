@@ -783,7 +783,7 @@ img { display: block; }
 }
 .journey-step { font-family: var(--font-mono); font-size: 13px; color: var(--coral); letter-spacing: 0.14em; }
 .journey-panel h3 { margin: 0; font-size: clamp(1.5rem, 3vw, 2.4rem); font-weight: 600; letter-spacing: -0.03em; }
-.journey-panel p { margin: 0; max-width: 42ch; color: var(--text-dim); font-size: clamp(1rem, 1.4vw, 1.2rem); line-height: 1.55; }
+.journey-panel > p { margin: 0; max-width: 42ch; color: var(--text-dim); font-size: clamp(1rem, 1.4vw, 1.2rem); line-height: 1.55; }
 .journey-progress { position: relative; height: 2px; margin-top: 24px; background: var(--line-dark); border-radius: 2px; overflow: hidden; }
 .journey-progress-bar { position: absolute; inset: 0; transform-origin: left center; transform: scaleX(0); background: var(--coral); }
 /* Pinned desktop track: 100vh viewport, panels laid out in a horizontal row. */
@@ -813,7 +813,7 @@ img { display: block; }
 .journey-panel .agent-name { font-size: 1.02rem; }
 .journey-panel .agent-note { margin-top: 5px; font-size: 0.9rem; }
 .journey-demo.usage-meters { margin-top: clamp(20px, 2.6vw, 30px); gap: 18px; max-width: none; }
-.journey-panel .approval-panel { max-width: 460px; }
+.journey-panel .approval-panel { max-width: 460px; color: var(--text-on-light); }
 .journey-note { margin: 14px 0 0; max-width: 48ch; color: var(--text-faint); font-family: var(--font-mono); font-size: 11px; line-height: 1.6; }
 .journey-demo.return-targets li { border-top-color: var(--line-dark); }
 .journey-demo.return-targets li:last-child { border-bottom-color: var(--line-dark); }

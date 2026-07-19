@@ -860,6 +860,28 @@ def main():
     for contract in required_chapter_css:
         if contract not in css:
             ok = fail(f"styles.css missing chapter contract: {contract}") and ok
+    # [skill: go-team-standards · Code Review · WCAG AA] Journey prose styling
+    # must target only direct panel copy. A broad `.journey-panel p` selector
+    # outranks the light approval card's own text colors and creates light text
+    # on a light background after the Task 5 demo migration.
+    if re.search(r"\.journey-panel\s+p\s*\{", css):
+        ok = fail(
+            "styles.css must not style every .journey-panel descendant <p>; "
+            "scope journey prose to direct children"
+        ) and ok
+    if not re.search(r"\.journey-panel\s*>\s*p\s*\{", css):
+        ok = fail(
+            "styles.css must scope journey prose with `.journey-panel > p`"
+        ) and ok
+    if not re.search(
+        r"\.journey-panel\s+\.approval-panel\s*\{[^}]*"
+        r"color:\s*var\(--text-on-light\)",
+        css,
+        re.DOTALL,
+    ):
+        ok = fail(
+            "journey approval card must explicitly restore --text-on-light"
+        ) and ok
     # Second particle scene is masked to the middle band with top/bottom vignette.
     if "80%" not in css or "20%" not in css:
         ok = fail("styles.css context mask must fade at 20% and 80% bands") and ok
