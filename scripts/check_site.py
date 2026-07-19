@@ -774,6 +774,8 @@ def main():
         ".reveal-band-inner",
         ".capability-panels",
         ".capability-panel",
+        ".has-js .capability-panels:hover .capability-panel",
+        ".has-js .capability-panels:focus-within .capability-panel",
         "flex: 0 1 25%",
         "flex-basis: 40%",
         "flex-basis: 20%",
@@ -828,6 +830,11 @@ def main():
         "requestIdleCallback",
         "scaleY",
         "Math.max(",
+        '"agentdock:curtain-complete"',
+        "getChapterProfile",
+        "rebuildChapters",
+        'style.removeProperty("transform")',
+        'style.removeProperty("clip-path")',
     )
     for contract in required_chapter_motion:
         if contract not in motion_source:

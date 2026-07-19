@@ -725,16 +725,17 @@ img { display: block; }
   opacity: 0.5;
   transition: opacity 320ms var(--ease-out);
 }
-/* When one panel is engaged, siblings collapse to 20% and it grows to 40%. */
-.capability-panels:hover .capability-panel,
-.capability-panels:focus-within .capability-panel { flex-basis: 20%; }
+/* JavaScript owns the active state. Without `.has-js`, hover/focus never
+   collapses all four cards to 20%, so the no-JS layout stays at 25% each. */
+.has-js .capability-panels:hover .capability-panel,
+.has-js .capability-panels:focus-within .capability-panel { flex-basis: 20%; }
 /* Specificity must beat the (0,3,0) :hover rule above, so scope to the wrap. */
-.capability-panels .capability-panel.is-active {
+.has-js .capability-panels .capability-panel.is-active {
   flex-basis: 40%;
   background: oklch(0.22 0.014 25 / 0.78);
   border-color: var(--coral);
 }
-.capability-panels .capability-panel.is-active p { opacity: 1; }
+.has-js .capability-panels .capability-panel.is-active p { opacity: 1; }
 
 /* Agent context — second particle scene, masked to the middle band (§5.2). */
 .context-scene { position: relative; isolation: isolate; overflow: hidden; }
@@ -853,9 +854,9 @@ img { display: block; }
 @media (max-width: 767px) {
   .capability-panels { flex-direction: column; }
   .capability-panel,
-  .capability-panels:hover .capability-panel,
-  .capability-panels:focus-within .capability-panel,
-  .capability-panels .capability-panel.is-active { flex-basis: auto; }
+  .has-js .capability-panels:hover .capability-panel,
+  .has-js .capability-panels:focus-within .capability-panel,
+  .has-js .capability-panels .capability-panel.is-active { flex-basis: auto; }
   .capability-panel h3 { white-space: normal; }
   .capability-panel p { opacity: 1; }
   .context-copy::before { inset: -28px -24px; }

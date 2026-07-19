@@ -109,17 +109,18 @@ function initHeroMotion() {
   }
 }
 
+// [skill: go-team-standards · dev-dna] Rebuild chapter motion at runtime boundaries.
 // --- Task 4: chapter choreography (reveal band, pinned journey, lines) ---
 // Every scroll-bound animation is additive: it only sets initial hidden/clipped
 // states through GSAP itself, so a missing library, a thrown error, or
 // reduced-motion always leaves the underlying content fully visible.
 let chapterTriggers = [];
-let chaptersStarted = false;
+let chapterAnimations = [];
+let chapterGateOpen = false;
+let chapterProfile = "";
 
 function initChapters() {
-  if (chaptersStarted) return;
-  chaptersStarted = true;
-  if (!gsap || !ScrollTrigger || reducedMotion.matches) return;
+  if (!chapterGateOpen || !gsap || !ScrollTrigger || reducedMotion.matches) return;
 
   try {
     // First light chapter reveals from the right via clip-path (design §6).
@@ -140,6 +141,7 @@ function initChapters() {
           },
         }
       );
+      chapterAnimations.push(revealTween);
       if (revealTween.scrollTrigger) chapterTriggers.push(revealTween.scrollTrigger);
     }
 
@@ -162,6 +164,7 @@ function initChapters() {
           },
         }
       );
+      chapterAnimations.push(linesTween);
       if (linesTween.scrollTrigger) chapterTriggers.push(linesTween.scrollTrigger);
     }
 
@@ -205,6 +208,7 @@ function initJourney() {
       },
     },
   });
+  chapterAnimations.push(journeyTween);
   if (journeyTween.scrollTrigger) chapterTriggers.push(journeyTween.scrollTrigger);
 }
 
@@ -213,15 +217,47 @@ function teardownChapters() {
     if (trigger && typeof trigger.kill === "function") trigger.kill(true);
   });
   chapterTriggers = [];
+  chapterAnimations.forEach((animation) => {
+    if (animation && typeof animation.kill === "function") animation.kill();
+  });
+  chapterAnimations = [];
+
   const bandInner = document.querySelector("#value .reveal-band-inner");
-  if (bandInner) bandInner.style.clipPath = "none";
+  if (bandInner) bandInner.style.removeProperty("clip-path");
+
   const journey = document.getElementById("journey");
   if (journey) journey.classList.remove("is-pinned");
+
   const track = document.getElementById("journeyTrack");
-  if (track) track.style.transform = "none";
+  if (track) track.style.removeProperty("transform");
+
+  const progressBar = document.querySelector("#journeyProgress .journey-progress-bar");
+  if (progressBar) progressBar.style.removeProperty("transform");
+
   document.querySelectorAll("#integrations .context-lines span").forEach((span) => {
-    span.style.transform = "scaleY(1)";
+    span.style.removeProperty("transform");
   });
+}
+
+function getChapterProfile() {
+  return [
+    window.matchMedia("(min-width: 901px)").matches,
+    window.innerHeight >= 700,
+    reducedMotion.matches,
+  ].join(":");
+}
+
+function rebuildChapters() {
+  if (!chapterGateOpen) return;
+  teardownChapters();
+  initChapters();
+}
+
+function openChapterGate() {
+  if (chapterGateOpen) return;
+  chapterGateOpen = true;
+  chapterProfile = getChapterProfile();
+  initChapters();
 }
 
 // --- Second particle field: lazy import with capable-device idle preload ---
@@ -276,35 +312,47 @@ let chapterResizeTimer = null;
 window.addEventListener(
   "resize",
   () => {
-    if (!chaptersStarted || reducedMotion.matches || !ScrollTrigger) return;
+    if (!chapterGateOpen || !ScrollTrigger) return;
     window.clearTimeout(chapterResizeTimer);
     chapterResizeTimer = window.setTimeout(() => {
-      try {
-        ScrollTrigger.refresh();
-      } catch {
-        /* ignore refresh failures */
-      }
+      const nextProfile = getChapterProfile();
+      if (nextProfile === chapterProfile) return;
+      chapterProfile = nextProfile;
+      rebuildChapters();
     }, 200);
   },
   { passive: true }
 );
 
-function startAfterCurtain() {
-  initHeroMotion();
-  initChapters();
-}
-
 const curtainState = window.AgentDockCurtain && window.AgentDockCurtain.state;
-if (curtainState === "skipped" || curtainState === "exiting" || curtainState === "complete") {
-  startAfterCurtain();
+if (curtainState === "skipped") {
+  initHeroMotion();
+  openChapterGate();
+} else if (curtainState === "complete") {
+  initHeroMotion();
+  openChapterGate();
+} else if (curtainState === "exiting") {
+  initHeroMotion();
+  document.addEventListener("agentdock:curtain-complete", openChapterGate, { once: true });
 } else {
-  document.addEventListener("agentdock:curtain-exit-start", startAfterCurtain, { once: true });
-  document.addEventListener("agentdock:curtain-skipped", startAfterCurtain, { once: true });
+  document.addEventListener("agentdock:curtain-exit-start", initHeroMotion, { once: true });
+  document.addEventListener("agentdock:curtain-complete", openChapterGate, { once: true });
+  document.addEventListener(
+    "agentdock:curtain-skipped",
+    () => {
+      initHeroMotion();
+      openChapterGate();
+    },
+    { once: true }
+  );
 }
 
 reducedMotion.addEventListener("change", () => {
   if (reducedMotion.matches) {
     rollbackHeroMotion();
-    teardownChapters();
   }
+  const nextProfile = getChapterProfile();
+  if (nextProfile === chapterProfile) return;
+  chapterProfile = nextProfile;
+  rebuildChapters();
 });
