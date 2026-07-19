@@ -3,65 +3,121 @@
 
 ## Comparison target
 
-The target is Vokie-inspired editorial rhythm—dark ink field, warm copper
-attention, oversized type, and a calm native-utility stage—not pixel copying.
-The route under review is `site/index.html`.
+The route under review is `site/index.html`. Task 6 compares AgentDock 1:1
+against the live Vokie site (https://vokie.com/) on *mechanism and composition*,
+not pixels: the same adaptive navigation, one-viewport particle hero, rounded
+`clip-path` chapter reveal, expanding capability panels, masked second particle
+field, pinned horizontal product journey, vertical-line background, and the
+left/right out-bleed cards — rendered with AgentDock's own brand, copy, product
+UI and particle shapes. No Vokie logo, image, copy, code, or particle shape is
+reproduced.
 
-## Evidence captured on 2026-07-18
+## Evidence captured on 2026-07-19
 
-- Desktop English: `/tmp/agentdock-task6-desktop-en.png` at 1440 × 1000.
-- Desktop Simplified Chinese: `/tmp/agentdock-task6-desktop-zh.png` at
-  1440 × 1000.
-- Tablet English: `/tmp/agentdock-task6-tablet-en.png` at 834 × 1194.
-- Mobile Simplified Chinese: `/tmp/agentdock-task6-mobile-zh.png` at
-  390 × 844.
-- Task 5 recorded zero horizontal overflow at 768 × 1024 and 360 × 800 in
-  both English and Simplified Chinese. At 360 × 800, all tap targets were at
-  least 44px; the Task 5 visual spot-check covered English at that size and
-  English at 768 × 1024.
+All frames were captured with local Chrome over CDP (puppeteer-core, real
+`Google Chrome`). Live Vokie reference frames and local AgentDock frames were
+taken at matching viewports and scroll positions. These are local, uncommitted
+evidence files under the git-ignored `.superpowers/sdd/nav-tests/` tree.
 
-The captured desktop and mobile hero views retain the intended headline,
-copper action, dark macOS stage, and notch hierarchy. The viewport checks
-reported no document-level horizontal overflow for all four captures.
-The Task 5 measurements above are recorded QA evidence only; this document
-does not claim new or retained screenshots for those two viewport entries.
+Live Vokie reference (read-only): `.superpowers/sdd/nav-tests/vokie/`
+- `vokie-1440-hero.png`, `vokie-1440-nav-condensed.png`, `vokie-1440-s1..s6.png`,
+  `vokie-1440-cta.png`, `vokie-1440-full.png`, `vokie-390-hero.png`,
+  `vokie-390-full.png`.
 
-## Browser matrix
+Local AgentDock: `.superpowers/sdd/nav-tests/task6/`
+- Desktop 1440×1000: `t6-1440-hero-settled-en.png`, `t6-1440-hero-zh.png`,
+  `t6-1440-nav-condensed.png`, `t6-1440-value.png`, `t6-1440-capabilities.png`,
+  `t6-1440-context-settled.png`, `t6-1440-journey-run.png`,
+  `t6-1440-journey-mid.png`, `t6-1440-journey-end.png`,
+  `t6-1440-integrations.png`, `t6-1440-privacy.png`, `t6-1440-cta.png`.
+- Desktop 1280×800: `t6-1280-hero.png`, `t6-1280-journey-run.png`.
+- Tablet 834×1194: `t6-834-hero.png`, `t6-834-capabilities.png`.
+- Mobile 390×844: `t6-390-hero-en.png`, `t6-390-hero-zh.png`, `t6-390-full.png`,
+  `t6-390-menu-open.png`.
+- Mobile 360×800: `t6-360-hero.png`, `t6-360-full.png`.
+- Degradation: `t6-1440-reduced.png`, `t6-1440-nojs.png`, `t6-390-nojs.png`,
+  `t6-1440-nowebgl.png`.
+- Critique-and-fix evidence: `t6-390-menu-open-scrolled-FIXED.png`.
 
-| Surface | Evidence-backed result |
+## Mechanism comparison (live Vokie vs local, 1440 unless noted)
+
+| Mechanism | Live Vokie | Local AgentDock | Result |
+| --- | --- | --- | --- |
+| Nav initial | Full-width thin bar: brand / center links / actions | Same three-region 80px bar (`所有…` links, EN·中文, 下载) | Match |
+| Nav condensed | Floating dark capsule (~920, blur, border) after scroll | Capsule at `min(920px, …)` height 58, `blur(14px)`, top 11px | Match |
+| Nav theme / hide | Foreground follows chapter; hides on scroll-down | `data-header` per section; direction hide past one viewport | Match |
+| Hero | One viewport; particles converge into a blob behind title | One viewport; 2200/1200 particles converge (1.9s) into the AgentDock notch + two status bands; title, CTA, description | Match (original shape) |
+| First light chapter | Rounded top slice revealing on scroll | `.reveal-band` rounded 30px top, `clip-path` reveal from right | Match |
+| Feature panels | Horizontal expanding colored panels | Four dark capability panels, active grows to 40% w/ coral border | Match (brand palette) |
+| Second particle field | Prominent dot field behind centered copy | Masked/vignetted stream field, deliberately calm per design §5.3 | Match (intentionally subtler) |
+| Product journey | Desktop pinned horizontal track + progress line | `.journey.is-pinned` horizontal track, coral scaleX progress bar | Match |
+| Vertical lines | Low-contrast vertical lines background | Five `.context-lines` columns grow on scroll | Match |
+| Privacy card | Light card bleeding to a page edge | `.bleed-card.bleed-left` light card | Match |
+| Final CTA | Accent card bleeding to opposite edge | `.bleed-card.bleed-right` coral card | Match (coral vs blue) |
+| Mobile menu | Four-square button → full-screen clipped menu | Same four-square button, full-screen `clip-path` staggered links | Match |
+
+## Browser matrix (evidence-backed)
+
+| Surface | Result |
 | --- | --- |
-| Desktop, 1440 × 1000 | English and Simplified Chinese rendered; no horizontal overflow. |
-| Tablet, 834 × 1194 | English rendered; no horizontal overflow. |
-| Tablet, 768 × 1024 (Task 5) | English and Simplified Chinese: no horizontal overflow; English visual spot-check found legible notch/status labels and full-width tablet demos. |
-| Mobile, 390 × 844 | Simplified Chinese rendered; no horizontal overflow. |
-| Mobile, 360 × 800 (Task 5) | English and Simplified Chinese: no horizontal overflow and all tap targets ≥44px; English visual spot-check found no clipped controls. |
-| Language control | Selecting 中文 set `document.documentElement.lang` to `zh-CN` and updated the hero copy. |
-| Notch | Pointer hover opened it; click/focus set `aria-expanded="true"`; an actual pointer click followed by Escape left `aria-expanded="false"`. |
-| Approval demo | Allow, Review, and Deny produced `approved`, `review`, and `denied` states respectively, with the selected button pressed. |
-| Reduced motion | Emulated `prefers-reduced-motion: reduce` matched; reveal opacity was `1` and transition duration was `1e-05s`. |
-| JavaScript disabled | `has-js` was absent; the English heading and approval text remained present and reveal content had opacity `1`. |
-| Resources and console | Three raster images had non-zero natural widths; stylesheet and script loaded; no Runtime or Log error entries were captured. |
-| Download links | The three `.download` links resolved to one URL: `https://api.agentdockstatus.app/v1/download/AgentDock-0.2.4.dmg`. |
+| Desktop 1440×1000 EN/ZH | Rendered; hero particles reach `uProgress=1` (2200 pts, 119 frames); zero document overflow. |
+| Desktop 1280×800 | Journey pins horizontally (tall enough); zero overflow. |
+| Tablet 834×1194 | Four capability panels legible; zero overflow. |
+| Mobile 390×844 EN/ZH | Hero fits one viewport (1200 pts, converged); full-screen menu opens; zero overflow. |
+| Mobile 360×800 | Full-page render; zero overflow. |
+| Language | `setLanguage` round-trips: `zh-CN`/`en` on `<html lang>`, hero copy, and `#notchToggle`/`#menuButton`/`.mobile-nav` aria-labels. |
+| Notch (WebGL fallback) | Hidden (`display:none`) while particles active; visible & interactive when WebGL fails; hover/click-pin open, pointer-away keeps pinned, Escape closes. |
+| Approval demo | Allow/Review/Deny set `approved`/`review`/`denied` with matching `aria-pressed`. |
+| Reduced motion | Curtain skipped, no `.reveal` hidden, hero `uProgress=1`, `motion-ready` absent. |
+| JavaScript disabled | English content, notch product UI, nav anchors and downloads all visible/usable; zero overflow. |
+| WebGL disabled | Hero and context fall back to CSS dot-grid / masked paper; content intact. Three.js logs its own context-creation error, then the guarded fallback engages. |
+| saveData / low memory / low CPU | Hero drops to 1200 pts, context to 800 pts; content unaffected. |
+| Resources / console | Three raster favicons load (natural width 64); one stylesheet; no console errors or failed requests on the happy path; all `.download` links resolve to `…/AgentDock-0.2.4.dmg`. |
+
+## Critique and correction
+
+First real critique-and-fix round found a material mobile interaction defect:
+while the full-screen mobile menu is open, scrolling down triggered the header's
+direction-hide logic and slid the header — including the four-square button that
+is the only touch close control — off-screen (measured `btnTop=-72`, header
+`translateY(-89.7px)`, not reachable) while the menu stayed open, stranding a
+touch user.
+
+Regression-first: four browser assertions were added to
+`.superpowers/sdd/nav-tests/nav.test.mjs` (menu stays open, header not hidden,
+close button on-screen and reachable while scrolling with the menu open). They
+were RED against the prior code (3 failures). The minimal fix in `site/main.js`
+makes `updateHeader()` keep the header shown whenever `#mobileMenu` has the
+`is-open` class. `scripts/check_site.py` gained a matching static contract. The
+tests then passed (nav 63/0); `t6-390-menu-open-scrolled-FIXED.png` shows the
+header capsule and close control remaining on-screen (`btnTop=18`).
 
 ## Release substitution check
 
 Using a temporary copy of `site/index.html`, the same two Python regex
-substitutions in `scripts/package.sh` changed all three versioned download URLs
-to the test DMG URL and updated the visible `v9.9.9` label. A byte comparison
-confirmed the real `site/index.html` was unchanged.
+substitutions in `scripts/package.sh` (version `9.9.9`) changed all five
+versioned download URLs to the test DMG URL and updated the visible `<b>v…</b>`
+label. A SHA-256 comparison confirmed the real `site/index.html` was unchanged.
 
-## Critique and correction
+## Command results
 
-The first interaction pass found a material Escape defect: the handler closed
-the notch and then refocused its trigger, whose `focusin` listener reopened the
-panel. A regression contract was added to `scripts/check_site.py` first; it
-failed against that behavior. Removing the unnecessary refocus is the minimal
-fix. The contract then passed, and the actual-click/Escape retest reported a
-collapsed notch (`aria-expanded="false"`).
+| Command | Result |
+| --- | --- |
+| `python3 scripts/check_site.py` | `PASS: site contract` |
+| `node --check` (main/motion/hero-particles/context-particles) | All OK |
+| `swift test` | 91 tests in 28 suites passed |
+| `git diff --check` | Clean (exit 0) |
+| Browser suites (nav/hero/journey/nojs/task5) | 63 / 86 / 92 / all / 81 passed, 0 failed |
 
-## Remaining polish
+## Concerns
 
-- P3: add official third-party agent brand assets only if licensed source files
-  are supplied.
-- P3: add a notarization or signing trust badge only after release status is
-  independently confirmed.
+- P3: The second (context) particle field is deliberately faint per design §5.3
+  ("no full-page uniform noise"); it renders (webgl, 200+ frames) but reads much
+  quieter than Vokie's prominent dot grid. This is an intentional divergence, not
+  a defect.
+- P3: When WebGL is unavailable, Three.js emits its own
+  `THREE.WebGLRenderer: Error creating WebGL context` console error before the
+  guarded fallback engages. It is third-party and harmless; the fallback UI is
+  correct.
+- Screenshot and reference frames are local, git-ignored evidence and are not
+  committed.

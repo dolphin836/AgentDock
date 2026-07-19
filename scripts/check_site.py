@@ -607,6 +607,10 @@ def main():
         'target.setAttribute("tabindex", "-1")',
         "target.scrollIntoView()",
         "restoreFocus: false",
+        # [skill: go-team-standards · 可及性回归] Task 6: the header hosts the only
+        # touch close control; scrolling must not direction-hide it while the
+        # full-screen mobile menu is open, or a touch user is stranded.
+        'openMobileMenu.classList.contains("is-open")',
     )
     for contract in required_nav_js:
         if contract not in js:

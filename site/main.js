@@ -413,6 +413,17 @@
     const vh = window.innerHeight;
     header.classList.toggle("is-condensed", y > vh * condenseRatio);
     header.dataset.header = currentTheme();
+    // Never hide the header while the mobile menu is open: the header hosts the
+    // only touch close control (the four-square button). Direction-hiding it
+    // mid-scroll would slide that button off-screen and strand a touch user
+    // inside the full-screen menu. (Queried from the DOM to stay safe before the
+    // later menuOpen binding is initialized during first synchronous call.)
+    const openMobileMenu = document.getElementById("mobileMenu");
+    if (openMobileMenu && openMobileMenu.classList.contains("is-open")) {
+      showHeader();
+      lastScrollY = y;
+      return;
+    }
     if (y <= vh) {
       showHeader();
       lastScrollY = y;
