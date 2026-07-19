@@ -13,24 +13,57 @@
 <body>
   <a class="skip-link" href="#main" data-i18n="skip">Skip to content</a>
 
-  <header class="site-header" id="siteHeader">
-    <nav class="site-nav shell" aria-label="Primary navigation">
+  <div class="intro-curtain" id="introCurtain" aria-hidden="true">
+    <div class="curtain-inner">
+      <img class="curtain-mark" src="./favicon.png" alt="">
+      <span class="curtain-word">AgentDock</span>
+      <span class="curtain-progress"><span id="curtainCount">0</span><span class="curtain-pct">%</span></span>
+    </div>
+  </div>
+
+  <header class="site-header" id="siteHeader" data-header="dark">
+    <div class="nav-shell">
       <a class="brand-link" href="#top" aria-label="AgentDock home">
         <img src="./favicon.png" alt="">
         <span>AgentDock</span>
       </a>
+      <nav class="nav-center" aria-label="Primary navigation">
+        <ul class="nav-links">
+          <li><a class="nav-link" href="#status" data-i18n="navStatus">Status</a></li>
+          <li><a class="nav-link" href="#approval" data-i18n="navApproval">Approval</a></li>
+          <li><a class="nav-link" href="#usage" data-i18n="navUsage">Usage</a></li>
+          <li><a class="nav-link" href="#privacy" data-i18n="navPrivacy">Privacy</a></li>
+          <span class="nav-indicator" aria-hidden="true"></span>
+        </ul>
+      </nav>
       <div class="header-actions">
         <div class="language-toggle" role="group" aria-label="Language">
           <button type="button" data-lang="en" aria-pressed="true">EN</button>
           <button type="button" data-lang="zh" aria-pressed="false">中文</button>
         </div>
-        <a class="bracket-link download" href="https://api.agentdockstatus.app/v1/download/AgentDock-0.2.4.dmg" data-i18n="downloadShort">Download</a>
+        <a class="bracket-link download header-download" href="https://api.agentdockstatus.app/v1/download/AgentDock-0.2.4.dmg" data-i18n="downloadShort">Download</a>
+        <button class="menu-button" id="menuButton" type="button" aria-label="Menu" aria-expanded="false" aria-controls="mobileMenu">
+          <span class="menu-squares" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        </button>
       </div>
-    </nav>
+    </div>
   </header>
 
+  <div class="mobile-menu" id="mobileMenu" aria-hidden="true" inert>
+    <nav class="mobile-nav" aria-label="Menu">
+      <a class="mobile-link" href="#value" data-i18n="navFocus">Focus</a>
+      <a class="mobile-link" href="#status" data-i18n="navStatus">Status</a>
+      <a class="mobile-link" href="#approval" data-i18n="navApproval">Approval</a>
+      <a class="mobile-link" href="#usage" data-i18n="navUsage">Usage</a>
+      <a class="mobile-link" href="#return" data-i18n="navReturn">Return</a>
+      <a class="mobile-link" href="#integrations" data-i18n="navIntegrations">Integrations</a>
+      <a class="mobile-link" href="#privacy" data-i18n="navPrivacy">Privacy</a>
+      <a class="mobile-link mobile-download download" href="https://api.agentdockstatus.app/v1/download/AgentDock-0.2.4.dmg" data-i18n="download">Download for Mac</a>
+    </nav>
+  </div>
+
   <main id="main">
-    <section id="top" class="hero dark-section">
+    <section id="top" class="hero dark-section" data-header="dark">
       <div class="hero-inner shell">
         <p class="eyebrow reveal" data-i18n="heroEyebrow">Every agent, at a glance</p>
         <h1 class="hero-title reveal">
@@ -77,7 +110,7 @@
       </div>
     </section>
 
-    <section id="value" class="value light-section chapter">
+    <section id="value" class="value light-section chapter" data-header="light">
       <div class="shell chapter-head reveal">
         <p class="chapter-index" data-i18n="valueIndex">01 / Focus</p>
         <h2 class="chapter-title" data-i18n="valueTitle">Know what needs you, without checking every window.</h2>
@@ -101,7 +134,7 @@
       </ol>
     </section>
 
-    <section id="status" class="status dark-section chapter">
+    <section id="status" class="status dark-section chapter" data-header="dark">
       <div class="shell chapter-head reveal">
         <p class="chapter-index" data-i18n="statusIndex">02 / Status</p>
         <h2 class="chapter-title" data-i18n="statusTitle">Three agents, read from where they already run.</h2>
@@ -132,7 +165,7 @@
       </div>
     </section>
 
-    <section id="approval" class="approval light-section chapter">
+    <section id="approval" class="approval light-section chapter" data-header="light">
       <div class="shell chapter-split">
         <div class="chapter-copy reveal">
           <p class="chapter-index" data-i18n="approvalIndex">03 / Approval</p>
@@ -157,7 +190,7 @@
       </div>
     </section>
 
-    <section id="usage" class="usage dark-section chapter">
+    <section id="usage" class="usage dark-section chapter" data-header="dark">
       <div class="shell chapter-head reveal">
         <p class="chapter-index" data-i18n="usageIndex">04 / Usage</p>
         <h2 class="chapter-title" data-i18n="usageTitle">Usage you can read, never guess.</h2>
@@ -180,7 +213,7 @@
       </div>
     </section>
 
-    <section id="return" class="workspace-return light-section chapter">
+    <section id="return" class="workspace-return light-section chapter" data-header="light">
       <div class="shell chapter-split">
         <div class="chapter-copy reveal">
           <p class="chapter-index" data-i18n="returnIndex">05 / Return</p>
@@ -196,7 +229,7 @@
       </div>
     </section>
 
-    <section id="integrations" class="integrations dark-section chapter">
+    <section id="integrations" class="integrations dark-section chapter" data-header="dark">
       <div class="shell chapter-sticky">
         <div class="sticky-copy">
           <div class="reveal">
@@ -222,7 +255,7 @@
       </div>
     </section>
 
-    <section id="privacy" class="privacy light-section chapter">
+    <section id="privacy" class="privacy light-section chapter" data-header="light">
       <div class="shell chapter-head reveal">
         <p class="chapter-index" data-i18n="privacyIndex">07 / Privacy</p>
         <h2 class="chapter-title" data-i18n="privacyTitle">Your work stays on your Mac.</h2>
@@ -247,7 +280,7 @@
       </dl>
     </section>
 
-    <section id="download" class="download-section dark-section chapter">
+    <section id="download" class="download-section dark-section chapter" data-header="dark">
       <div class="shell final-cta reveal">
         <h2 class="chapter-title" data-i18n="downloadTitle">Put your agents in the notch.</h2>
         <a class="primary-cta download" href="https://api.agentdockstatus.app/v1/download/AgentDock-0.2.4.dmg" data-i18n="download">Download for Mac</a>

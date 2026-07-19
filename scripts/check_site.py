@@ -41,10 +41,16 @@ REQUIRED_IDS = {
     "notchToggle", "notchPanel", "approvalPanel", "approvalStatus",
 }
 REQUIRED_IDS.update({"siteHeader", "heroStage"})
+# Task 2 owns the adaptive navigation, intro curtain, and mobile menu nodes.
+REQUIRED_IDS.update({"menuButton", "mobileMenu", "introCurtain"})
 PRODUCT_SECTIONS = {
     "value", "status", "approval", "usage",
     "return", "integrations", "privacy", "download",
 }
+# Every hero and product section must declare an explicit nav theme so the
+# header foreground follows dark/light chapters (design §4.1).
+SECTION_THEME_IDS = PRODUCT_SECTIONS | {"top"}
+SECTION_THEME_VALUES = {"dark", "light"}
 REQUIRED_ACTIONS = {"allow", "review", "deny"}
 DEMO_STATES = {"running", "waiting", "usage"}
 MIN_AGENT_ROWS = 3
@@ -104,6 +110,12 @@ class SiteParser(HTMLParser):
         self.lang_buttons_pressed = set()
         self.buttons_without_text = []
         self._button_stack = []
+        self.section_themes = {}
+        self.menu_button_expanded = None
+        self.menu_button_controls = None
+        self.menu_button_label = None
+        self.mobile_menu_hidden = None
+        self.mobile_menu_inert = None
 
     def handle_starttag(self, tag, attrs):
         values = dict(attrs)
@@ -115,6 +127,15 @@ class SiteParser(HTMLParser):
             self.section_stack.append(sid)
             self.section_headings.setdefault(sid, 0)
             self.section_i18n.setdefault(sid, 0)
+        if tag == "section" and values.get("id") in SECTION_THEME_IDS:
+            self.section_themes[values["id"]] = values.get("data-header")
+        if values.get("id") == "menuButton":
+            self.menu_button_expanded = values.get("aria-expanded")
+            self.menu_button_controls = values.get("aria-controls")
+            self.menu_button_label = values.get("aria-label")
+        if values.get("id") == "mobileMenu":
+            self.mobile_menu_hidden = values.get("aria-hidden")
+            self.mobile_menu_inert = "inert" in values
         if tag in ("h2", "h3") and self.section_stack:
             self.section_headings[self.section_stack[-1]] += 1
         if values.get("data-action"):
@@ -323,6 +344,26 @@ def main():
             f"buttons without accessible text: {parser.buttons_without_text}"
         ) and ok
 
+    # --- Task 2: adaptive navigation, intro curtain, mobile menu ---
+    for sid in sorted(SECTION_THEME_IDS):
+        theme = parser.section_themes.get(sid)
+        if theme is None:
+            ok = fail(f'section #{sid} must declare data-header="dark|light"') and ok
+        elif theme not in SECTION_THEME_VALUES:
+            ok = fail(
+                f'section #{sid} data-header must be dark|light, got {theme!r}'
+            ) and ok
+    if parser.menu_button_expanded is None:
+        ok = fail("#menuButton must expose aria-expanded state") and ok
+    if parser.menu_button_controls != "mobileMenu":
+        ok = fail('#menuButton must set aria-controls="mobileMenu"') and ok
+    if not parser.menu_button_label:
+        ok = fail("#menuButton must have an accessible name") and ok
+    if parser.mobile_menu_hidden != "true":
+        ok = fail('#mobileMenu must start with aria-hidden="true"') and ok
+    if parser.mobile_menu_inert is not True:
+        ok = fail("#mobileMenu must start inert") and ok
+
     downloads = re.findall(
         r"https://api\.agentdockstatus\.app/v1/download/AgentDock-[0-9.]+\.dmg",
         text,
@@ -377,7 +418,7 @@ def main():
     missing_keys = parser.i18n_keys - (en_keys & zh_keys)
     if missing_keys:
         ok = fail(f"translation keys missing from main.js: {sorted(missing_keys)}") and ok
-    required_accessibility_keys = {"notchToggleLabel"}
+    required_accessibility_keys = {"notchToggleLabel", "navMenu"}
     missing_accessibility_keys = required_accessibility_keys - (en_keys & zh_keys)
     if missing_accessibility_keys:
         ok = fail(
@@ -432,6 +473,46 @@ def main():
         ok = fail(
             "styles.css must give .approval-agent a light-surface contrast color"
         ) and ok
+
+    # [skill: go-team-standards · Vokie 1:1] 导航形态、指示线、移动菜单与 curtain 的样式契约
+    required_nav_css = (
+        ".nav-shell",
+        ".site-header.is-condensed",
+        "min(920px, calc(100% - 32px))",
+        "blur(14px)",
+        ".site-header.is-hidden",
+        ".nav-indicator",
+        ".menu-squares",
+        ".mobile-menu",
+        "blur(12px)",
+        "clip-path: inset(",
+        "@media (max-width: 900px)",
+        "@media (max-width: 680px)",
+        ".intro-curtain",
+    )
+    for contract in required_nav_css:
+        if contract not in css:
+            ok = fail(f"styles.css missing navigation contract: {contract}") and ok
+
+    # 滚动形态与降级行为契约（行为测试在浏览器中验证，这里只锁定关键常量与钩子）
+    required_nav_js = (
+        "condenseRatio = 0.22",
+        "scrollHideDelta = 12",
+        "header.dataset.header",
+        "curtain-active",
+        "< 680",
+        "setTimeout",
+        '"Tab"',
+        "inert",
+    )
+    for contract in required_nav_js:
+        if contract not in js:
+            ok = fail(f"main.js missing navigation behavior hook: {contract}") and ok
+    if (
+        'menuButton.setAttribute("aria-label", translations[currentLanguage].navMenu)'
+        not in js
+    ):
+        ok = fail("language changes must update #menuButton aria-label") and ok
 
     # [skill: go-team-standards · 文案事实契约] stageNote 声称"聚焦刘海即可展开"，
     # 行为必须以 focusin 兜住该可及性承诺，避免文案与交互不一致（已知 Minor）。

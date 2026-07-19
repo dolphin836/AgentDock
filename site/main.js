@@ -9,6 +9,14 @@
       skip: "Skip to content",
       downloadShort: "Download",
       download: "Download for Mac",
+      navMenu: "Menu",
+      navFocus: "Focus",
+      navStatus: "Status",
+      navApproval: "Approval",
+      navUsage: "Usage",
+      navReturn: "Return",
+      navIntegrations: "Integrations",
+      navPrivacy: "Privacy",
       heroEyebrow: "Every agent, at a glance",
       heroLine1: "Your agents are working.",
       heroLine2: "You stay in flow.",
@@ -85,6 +93,14 @@
       skip: "跳到主要内容",
       downloadShort: "下载",
       download: "下载 Mac 版",
+      navMenu: "菜单",
+      navFocus: "专注",
+      navStatus: "状态",
+      navApproval: "审批",
+      navUsage: "用量",
+      navReturn: "回到现场",
+      navIntegrations: "集成",
+      navPrivacy: "隐私",
       heroEyebrow: "所有 Agent，一眼看清",
       heroLine1: "Agent 在工作。",
       heroLine2: "你保持专注。",
@@ -187,6 +203,9 @@
     if (notchToggle) {
       notchToggle.setAttribute("aria-label", translations[currentLanguage].notchToggleLabel);
     }
+    if (menuButton) {
+      menuButton.setAttribute("aria-label", translations[currentLanguage].navMenu);
+    }
     try {
       localStorage.setItem("agentdock-language", currentLanguage);
     } catch {}
@@ -198,6 +217,7 @@
 
   const notchWrap = document.getElementById("notchWrap");
   const notchToggle = document.getElementById("notchToggle");
+  const menuButton = document.getElementById("menuButton");
   let notchPinned = false;
 
   function setNotch(open) {
@@ -300,10 +320,209 @@
     revealNodes.forEach((node) => node.classList.add("is-visible"));
   }
 
+  // --- Adaptive navigation: 22vh condense, direction hide, chapter theme, indicator ---
+  const header = document.getElementById("siteHeader");
+  const navLinks = Array.from(document.querySelectorAll(".nav-link"));
+  const navIndicator = document.querySelector(".nav-indicator");
+  const navList = document.querySelector(".nav-links");
+  const themedSections = Array.from(document.querySelectorAll("section[data-header]"));
+  const condenseRatio = 0.22;
+  const scrollHideDelta = 12;
+  let lastScrollY = window.scrollY;
+  let headerHidden = false;
+  let navTicking = false;
+
+  function currentTheme() {
+    const probe = 48;
+    let theme = "dark";
+    for (const section of themedSections) {
+      const rect = section.getBoundingClientRect();
+      if (rect.top <= probe && rect.bottom > probe) {
+        theme = section.dataset.header === "light" ? "light" : "dark";
+      }
+    }
+    return theme;
+  }
+
+  function showHeader() {
+    if (!headerHidden) return;
+    headerHidden = false;
+    header.classList.remove("is-hidden");
+  }
+
+  function hideHeader() {
+    if (headerHidden) return;
+    headerHidden = true;
+    header.classList.add("is-hidden");
+  }
+
+  function updateHeader() {
+    navTicking = false;
+    if (!header) return;
+    const y = window.scrollY;
+    const vh = window.innerHeight;
+    header.classList.toggle("is-condensed", y > vh * condenseRatio);
+    header.dataset.header = currentTheme();
+    if (y <= vh) {
+      showHeader();
+      lastScrollY = y;
+      return;
+    }
+    const delta = y - lastScrollY;
+    if (delta > scrollHideDelta) {
+      hideHeader();
+      lastScrollY = y;
+    } else if (delta < 0) {
+      showHeader();
+      lastScrollY = y;
+    }
+  }
+
+  function requestHeaderUpdate() {
+    if (navTicking) return;
+    navTicking = true;
+    window.requestAnimationFrame(updateHeader);
+  }
+
+  if (header) {
+    window.addEventListener("scroll", requestHeaderUpdate, { passive: true });
+    window.addEventListener("resize", requestHeaderUpdate, { passive: true });
+    updateHeader();
+  }
+
+  function moveIndicator(target) {
+    if (!navIndicator || !navList || !target) return;
+    const linkRect = target.getBoundingClientRect();
+    const listRect = navList.getBoundingClientRect();
+    navIndicator.style.width = `${linkRect.width}px`;
+    navIndicator.style.transform = `translateX(${linkRect.left - listRect.left}px)`;
+    navIndicator.style.opacity = "1";
+  }
+
+  function hideIndicator() {
+    if (navIndicator) navIndicator.style.opacity = "0";
+  }
+
+  navLinks.forEach((link) => {
+    link.addEventListener("mouseenter", () => moveIndicator(link));
+    link.addEventListener("focus", () => moveIndicator(link));
+  });
+  if (navList) {
+    navList.addEventListener("mouseleave", hideIndicator);
+    navList.addEventListener("focusout", (event) => {
+      if (!navList.contains(event.relatedTarget)) hideIndicator();
+    });
+  }
+
+  // --- Mobile full-screen menu: focus trap, inert, Escape ---
+  const mobileMenu = document.getElementById("mobileMenu");
+  const mainEl = document.getElementById("main");
+  const footerEl = document.querySelector("footer");
+  let menuOpen = false;
+
+  function menuFocusables() {
+    return mobileMenu
+      ? Array.from(mobileMenu.querySelectorAll('a[href], button:not([disabled])'))
+      : [];
+  }
+
+  function setMenu(open) {
+    if (!mobileMenu || !menuButton) return;
+    menuOpen = open;
+    mobileMenu.classList.toggle("is-open", open);
+    mobileMenu.setAttribute("aria-hidden", String(!open));
+    menuButton.setAttribute("aria-expanded", String(open));
+    if (open) {
+      mobileMenu.removeAttribute("inert");
+      if (mainEl) mainEl.setAttribute("inert", "");
+      if (footerEl) footerEl.setAttribute("inert", "");
+      const focusables = menuFocusables();
+      // Focus on the next frame so the menu is rendered visible and focusable.
+      if (focusables[0]) window.requestAnimationFrame(() => focusables[0].focus());
+    } else {
+      mobileMenu.setAttribute("inert", "");
+      if (mainEl) mainEl.removeAttribute("inert");
+      if (footerEl) footerEl.removeAttribute("inert");
+    }
+  }
+
+  if (mobileMenu && menuButton) {
+    menuButton.addEventListener("click", () => setMenu(!menuOpen));
+    mobileMenu.querySelectorAll(".mobile-link").forEach((link) =>
+      link.addEventListener("click", () => setMenu(false))
+    );
+    mobileMenu.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        setMenu(false);
+        menuButton.focus();
+        return;
+      }
+      if (event.key === "Tab") {
+        const focusables = menuFocusables();
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && menuOpen) {
+        setMenu(false);
+        menuButton.focus();
+      }
+    });
+  }
+
+  // --- Intro curtain: 0→100 progress then clip upward; skip reduced motion / <680 ---
+  const curtain = document.getElementById("introCurtain");
+  const curtainCount = document.getElementById("curtainCount");
+  const rootEl = document.documentElement;
+
+  function runCurtain() {
+    if (!curtain) return;
+    if (reducedMotion.matches || window.innerWidth < 680) return;
+    rootEl.classList.add("curtain-active");
+    const start = performance.now();
+    const duration = 1400;
+    let finished = false;
+
+    function finish() {
+      if (finished) return;
+      finished = true;
+      curtain.classList.add("is-done");
+      const cleanup = () => rootEl.classList.remove("curtain-active");
+      curtain.addEventListener("transitionend", cleanup, { once: true });
+      setTimeout(cleanup, 900);
+    }
+
+    function tick(now) {
+      const progress = Math.min(1, (now - start) / duration);
+      if (curtainCount) curtainCount.textContent = String(Math.round(progress * 100));
+      if (progress < 1) {
+        window.requestAnimationFrame(tick);
+      } else {
+        finish();
+      }
+    }
+
+    window.requestAnimationFrame(tick);
+    // Resource timeout fallback so content is never trapped behind the curtain
+    setTimeout(finish, 3500);
+  }
+
+  runCurtain();
+
   const AgentDockSite = {
     setLanguage,
     setNotch,
     setApproval,
+    setMenu,
   };
 
   window.AgentDockSite = AgentDockSite;
