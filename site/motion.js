@@ -81,14 +81,20 @@ function initHeroMotion() {
     }
 
     root.classList.add("motion-ready");
-    if (hero) hero._driven = true;
     requestAnimationFrame(() => {
       if (reducedMotion.matches) {
         rollbackHeroMotion();
         return;
       }
-      timeline.play();
-      if (particleTween) particleTween.play();
+      try {
+        timeline.play();
+        if (particleTween) {
+          particleTween.play();
+          if (hero) hero._driven = true;
+        }
+      } catch {
+        rollbackHeroMotion();
+      }
     });
   } catch {
     rollbackHeroMotion();

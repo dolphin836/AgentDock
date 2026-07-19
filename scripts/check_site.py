@@ -645,6 +645,34 @@ def main():
         if contract not in motion_source:
             ok = fail(f"motion.js missing hero contract: {contract}") and ok
 
+    playback_guard = re.search(
+        r"requestAnimationFrame\(\(\) => \{(?P<body>.*?)\n\s*\}\);",
+        motion_source,
+        re.DOTALL,
+    )
+    if not playback_guard:
+        ok = fail("motion.js must start deferred GSAP playback in requestAnimationFrame") and ok
+    else:
+        playback_body = playback_guard.group("body")
+        if "try {" not in playback_body or "} catch" not in playback_body:
+            ok = fail("deferred timeline/tween play calls must be guarded by try/catch") and ok
+        required_playback = ("timeline.play()", "particleTween.play()", "hero._driven = true")
+        missing_playback = [
+            contract for contract in required_playback if contract not in playback_body
+        ]
+        if missing_playback:
+            ok = fail(
+                f"deferred playback guard missing: {missing_playback}"
+            ) and ok
+        elif not (
+            playback_body.index("timeline.play()")
+            < playback_body.index("particleTween.play()")
+            < playback_body.index("hero._driven = true")
+        ):
+            ok = fail(
+                "hero._driven=true must follow successful timeline and particle play"
+            ) and ok
+
     required_hero_css = (
         ".hero-canvas",
         "z-index: -1",
