@@ -10,7 +10,7 @@ Artifact SHA-256:
   three.module.min.js  86bcee248b64f44bcfc23c331ae74619061957d59cab040171dcb6fb5900beb6
 Package: https://www.npmjs.com/package/three/v/0.185.1
 Upstream source: https://github.com/mrdoob/three.js
-Retrieved tarball: https://registry.npmmirror.com/three/-/three-0.185.1.tgz
+Retrieved tarball: https://registry.npmjs.org/three/-/three-0.185.1.tgz
 Package integrity: sha512-5aojFCXKwnjBRZvUnt3WFfEcvUJgkN5LlijRFN95hMy8WVkG4I0QNcJE+OuWvuJ0bOdStrbfXn0pkd6/QyiAlg==
 License: MIT
 License text: https://github.com/mrdoob/three.js/blob/dev/LICENSE
@@ -44,7 +44,7 @@ Artifact SHA-256:
   ScrollTrigger.min.js  b0b14d67b55b0c43c756ac0b106cfcb09d0879945f6ead64451065b0672916a2
 Package: https://www.npmjs.com/package/gsap/v/3.15.0
 Upstream source: https://github.com/greensock/GSAP
-Retrieved tarball: https://registry.npmmirror.com/gsap/-/gsap-3.15.0.tgz
+Retrieved tarball: https://registry.npmjs.org/gsap/-/gsap-3.15.0.tgz
 Package integrity: sha512-dMW4CWBTUK1AEEDeZc1g4xpPGIrSf9fJF960qbTZmN/QwZIWY5wgliS6JWl9/25fpTGJrMRtSjGtOmPnfjZB+A==
 License: GSAP Standard "No Charge" License
 License text: https://gsap.com/standard-license/
@@ -52,3 +52,8 @@ Copyright: GreenSock, Inc.
 
 GSAP is subject to GreenSock's Standard License rather than an open-source
 license. Review the upstream license URL above for the complete terms.
+
+Current use record: GSAP is used only on AgentDock's own public website. It is
+not offered as a resellable site-building or animation feature. Based on the
+Standard License's "No Charge" terms, this current use is treated as permitted;
+this is not legal advice. Re-review the license if the product use changes.

@@ -15,7 +15,7 @@ VENDOR_SHA256 = {
     "three.module.min.js": "86bcee248b64f44bcfc23c331ae74619061957d59cab040171dcb6fb5900beb6",
     "gsap.min.js": "92bb9a96476f983d212a2bc4f54c889039c1696dd4461d40a736860938570fbb",
     "ScrollTrigger.min.js": "b0b14d67b55b0c43c756ac0b106cfcb09d0879945f6ead64451065b0672916a2",
-    "LICENSES.txt": "cd3202138b82af70f2003c3f51b70cd993806cec4a3c1bbd9893dc06f1dac3dd",
+    "LICENSES.txt": "58b8f62144ca821ef1552bf17322b107f4bd3e23e16a39b412dc56ad2bf4717b",
 }
 # Module entry points and scene IDs are activated with their implementations:
 # Task 2 owns navigation IDs, Task 3 owns the hero scene, and Task 4 owns
@@ -130,10 +130,19 @@ class SiteParser(HTMLParser):
         self.mobile_menu_hidden = None
         self.mobile_menu_inert = None
         self.internal_anchors = set()
+        self.document_title = None
+        self.meta_description = None
+        self.capability_panels = []
+        self._in_title = False
+        self._title_parts = []
 
     def handle_starttag(self, tag, attrs):
         values = dict(attrs)
         classes = values.get("class", "").split()
+        if tag == "title":
+            self._in_title = True
+        if tag == "meta" and values.get("name") == "description":
+            self.meta_description = values.get("content")
         if values.get("id"):
             self.ids.add(values["id"])
         if tag == "section" and values.get("id") in PRODUCT_SECTIONS:
@@ -161,6 +170,15 @@ class SiteParser(HTMLParser):
                 self.demo_views_with_text.add(state)
         if "agent-row" in classes:
             self.agent_rows += 1
+        if "capability-panel" in classes:
+            self.capability_panels.append(
+                {
+                    "tag": tag,
+                    "role": values.get("role"),
+                    "expanded": values.get("aria-expanded"),
+                    "tabindex": values.get("tabindex"),
+                }
+            )
         if tag == "h1":
             self.h1_count += 1
         if tag == "a" and values.get("href") == "#main":
@@ -197,10 +215,15 @@ class SiteParser(HTMLParser):
             self.images_without_alt.append(values.get("src", "<unknown>"))
 
     def handle_data(self, data):
+        if self._in_title:
+            self._title_parts.append(data)
         if self._button_stack:
             self._button_stack[-1]["text"].append(data)
 
     def handle_endtag(self, tag):
+        if tag == "title":
+            self._in_title = False
+            self.document_title = "".join(self._title_parts).strip()
         if tag == "section" and self.section_stack:
             self.section_stack.pop()
         if tag == "button" and self._button_stack:
@@ -238,6 +261,53 @@ def sha256_file(path):
         for chunk in iter(lambda: source.read(64 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def oklch_to_srgb(lightness, chroma, hue):
+    hue_radians = hue * 3.141592653589793 / 180
+    a = chroma * __import__("math").cos(hue_radians)
+    b = chroma * __import__("math").sin(hue_radians)
+    l_ = lightness + 0.3963377774 * a + 0.2158037573 * b
+    m_ = lightness - 0.1055613458 * a - 0.0638541728 * b
+    s_ = lightness - 0.0894841775 * a - 1.2914855480 * b
+    l, m, s = l_**3, m_**3, s_**3
+    linear = (
+        +4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+        -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+        -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s,
+    )
+    return tuple(
+        12.92 * channel if channel <= 0.0031308 else 1.055 * channel ** (1 / 2.4) - 0.055
+        for channel in linear
+    )
+
+
+def relative_luminance(srgb):
+    linear = tuple(
+        channel / 12.92
+        if channel <= 0.04045
+        else ((channel + 0.055) / 1.055) ** 2.4
+        for channel in srgb
+    )
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+
+def contrast_ratio(foreground, background):
+    lighter, darker = sorted(
+        (relative_luminance(foreground), relative_luminance(background)),
+        reverse=True,
+    )
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def parse_oklch(css, name):
+    match = re.search(
+        rf"{re.escape(name)}:\s*oklch\(\s*([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)",
+        css,
+    )
+    if not match:
+        return None
+    return oklch_to_srgb(*(float(value) for value in match.groups()))
 
 
 # [skill: go-team-standards · dev-dna] 分语言提取翻译键，确保双语契约对称
@@ -381,6 +451,13 @@ def main():
         ok = fail('#mobileMenu must start with aria-hidden="true"') and ok
     if parser.mobile_menu_inert is not True:
         ok = fail("#mobileMenu must start inert") and ok
+    if parser.document_title != "AgentDock | Every AI agent, at a glance":
+        ok = fail("index.html must start with the English document title") and ok
+    if (
+        parser.meta_description
+        != "AgentDock keeps live agent status, approvals, and usage visible in your macOS notch."
+    ):
+        ok = fail("index.html must start with the English meta description") and ok
     nav_list_match = re.search(
         r'<ul\s+class="nav-links"[^>]*>(?P<body>.*?)</ul>',
         text,
@@ -526,6 +603,17 @@ def main():
         not in js
     ):
         ok = fail("language changes must update .mobile-nav aria-label") and ok
+    required_metadata_keys = {"pageTitle", "pageDescription"}
+    missing_metadata_keys = required_metadata_keys - (en_keys & zh_keys)
+    if missing_metadata_keys:
+        ok = fail(
+            "metadata translation keys missing from main.js: "
+            f"{sorted(missing_metadata_keys)}"
+        ) and ok
+    if 'document.title = dict.pageTitle' not in js:
+        ok = fail("language changes must update document.title") and ok
+    if 'metaDescription.setAttribute("content", dict.pageDescription)' not in js:
+        ok = fail("language changes must update the meta description") and ok
 
     if parser.demo_views != DEMO_STATES:
         ok = fail(
@@ -569,6 +657,26 @@ def main():
         ok = fail(
             "styles.css must give .approval-agent a light-surface contrast color"
         ) and ok
+    faint = parse_oklch(css, "--text-faint")
+    faint_surfaces = {
+        ".state-dot": "oklch(0.19 0.012 25)",
+        ".panel-title span": "oklch(0.145 0.012 25)",
+        ".session-detail": "oklch(0.145 0.012 25)",
+        ".usage-foot": "oklch(0.155 0.012 25)",
+        ".journey-note": "oklch(0.19 0.012 25)",
+        ".journey-panel .return-how": "oklch(0.19 0.012 25)",
+    }
+    if faint is None:
+        ok = fail("styles.css must define --text-faint in OKLCH") and ok
+    else:
+        for selector, surface in faint_surfaces.items():
+            values = re.search(r"oklch\(\s*([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)", surface)
+            background = oklch_to_srgb(*(float(value) for value in values.groups()))
+            ratio = contrast_ratio(faint, background)
+            if ratio < 4.5:
+                ok = fail(
+                    f"{selector} --text-faint contrast must be >= 4.5:1, got {ratio:.2f}:1"
+                ) and ok
 
     # [skill: go-team-standards · Vokie 1:1] 导航形态、指示线、移动菜单与 curtain 的样式契约
     required_nav_css = (
@@ -945,6 +1053,58 @@ def main():
     for contract in required_chapter_js:
         if contract not in js:
             ok = fail(f"main.js missing capability panel hook: {contract}") and ok
+    if len(parser.capability_panels) != 4:
+        ok = fail(
+            f"exactly 4 capability panels required, found {len(parser.capability_panels)}"
+        ) and ok
+    for panel in parser.capability_panels:
+        if panel != {
+            "tag": "article",
+            "role": "button",
+            "expanded": "false",
+            "tabindex": "0",
+        }:
+            ok = fail(
+                "capability panels must be focusable article buttons with "
+                "aria-expanded=\"false\""
+            ) and ok
+            break
+    required_capability_behavior = (
+        'setAttribute("aria-expanded", String(isActive))',
+        'event.key === "Enter"',
+        'event.key === " "',
+        "event.preventDefault()",
+    )
+    for contract in required_capability_behavior:
+        if contract not in js:
+            ok = fail(f"main.js missing capability button behavior: {contract}") and ok
+
+    required_final_accessibility_hooks = (
+        "inertOwners",
+        "setInertOwner",
+        '"curtain"',
+        '"agentdock:curtain-error"',
+        'finish("error")',
+        "menuFocusables",
+        "menuButton",
+        "focusin",
+        "focusJourneyPanel",
+    )
+    for contract in required_final_accessibility_hooks:
+        if contract not in js and contract not in motion_source:
+            ok = fail(f"missing final accessibility behavior hook: {contract}") and ok
+
+    required_official_registry_records = (
+        "https://registry.npmjs.org/three/-/three-0.185.1.tgz",
+        "https://registry.npmjs.org/gsap/-/gsap-3.15.0.tgz",
+        "No Charge",
+        "AgentDock",
+        "not legal advice",
+    )
+    licenses = (SITE / "vendor" / "LICENSES.txt").read_text(encoding="utf-8")
+    for record in required_official_registry_records:
+        if record not in licenses:
+            ok = fail(f"LICENSES.txt missing official supply-chain record: {record}") and ok
 
     # Second particle field: lazy, device-tiered, reduced-motion static, resilient.
     required_context_particles = (

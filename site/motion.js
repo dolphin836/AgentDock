@@ -118,6 +118,8 @@ let chapterTriggers = [];
 let chapterAnimations = [];
 let chapterGateOpen = false;
 let chapterLayoutKey = "";
+let journeyScrollTrigger = null;
+let journeyViewport = null;
 
 function initChapters() {
   if (!chapterGateOpen || !gsap || !ScrollTrigger || reducedMotion.matches) return;
@@ -209,10 +211,63 @@ function initJourney() {
     },
   });
   chapterAnimations.push(journeyTween);
-  if (journeyTween.scrollTrigger) chapterTriggers.push(journeyTween.scrollTrigger);
+  if (journeyTween.scrollTrigger) {
+    journeyScrollTrigger = journeyTween.scrollTrigger;
+    chapterTriggers.push(journeyScrollTrigger);
+    journeyViewport = viewport;
+    viewport.addEventListener("focusin", focusJourneyPanel);
+  }
+}
+
+function focusJourneyPanel(event) {
+  if (
+    !journeyScrollTrigger ||
+    !journeyViewport ||
+    reducedMotion.matches ||
+    !window.matchMedia("(min-width: 901px)").matches ||
+    window.innerHeight < 700
+  ) {
+    return;
+  }
+  const panel = event.target.closest(".journey-panel");
+  if (!panel || !journeyViewport.contains(panel)) return;
+
+  const panels = Array.from(journeyViewport.querySelectorAll(".journey-panel"));
+  const panelIndex = panels.indexOf(panel);
+  const currentIndex = Math.round(
+    journeyScrollTrigger.progress * Math.max(0, panels.length - 1)
+  );
+  if (panelIndex < 0) return;
+  if (panelIndex === currentIndex) {
+    const panelRect = panel.getBoundingClientRect();
+    if (panelRect.top < 0 || panelRect.bottom > window.innerHeight) {
+      panel.scrollIntoView({ block: "center", behavior: "auto" });
+    }
+    return;
+  }
+
+  journeyScrollTrigger.refresh();
+  const progress = panels.length > 1 ? panelIndex / (panels.length - 1) : 0;
+  const measuredStart =
+    journeyViewport.getBoundingClientRect().top + window.scrollY;
+  const triggerStart = journeyScrollTrigger.start;
+  const start =
+    Math.abs(triggerStart - measuredStart) > 1 ? measuredStart : triggerStart;
+  const scrollY =
+    start + (journeyScrollTrigger.end - journeyScrollTrigger.start) * progress;
+  window.scrollTo({ top: scrollY, behavior: "auto" });
+  const panelRect = panel.getBoundingClientRect();
+  if (panelRect.top < 0 || panelRect.bottom > window.innerHeight) {
+    panel.scrollIntoView({ block: "center", behavior: "auto" });
+  }
 }
 
 function teardownChapters() {
+  if (journeyViewport) {
+    journeyViewport.removeEventListener("focusin", focusJourneyPanel);
+  }
+  journeyViewport = null;
+  journeyScrollTrigger = null;
   chapterTriggers.forEach((trigger) => {
     if (trigger && typeof trigger.kill === "function") trigger.kill(true);
   });

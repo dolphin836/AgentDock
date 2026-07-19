@@ -184,10 +184,17 @@ async function run() {
         height: innerHeight,
         buttonDisplay: getComputedStyle(button).display,
         navDisplay: getComputedStyle(document.querySelector(".nav-center")).display,
+        curtainState: window.AgentDockCurtain?.state,
+        mainInert: document.getElementById("main").hasAttribute("inert"),
+        footerInert: document.querySelector("footer").hasAttribute("inert"),
       };
     })()`);
     check(mobile.width === 390 && mobile.height === 844, "390x844 mobile viewport applied");
     check(mobile.buttonDisplay !== "none" && mobile.navDisplay === "none", "mobile navigation mode active");
+    check(
+      mobile.curtainState === "skipped" && !mobile.mainInert && !mobile.footerInert,
+      "skipped curtain leaves main and footer available",
+    );
 
     await cdp.evaluate(`document.getElementById("menuButton").click()`);
     await sleep(100);
@@ -201,6 +208,40 @@ async function run() {
     })()`);
     check(opened.expanded === "true" && opened.hidden === "false", "mobile menu opens with ARIA state");
     check(opened.firstFocused, "mobile menu focuses first link");
+    await cdp.send("Input.dispatchKeyEvent", {
+      type: "keyDown",
+      key: "Tab",
+      code: "Tab",
+      windowsVirtualKeyCode: 9,
+      modifiers: 8,
+    });
+    await cdp.send("Input.dispatchKeyEvent", {
+      type: "keyUp",
+      key: "Tab",
+      code: "Tab",
+      windowsVirtualKeyCode: 9,
+      modifiers: 8,
+    });
+    const trapBack = await cdp.evaluate(
+      `document.activeElement === document.getElementById("menuButton")`,
+    );
+    check(trapBack, "Shift+Tab cycles from first menu link to the close button");
+    await cdp.send("Input.dispatchKeyEvent", {
+      type: "keyDown",
+      key: "Tab",
+      code: "Tab",
+      windowsVirtualKeyCode: 9,
+    });
+    await cdp.send("Input.dispatchKeyEvent", {
+      type: "keyUp",
+      key: "Tab",
+      code: "Tab",
+      windowsVirtualKeyCode: 9,
+    });
+    const trapForward = await cdp.evaluate(
+      `document.activeElement === document.querySelector("#mobileMenu .mobile-link")`,
+    );
+    check(trapForward, "Tab cycles from the close button to the first menu link");
 
     await cdp.evaluate(`window.scrollTo(0, 3000)`);
     await sleep(500);
@@ -262,6 +303,15 @@ async function run() {
 
     await setViewport(cdp, 1440, 1000);
     await load(cdp, `${url}?context-density`);
+    const curtainRunning = await cdp.evaluate(`(() => ({
+      state: window.AgentDockCurtain?.state,
+      mainInert: document.getElementById("main").hasAttribute("inert"),
+      footerInert: document.querySelector("footer").hasAttribute("inert"),
+    }))()`);
+    check(
+      curtainRunning.state === "running" && curtainRunning.mainInert && curtainRunning.footerInert,
+      "running curtain temporarily inerts main and footer",
+    );
     for (let attempt = 0; attempt < 100; attempt += 1) {
       const curtainDone = await cdp.evaluate(
         `["complete", "skipped"].includes(window.AgentDockCurtain?.state)`,
@@ -269,13 +319,97 @@ async function run() {
       if (curtainDone) break;
       await sleep(50);
     }
-    await cdp.evaluate(`(() => {
+    const curtainComplete = await cdp.evaluate(`(() => ({
+      state: window.AgentDockCurtain?.state,
+      mainInert: document.getElementById("main").hasAttribute("inert"),
+      footerInert: document.querySelector("footer").hasAttribute("inert"),
+    }))()`);
+    check(
+      ["complete", "skipped"].includes(curtainComplete.state) &&
+        !curtainComplete.mainInert &&
+        !curtainComplete.footerInert,
+      "completed curtain releases main and footer inert ownership",
+    );
+    const languageAndCapability = await cdp.evaluate(`(() => {
+      const [en, zh] = document.querySelectorAll("[data-lang]");
+      const panels = Array.from(document.querySelectorAll(".capability-panel"));
+      panels[0].focus({ preventScroll: true });
+      panels[0].dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      const focusState = panels.map((panel) => panel.getAttribute("aria-expanded"));
+      const focusSucceeded = document.activeElement === panels[0];
+      panels[1].click();
+      const clickState = panels.map((panel) => panel.getAttribute("aria-expanded"));
+      panels[1].dispatchEvent(
+        new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true }),
+      );
+      const keyboardState = panels.map((panel) => panel.getAttribute("aria-expanded"));
+      zh.click();
+      return {
+        focusState,
+        clickState,
+        keyboardState,
+        focusSucceeded,
+        title: document.title,
+        description: document.querySelector('meta[name="description"]').content,
+        lang: document.documentElement.lang,
+        enPressed: en.getAttribute("aria-pressed"),
+        zhPressed: zh.getAttribute("aria-pressed"),
+      };
+    })()`);
+    check(
+      languageAndCapability.focusState.join(",") === "true,false,false,false",
+      `capability focus synchronizes its expanded ARIA state (${languageAndCapability.focusState.join(",")}, focused=${languageAndCapability.focusSucceeded})`,
+    );
+    check(
+      languageAndCapability.clickState.join(",") === "false,true,false,false" &&
+        languageAndCapability.keyboardState.join(",") === "false,true,false,false",
+      "capability click and keyboard states stay synchronized",
+    );
+    check(
+      languageAndCapability.lang === "zh-CN" &&
+        languageAndCapability.title === "AgentDock｜一眼掌握所有 AI Agent" &&
+        languageAndCapability.description === "AgentDock 将实时 Agent 状态、审批和用量集中呈现在你的 macOS 刘海中。" &&
+        languageAndCapability.enPressed === "false" &&
+        languageAndCapability.zhPressed === "true",
+      "language selection updates localized document metadata",
+    );
+    await cdp.evaluate(`(async () => {
+      const journey = document.getElementById("journeyViewport");
+      window.scrollTo({
+        top: journey.getBoundingClientRect().top + window.scrollY,
+        behavior: "instant",
+      });
+      await new Promise(requestAnimationFrame);
+      const button = document.querySelector("#approvalPanel .approval-btn");
+      button.focus({ preventScroll: true });
+      button.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    })()`);
+    await sleep(100);
+    const journeyFocus = await cdp.evaluate(`(() => {
+      const button = document.querySelector("#approvalPanel .approval-btn");
+      const rect = button.getBoundingClientRect();
+      return {
+        y: window.scrollY,
+        top: rect.top,
+        bottom: rect.bottom,
+        viewportHeight: window.innerHeight,
+      };
+    })()`);
+    check(
+      journeyFocus.y > 0 &&
+        journeyFocus.top >= 0 &&
+        journeyFocus.bottom <= journeyFocus.viewportHeight,
+      `desktop pinned journey scrolls a focused noncurrent panel into view (y=${journeyFocus.y}, top=${journeyFocus.top}, bottom=${journeyFocus.bottom})`,
+    );
+    await cdp.evaluate(`(async () => {
       const section = document.getElementById("context");
       window.scrollTo({
         top: section.getBoundingClientRect().top + window.scrollY,
         left: 0,
         behavior: "instant",
       });
+      await new Promise(requestAnimationFrame);
+      window.scrollBy({ top: section.getBoundingClientRect().top, behavior: "instant" });
     })()`);
     for (let attempt = 0; attempt < 100; attempt += 1) {
       if (await cdp.evaluate("Boolean(window.AgentDockContext?.ready)")) break;
@@ -337,13 +471,15 @@ async function run() {
       if (curtainDone) break;
       await sleep(50);
     }
-    await cdp.evaluate(`(() => {
+    await cdp.evaluate(`(async () => {
       const section = document.getElementById("context");
       window.scrollTo({
         top: section.getBoundingClientRect().top + window.scrollY,
         left: 0,
         behavior: "instant",
       });
+      await new Promise(requestAnimationFrame);
+      window.scrollBy({ top: section.getBoundingClientRect().top, behavior: "instant" });
     })()`);
     for (let attempt = 0; attempt < 100; attempt += 1) {
       if (await cdp.evaluate("Boolean(window.AgentDockContext?.ready)")) break;

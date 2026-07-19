@@ -6,6 +6,8 @@
 
   const translations = {
     en: {
+      pageTitle: "AgentDock | Every AI agent, at a glance",
+      pageDescription: "AgentDock keeps live agent status, approvals, and usage visible in your macOS notch.",
       skip: "Skip to content",
       downloadShort: "Download",
       download: "Download for Mac",
@@ -102,6 +104,8 @@
       downloadMeta: "macOS 14+ · Universal · Free",
     },
     zh: {
+      pageTitle: "AgentDock｜一眼掌握所有 AI Agent",
+      pageDescription: "AgentDock 将实时 Agent 状态、审批和用量集中呈现在你的 macOS 刘海中。",
       skip: "跳到主要内容",
       downloadShort: "下载",
       download: "下载 Mac 版",
@@ -211,12 +215,17 @@
   let currentLanguage = detectLanguage();
   const langButtons = document.querySelectorAll("[data-lang]");
   const i18nNodes = document.querySelectorAll("[data-i18n]");
+  const metaDescription = document.querySelector('meta[name="description"]');
 
   function setLanguage(nextLanguage) {
     const language = nextLanguage === "zh" ? "zh" : "en";
     currentLanguage = language;
     const dict = translations[currentLanguage];
     document.documentElement.lang = currentLanguage === "zh" ? "zh-CN" : "en";
+    document.title = dict.pageTitle;
+    if (metaDescription) {
+      metaDescription.setAttribute("content", dict.pageDescription);
+    }
     i18nNodes.forEach((node) => {
       const value = dict[node.dataset.i18n];
       if (value) node.textContent = value;
@@ -315,14 +324,29 @@
   const capabilityPanels = Array.from(document.querySelectorAll(".capability-panel"));
   const capabilityWrap = document.querySelector(".capability-panels");
   function setActivePanel(panel) {
-    capabilityPanels.forEach((node) => node.classList.toggle("is-active", node === panel));
+    capabilityPanels.forEach((node) => {
+      const isActive = node === panel;
+      node.classList.toggle("is-active", isActive);
+      node.setAttribute("aria-expanded", String(isActive));
+    });
   }
   function clearActivePanels() {
-    capabilityPanels.forEach((node) => node.classList.remove("is-active"));
+    capabilityPanels.forEach((node) => {
+      node.classList.remove("is-active");
+      node.setAttribute("aria-expanded", "false");
+    });
   }
   capabilityPanels.forEach((panel) => {
     panel.addEventListener("mouseenter", () => setActivePanel(panel));
+    panel.addEventListener("focus", () => setActivePanel(panel));
     panel.addEventListener("focusin", () => setActivePanel(panel));
+    panel.addEventListener("click", () => setActivePanel(panel));
+    panel.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        setActivePanel(panel);
+      }
+    });
   });
   if (capabilityWrap) {
     capabilityWrap.addEventListener("mouseleave", clearActivePanels);
@@ -480,11 +504,23 @@
   const mainEl = document.getElementById("main");
   const footerEl = document.querySelector("footer");
   let menuOpen = false;
+  const inertOwners = new WeakMap();
+
+  function setInertOwner(element, owner, isInert) {
+    if (!element) return;
+    const owners = inertOwners.get(element) || new Set();
+    if (isInert) owners.add(owner);
+    else owners.delete(owner);
+    inertOwners.set(element, owners);
+    element.toggleAttribute("inert", owners.size > 0);
+  }
 
   function menuFocusables() {
-    return mobileMenu
-      ? Array.from(mobileMenu.querySelectorAll('a[href], button:not([disabled])'))
-      : [];
+    if (!mobileMenu || !menuButton) return [];
+    return [
+      menuButton,
+      ...mobileMenu.querySelectorAll('a[href], button:not([disabled])'),
+    ];
   }
 
   function focusHashTarget(hash) {
@@ -519,20 +555,20 @@
     mobileMenu.setAttribute("aria-hidden", String(!open));
     menuButton.setAttribute("aria-expanded", String(open));
     if (open) {
-      mobileMenu.removeAttribute("inert");
-      if (mainEl) mainEl.setAttribute("inert", "");
-      if (footerEl) footerEl.setAttribute("inert", "");
+      setInertOwner(mobileMenu, "menu", false);
+      setInertOwner(mainEl, "menu", true);
+      setInertOwner(footerEl, "menu", true);
       const focusables = menuFocusables();
       // Focus on the next frame so the menu is rendered visible and focusable.
-      if (focusables[0]) {
+      if (focusables[1]) {
         window.requestAnimationFrame(() => {
-          if (menuOpen) focusables[0].focus();
+          if (menuOpen) focusables[1].focus();
         });
       }
     } else {
-      mobileMenu.setAttribute("inert", "");
-      if (mainEl) mainEl.removeAttribute("inert");
-      if (footerEl) footerEl.removeAttribute("inert");
+      setInertOwner(mobileMenu, "menu", true);
+      setInertOwner(mainEl, "menu", false);
+      setInertOwner(footerEl, "menu", false);
       if (wasOpen && restoreFocus) menuButton.focus();
     }
   }
@@ -550,8 +586,9 @@
         focusHashTarget(link.hash);
       });
     });
-    mobileMenu.addEventListener("keydown", (event) => {
+    document.addEventListener("keydown", (event) => {
       if (event.key === "Tab") {
+        if (!menuOpen) return;
         const focusables = menuFocusables();
         if (focusables.length === 0) return;
         const first = focusables[0];
@@ -586,42 +623,59 @@
 
   function runCurtain() {
     if (!curtain || reducedMotion.matches || window.innerWidth <= 680) {
+      setInertOwner(mainEl, "curtain", false);
+      setInertOwner(footerEl, "curtain", false);
       publishCurtainState("skipped", "agentdock:curtain-skipped");
       return;
     }
     curtainLifecycle.state = "running";
+    setInertOwner(mainEl, "curtain", true);
+    setInertOwner(footerEl, "curtain", true);
     rootEl.classList.add("curtain-active");
     const start = performance.now();
     const duration = 1400;
     let finished = false;
     let completed = false;
 
-    function finish() {
+    function finish(finalState = "complete") {
       if (finished) return;
       finished = true;
       publishCurtainState("exiting", "agentdock:curtain-exit-start");
       curtain.classList.add("is-done");
       const cleanup = () => {
         rootEl.classList.remove("curtain-active");
+        setInertOwner(mainEl, "curtain", false);
+        setInertOwner(footerEl, "curtain", false);
         if (completed) return;
         completed = true;
-        publishCurtainState("complete", "agentdock:curtain-complete");
+        publishCurtainState(
+          finalState,
+          finalState === "error" ? "agentdock:curtain-error" : "agentdock:curtain-complete"
+        );
       };
       curtain.addEventListener("transitionend", cleanup, { once: true });
       setTimeout(cleanup, 900);
     }
 
     function tick(now) {
-      const progress = Math.min(1, (now - start) / duration);
-      if (curtainCount) curtainCount.textContent = String(Math.round(progress * 100));
-      if (progress < 1) {
-        window.requestAnimationFrame(tick);
-      } else {
-        finish();
+      try {
+        const progress = Math.min(1, (now - start) / duration);
+        if (curtainCount) curtainCount.textContent = String(Math.round(progress * 100));
+        if (progress < 1) {
+          window.requestAnimationFrame(tick);
+        } else {
+          finish();
+        }
+      } catch {
+        finish("error");
       }
     }
 
-    window.requestAnimationFrame(tick);
+    try {
+      window.requestAnimationFrame(tick);
+    } catch {
+      finish("error");
+    }
     // Resource timeout fallback so content is never trapped behind the curtain
     setTimeout(finish, 3500);
   }
