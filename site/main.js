@@ -10,6 +10,7 @@
       downloadShort: "Download",
       download: "Download for Mac",
       navMenu: "Menu",
+      mobileNavLabel: "Mobile navigation",
       navFocus: "Focus",
       navStatus: "Status",
       navApproval: "Approval",
@@ -94,6 +95,7 @@
       downloadShort: "下载",
       download: "下载 Mac 版",
       navMenu: "菜单",
+      mobileNavLabel: "移动导航",
       navFocus: "专注",
       navStatus: "状态",
       navApproval: "审批",
@@ -206,6 +208,9 @@
     if (menuButton) {
       menuButton.setAttribute("aria-label", translations[currentLanguage].navMenu);
     }
+    if (mobileNav) {
+      mobileNav.setAttribute("aria-label", translations[currentLanguage].mobileNavLabel);
+    }
     try {
       localStorage.setItem("agentdock-language", currentLanguage);
     } catch {}
@@ -218,6 +223,7 @@
   const notchWrap = document.getElementById("notchWrap");
   const notchToggle = document.getElementById("notchToggle");
   const menuButton = document.getElementById("menuButton");
+  const mobileNav = document.querySelector(".mobile-nav");
   let notchPinned = false;
 
   function setNotch(open) {
@@ -324,7 +330,7 @@
   const header = document.getElementById("siteHeader");
   const navLinks = Array.from(document.querySelectorAll(".nav-link"));
   const navIndicator = document.querySelector(".nav-indicator");
-  const navList = document.querySelector(".nav-links");
+  const navCenter = document.querySelector(".nav-center");
   const themedSections = Array.from(document.querySelectorAll("section[data-header]"));
   const condenseRatio = 0.22;
   const scrollHideDelta = 12;
@@ -391,11 +397,11 @@
   }
 
   function moveIndicator(target) {
-    if (!navIndicator || !navList || !target) return;
+    if (!navIndicator || !navCenter || !target) return;
     const linkRect = target.getBoundingClientRect();
-    const listRect = navList.getBoundingClientRect();
+    const navRect = navCenter.getBoundingClientRect();
     navIndicator.style.width = `${linkRect.width}px`;
-    navIndicator.style.transform = `translateX(${linkRect.left - listRect.left}px)`;
+    navIndicator.style.transform = `translateX(${linkRect.left - navRect.left}px)`;
     navIndicator.style.opacity = "1";
   }
 
@@ -407,10 +413,10 @@
     link.addEventListener("mouseenter", () => moveIndicator(link));
     link.addEventListener("focus", () => moveIndicator(link));
   });
-  if (navList) {
-    navList.addEventListener("mouseleave", hideIndicator);
-    navList.addEventListener("focusout", (event) => {
-      if (!navList.contains(event.relatedTarget)) hideIndicator();
+  if (navCenter) {
+    navCenter.addEventListener("mouseleave", hideIndicator);
+    navCenter.addEventListener("focusout", (event) => {
+      if (!navCenter.contains(event.relatedTarget)) hideIndicator();
     });
   }
 
@@ -426,8 +432,9 @@
       : [];
   }
 
-  function setMenu(open) {
+  function setMenu(open, { restoreFocus = !open } = {}) {
     if (!mobileMenu || !menuButton) return;
+    const wasOpen = menuOpen;
     menuOpen = open;
     mobileMenu.classList.toggle("is-open", open);
     mobileMenu.setAttribute("aria-hidden", String(!open));
@@ -438,25 +445,25 @@
       if (footerEl) footerEl.setAttribute("inert", "");
       const focusables = menuFocusables();
       // Focus on the next frame so the menu is rendered visible and focusable.
-      if (focusables[0]) window.requestAnimationFrame(() => focusables[0].focus());
+      if (focusables[0]) {
+        window.requestAnimationFrame(() => {
+          if (menuOpen) focusables[0].focus();
+        });
+      }
     } else {
       mobileMenu.setAttribute("inert", "");
       if (mainEl) mainEl.removeAttribute("inert");
       if (footerEl) footerEl.removeAttribute("inert");
+      if (wasOpen && restoreFocus) menuButton.focus();
     }
   }
 
   if (mobileMenu && menuButton) {
     menuButton.addEventListener("click", () => setMenu(!menuOpen));
     mobileMenu.querySelectorAll(".mobile-link").forEach((link) =>
-      link.addEventListener("click", () => setMenu(false))
+      link.addEventListener("click", () => setMenu(false, { restoreFocus: false }))
     );
     mobileMenu.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") {
-        setMenu(false);
-        menuButton.focus();
-        return;
-      }
       if (event.key === "Tab") {
         const focusables = menuFocusables();
         if (focusables.length === 0) return;
@@ -474,19 +481,18 @@
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && menuOpen) {
         setMenu(false);
-        menuButton.focus();
       }
     });
   }
 
-  // --- Intro curtain: 0→100 progress then clip upward; skip reduced motion / <680 ---
+  // --- Intro curtain: 0→100 progress then clip upward; skip reduced motion / <=680 ---
   const curtain = document.getElementById("introCurtain");
   const curtainCount = document.getElementById("curtainCount");
   const rootEl = document.documentElement;
 
   function runCurtain() {
     if (!curtain) return;
-    if (reducedMotion.matches || window.innerWidth < 680) return;
+    if (reducedMotion.matches || window.innerWidth <= 680) return;
     rootEl.classList.add("curtain-active");
     const start = performance.now();
     const duration = 1400;

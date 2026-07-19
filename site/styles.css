@@ -127,9 +127,8 @@ img { display: block; }
 }
 .brand-link img { width: 27px; height: 27px; border-radius: 7px; }
 
-.nav-center { display: flex; justify-content: center; flex: 1; }
+.nav-center { position: relative; display: flex; justify-content: center; flex: 1; }
 .nav-links {
-  position: relative;
   display: flex;
   align-items: center;
   gap: clamp(18px, 2.4vw, 34px);
@@ -263,6 +262,10 @@ img { display: block; }
 .mobile-menu.is-open .mobile-link:nth-child(8) { transition-delay: 320ms; }
 .mobile-link:hover, .mobile-link:focus-visible { color: var(--coral); }
 .mobile-download { margin-top: 18px; color: var(--coral); }
+
+/* No-JS progressive fallback: hidden on desktop, visible and focusable on
+   mobile while the inert overlay trigger remains hidden without .has-js. */
+.nojs-mobile-nav { display: none; }
 
 /* Intro curtain — 0→100 progress, clips upward on exit */
 .intro-curtain {
@@ -646,7 +649,30 @@ footer img { width: 20px; height: 20px; border-radius: 5px; }
 @media (max-width: 900px) {
   .nav-center { display: none; }
   .header-download { display: none; }
-  .menu-button { display: grid; }
+  .has-js .menu-button { display: grid; }
+  .nojs-mobile-nav {
+    display: flex;
+    position: relative;
+    z-index: 21;
+    gap: 18px;
+    align-items: center;
+    padding: 76px 18px 14px;
+    overflow-x: auto;
+    color: var(--text-on-dark);
+    background: var(--ink);
+    scrollbar-width: none;
+  }
+  .nojs-mobile-nav::-webkit-scrollbar { display: none; }
+  .nojs-mobile-nav a {
+    flex: none;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    color: inherit;
+    font-size: 14px;
+    text-decoration: none;
+  }
+  .nojs-mobile-nav .download { color: var(--coral); font-weight: 600; }
 }
 
 /* Phones: 30px page gutter, stacked hero, ≥44px tap targets, no h-scroll */

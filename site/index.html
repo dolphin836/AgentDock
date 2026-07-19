@@ -33,8 +33,8 @@
           <li><a class="nav-link" href="#approval" data-i18n="navApproval">Approval</a></li>
           <li><a class="nav-link" href="#usage" data-i18n="navUsage">Usage</a></li>
           <li><a class="nav-link" href="#privacy" data-i18n="navPrivacy">Privacy</a></li>
-          <span class="nav-indicator" aria-hidden="true"></span>
         </ul>
+        <span class="nav-indicator" aria-hidden="true"></span>
       </nav>
       <div class="header-actions">
         <div class="language-toggle" role="group" aria-label="Language">
@@ -50,7 +50,7 @@
   </header>
 
   <div class="mobile-menu" id="mobileMenu" aria-hidden="true" inert>
-    <nav class="mobile-nav" aria-label="Menu">
+    <nav class="mobile-nav" aria-label="Mobile navigation">
       <a class="mobile-link" href="#value" data-i18n="navFocus">Focus</a>
       <a class="mobile-link" href="#status" data-i18n="navStatus">Status</a>
       <a class="mobile-link" href="#approval" data-i18n="navApproval">Approval</a>
@@ -61,6 +61,19 @@
       <a class="mobile-link mobile-download download" href="https://api.agentdockstatus.app/v1/download/AgentDock-0.2.4.dmg" data-i18n="download">Download for Mac</a>
     </nav>
   </div>
+
+  <noscript>
+    <nav class="nojs-mobile-nav" aria-label="Mobile navigation">
+      <a href="#value">Focus</a>
+      <a href="#status">Status</a>
+      <a href="#approval">Approval</a>
+      <a href="#usage">Usage</a>
+      <a href="#return">Return</a>
+      <a href="#integrations">Integrations</a>
+      <a href="#privacy">Privacy</a>
+      <a class="download" href="https://api.agentdockstatus.app/v1/download/AgentDock-0.2.4.dmg">Download for Mac</a>
+    </nav>
+  </noscript>
 
   <main id="main">
     <section id="top" class="hero dark-section" data-header="dark">

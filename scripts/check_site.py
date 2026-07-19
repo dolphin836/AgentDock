@@ -363,6 +363,24 @@ def main():
         ok = fail('#mobileMenu must start with aria-hidden="true"') and ok
     if parser.mobile_menu_inert is not True:
         ok = fail("#mobileMenu must start inert") and ok
+    nav_list_match = re.search(
+        r'<ul\s+class="nav-links"[^>]*>(?P<body>.*?)</ul>',
+        text,
+        re.DOTALL,
+    )
+    if not nav_list_match:
+        ok = fail("index.html must contain .nav-links list") and ok
+    elif "nav-indicator" in nav_list_match.group("body"):
+        ok = fail(".nav-links <ul> must contain only list items; move indicator outside") and ok
+    if not re.search(
+        r'</ul>\s*<span\s+class="nav-indicator"\s+aria-hidden="true"></span>',
+        text,
+    ):
+        ok = fail(".nav-indicator must be a sibling immediately after .nav-links") and ok
+    if '<noscript>' not in text or 'class="nojs-mobile-nav"' not in text:
+        ok = fail("index.html must provide a <noscript> mobile navigation fallback") and ok
+    if 'class="mobile-nav" aria-label="Mobile navigation"' not in text:
+        ok = fail(".mobile-nav must start with an English accessible name") and ok
 
     downloads = re.findall(
         r"https://api\.agentdockstatus\.app/v1/download/AgentDock-[0-9.]+\.dmg",
@@ -418,7 +436,11 @@ def main():
     missing_keys = parser.i18n_keys - (en_keys & zh_keys)
     if missing_keys:
         ok = fail(f"translation keys missing from main.js: {sorted(missing_keys)}") and ok
-    required_accessibility_keys = {"notchToggleLabel", "navMenu"}
+    required_accessibility_keys = {
+        "notchToggleLabel",
+        "navMenu",
+        "mobileNavLabel",
+    }
     missing_accessibility_keys = required_accessibility_keys - (en_keys & zh_keys)
     if missing_accessibility_keys:
         ok = fail(
@@ -430,6 +452,11 @@ def main():
         not in js
     ):
         ok = fail("language changes must update #notchToggle aria-label") and ok
+    if (
+        'mobileNav.setAttribute("aria-label", translations[currentLanguage].mobileNavLabel)'
+        not in js
+    ):
+        ok = fail("language changes must update .mobile-nav aria-label") and ok
 
     if parser.demo_views != DEMO_STATES:
         ok = fail(
@@ -489,6 +516,8 @@ def main():
         "@media (max-width: 900px)",
         "@media (max-width: 680px)",
         ".intro-curtain",
+        ".has-js .menu-button",
+        ".nojs-mobile-nav",
     )
     for contract in required_nav_css:
         if contract not in css:
@@ -500,10 +529,11 @@ def main():
         "scrollHideDelta = 12",
         "header.dataset.header",
         "curtain-active",
-        "< 680",
+        "<= 680",
         "setTimeout",
         '"Tab"',
         "inert",
+        "restoreFocus",
     )
     for contract in required_nav_js:
         if contract not in js:
