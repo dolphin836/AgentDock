@@ -117,7 +117,7 @@ function initHeroMotion() {
 let chapterTriggers = [];
 let chapterAnimations = [];
 let chapterGateOpen = false;
-let chapterProfile = "";
+let chapterLayoutKey = "";
 
 function initChapters() {
   if (!chapterGateOpen || !gsap || !ScrollTrigger || reducedMotion.matches) return;
@@ -247,6 +247,10 @@ function getChapterProfile() {
   ].join(":");
 }
 
+function getChapterLayoutKey() {
+  return [window.innerWidth, window.innerHeight, getChapterProfile()].join(":");
+}
+
 function rebuildChapters() {
   if (!chapterGateOpen) return;
   teardownChapters();
@@ -256,7 +260,7 @@ function rebuildChapters() {
 function openChapterGate() {
   if (chapterGateOpen) return;
   chapterGateOpen = true;
-  chapterProfile = getChapterProfile();
+  chapterLayoutKey = getChapterLayoutKey();
   initChapters();
 }
 
@@ -315,9 +319,12 @@ window.addEventListener(
     if (!chapterGateOpen || !ScrollTrigger) return;
     window.clearTimeout(chapterResizeTimer);
     chapterResizeTimer = window.setTimeout(() => {
-      const nextProfile = getChapterProfile();
-      if (nextProfile === chapterProfile) return;
-      chapterProfile = nextProfile;
+      // Every settled resize rebuilds size-dependent geometry. A profile may
+      // stay "desktop" while track overflow, tween x, pin end, and reveal/line
+      // trigger positions still change substantially (for example 1440→1024).
+      const nextLayoutKey = getChapterLayoutKey();
+      if (nextLayoutKey === chapterLayoutKey) return;
+      chapterLayoutKey = nextLayoutKey;
       rebuildChapters();
     }, 200);
   },
@@ -351,8 +358,8 @@ reducedMotion.addEventListener("change", () => {
   if (reducedMotion.matches) {
     rollbackHeroMotion();
   }
-  const nextProfile = getChapterProfile();
-  if (nextProfile === chapterProfile) return;
-  chapterProfile = nextProfile;
+  const nextLayoutKey = getChapterLayoutKey();
+  if (nextLayoutKey === chapterLayoutKey) return;
+  chapterLayoutKey = nextLayoutKey;
   rebuildChapters();
 });
