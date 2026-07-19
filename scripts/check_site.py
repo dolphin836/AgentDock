@@ -620,6 +620,10 @@ def main():
         "IntersectionObserver",
         "prefers-reduced-motion",
         "particles-active",
+        'reducedMotion.addEventListener("change"',
+        '"webglcontextlost"',
+        "preventDefault()",
+        "beginFallbackConvergence",
     )
     for contract in required_hero_particles:
         if contract not in hero_particles_js:
@@ -632,6 +636,10 @@ def main():
         "motion-ready",
         "clipPath",
         "prefers-reduced-motion",
+        '"agentdock:curtain-exit-start"',
+        '"agentdock:curtain-skipped"',
+        "rollbackHeroMotion",
+        "beginFallbackConvergence",
     )
     for contract in required_motion:
         if contract not in motion_source:
@@ -646,11 +654,39 @@ def main():
         ".hero-fallback",
         ".hero.particles-active .hero-fallback",
         ".hero-dot-grid",
+        ".hero-visual",
         ".motion-ready .hero-title",
+        "@media (max-height: 579px)",
     )
     for contract in required_hero_css:
         if contract not in css:
             ok = fail(f"styles.css missing hero contract: {contract}") and ok
+
+    # Curtain owns the start gate. Motion must never race beneath the intro:
+    # the curtain publishes an explicit exit-start event, while skipped
+    # (mobile/reduced-motion) paths publish an explicit immediate-start event.
+    required_curtain_gate = (
+        '"agentdock:curtain-exit-start"',
+        '"agentdock:curtain-skipped"',
+        "dispatchEvent",
+        "AgentDockCurtain",
+    )
+    for contract in required_curtain_gate:
+        if contract not in js:
+            ok = fail(f"main.js missing curtain/motion gate: {contract}") and ok
+
+    # `height: calc(100svh - 24px)` is strict one-viewport behavior only when
+    # the viewport can satisfy the 580px minimum. Below 580px the explicit
+    # max-height rule fixes the hero at 580px, allowing normal page scrolling
+    # instead of compressing/overlapping title, fallback product UI and CTA.
+    if not re.search(
+        r"@media\s*\(max-height:\s*579px\).*?\.hero\s*\{[^}]*height:\s*580px",
+        css,
+        re.DOTALL,
+    ):
+        ok = fail(
+            "styles.css must make <580px heroes 580px tall and vertically scrollable"
+        ) and ok
 
     if ok:
         print("PASS: site contract")

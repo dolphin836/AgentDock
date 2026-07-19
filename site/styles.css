@@ -300,8 +300,17 @@ img { display: block; }
 /* Full-cover WebGL particle canvas behind hero copy */
 .hero-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; display: block; }
 .hero.webgl-failed .hero-canvas { display: none; }
-/* Static CSS dot-grid + notch product UI, shown when WebGL is unavailable (design §8) */
-.hero-fallback { position: absolute; inset: 0; z-index: -1; overflow: hidden; }
+/* Static CSS dot-grid + notch product UI occupies the middle Grid row.
+   It is never an absolute overlay, so no-WebGL/no-JS cannot collide with the
+   title, CTA or description (design §8). */
+.hero-visual {
+  position: relative;
+  z-index: 0;
+  min-height: clamp(120px, 22vh, 210px);
+  display: grid;
+  place-items: center;
+}
+.hero-fallback { overflow: hidden; }
 .hero.particles-active .hero-fallback { display: none; }
 .hero-dot-grid {
   position: absolute;
@@ -313,18 +322,16 @@ img { display: block; }
   opacity: 0.55;
 }
 .hero-fallback .notch-shell {
-  position: absolute;
-  left: 50%;
-  bottom: clamp(20px, 6vh, 56px);
-  transform: translateX(-50%);
+  position: relative;
   width: min(560px, calc(100% - 48px));
-  min-height: 300px;
+  height: clamp(120px, 20vh, 190px);
+  min-height: 0;
 }
 /* Three-row grid: eyebrow / centered headline / download row */
 .hero-inner {
   height: 100%;
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto minmax(120px, 1fr) auto;
   padding-block: clamp(92px, 12vh, 148px) clamp(28px, 5vh, 56px);
 }
 .eyebrow {
@@ -336,7 +343,8 @@ img { display: block; }
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
-.hero-title { align-self: end; max-width: 1180px; margin: 0; font-size: clamp(3.4rem, 8vw, 7.8rem); line-height: 0.91; letter-spacing: -0.07em; font-weight: 600; }
+.hero-copy { display: grid; gap: clamp(16px, 3vh, 30px); }
+.hero-title { max-width: 1180px; margin: 0; font-size: clamp(3.4rem, 8vw, 7.8rem); line-height: 0.91; letter-spacing: -0.07em; font-weight: 600; }
 .hero-title span { display: block; }
 .hero-title .line { will-change: clip-path, transform; }
 .hero-title .accent { color: var(--coral); }
@@ -362,6 +370,17 @@ img { display: block; }
   transition: transform 200ms var(--ease-out), background 200ms var(--ease-out);
 }
 .primary-cta:hover { transform: translateY(-2px); background: oklch(0.76 0.12 25); }
+
+/* Strict one-viewport applies only when 580px fits. Shorter viewports keep the
+   580px minimum and use normal document scrolling, preventing compression and
+   overlap between the middle visual row and bottom copy. */
+@media (max-height: 579px) {
+  .hero { height: 580px; }
+  .hero-inner { padding-block: 70px 20px; }
+  .hero-visual { min-height: 110px; }
+  .hero-fallback .notch-shell { height: 110px; }
+  .hero-copy { gap: 12px; }
+}
 
 /* Notch shell (real AgentDock preview) */
 .notch-shell {

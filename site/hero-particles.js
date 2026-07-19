@@ -149,6 +149,8 @@ function markFallback() {
     uniforms: { uProgress: { value: 0 } },
     frameCount: 0,
     pixelRatio: 1,
+    fallbackConvergenceActive: false,
+    beginFallbackConvergence() {},
   };
 }
 
@@ -300,6 +302,8 @@ function init() {
     frameCount: 0,
     pixelRatio,
     _driven: false,
+    fallbackConvergenceActive: false,
+    beginFallbackConvergence,
   };
   window.AgentDockHero = hero;
 
@@ -308,24 +312,42 @@ function init() {
     hero.frameCount++;
   }
 
-  // Reduced motion: render one structured frame, never loop.
-  if (reducedMotion.matches) {
-    uniforms.uProgress.value = 1;
-    renderFrame();
-    window.addEventListener("resize", () => {
-      resize();
-      renderFrame();
-    });
-    return;
-  }
-
-  // --- Continuous loop with pausing ---
+  // --- One scheduler owns breathing and fallback convergence. ---
+  // Time only advances on rendered visible frames, so fallback convergence
+  // cannot progress while the canvas is offscreen or the document is hidden.
   let rafId = null;
   let visible = true;
+  let runtimeReduced = reducedMotion.matches;
+  let lastFrameTime = null;
+  let fallbackElapsed = 0;
+  const fallbackDuration = 1900;
   const allowInteraction = !coarsePointer.matches;
   const mouseTarget = new THREE.Vector2(999, 999);
 
+  function canRun() {
+    return hero.mode === "webgl" && visible && !document.hidden && !runtimeReduced;
+  }
+
+  function beginFallbackConvergence() {
+    if (hero.mode !== "webgl" || uniforms.uProgress.value >= 1) return;
+    hero._driven = false;
+    hero.fallbackConvergenceActive = true;
+    fallbackElapsed = uniforms.uProgress.value * fallbackDuration;
+    lastFrameTime = null;
+    start();
+  }
+
   function loop(now) {
+    rafId = null;
+    if (!canRun()) return;
+    const delta = lastFrameTime === null ? 0 : Math.min(50, now - lastFrameTime);
+    lastFrameTime = now;
+    if (hero.fallbackConvergenceActive) {
+      fallbackElapsed = Math.min(fallbackDuration, fallbackElapsed + delta);
+      const k = fallbackElapsed / fallbackDuration;
+      uniforms.uProgress.value = k * k * (3 - 2 * k);
+      if (k >= 1) hero.fallbackConvergenceActive = false;
+    }
     uniforms.uTime.value = now * 0.001;
     if (allowInteraction && uniforms.uMouseStrength.value > 0.001) {
       uniforms.uMouse.value.lerp(mouseTarget, 0.12);
@@ -335,7 +357,8 @@ function init() {
   }
 
   function start() {
-    if (rafId === null && visible && !document.hidden) {
+    if (rafId === null && canRun()) {
+      lastFrameTime = null;
       rafId = requestAnimationFrame(loop);
     }
   }
@@ -344,6 +367,16 @@ function init() {
       cancelAnimationFrame(rafId);
       rafId = null;
     }
+    lastFrameTime = null;
+  }
+
+  function switchToFallback() {
+    if (hero.mode === "fallback") return;
+    stop();
+    hero.mode = "fallback";
+    hero.fallbackConvergenceActive = false;
+    heroSection.classList.remove("particles-active");
+    heroSection.classList.add("webgl-failed");
   }
 
   document.addEventListener("visibilitychange", () => {
@@ -363,7 +396,35 @@ function init() {
     io.observe(canvas);
   }
 
-  window.addEventListener("resize", resize, { passive: true });
+  window.addEventListener(
+    "resize",
+    () => {
+      resize();
+      if (runtimeReduced && hero.mode === "webgl") renderFrame();
+    },
+    { passive: true }
+  );
+
+  reducedMotion.addEventListener("change", () => {
+    runtimeReduced = reducedMotion.matches;
+    if (runtimeReduced) {
+      stop();
+      hero.fallbackConvergenceActive = false;
+      uniforms.uProgress.value = 1;
+      if (hero.mode === "webgl") renderFrame();
+    } else {
+      start();
+    }
+  });
+
+  canvas.addEventListener(
+    "webglcontextlost",
+    (event) => {
+      event.preventDefault();
+      switchToFallback();
+    },
+    false
+  );
 
   if (allowInteraction) {
     window.addEventListener(
@@ -383,21 +444,32 @@ function init() {
     });
   }
 
-  start();
+  if (runtimeReduced) {
+    uniforms.uProgress.value = 1;
+    renderFrame();
+  } else {
+    start();
+  }
 
-  // Safety net: if motion.js never drives convergence (GSAP missing or errored),
-  // self-converge over 1.9s so particles never stay scattered.
-  setTimeout(() => {
-    if (hero._driven || uniforms.uProgress.value > 0.001) return;
-    const startTime = performance.now();
-    const duration = 1900;
-    function step(now) {
-      const k = Math.min(1, (now - startTime) / duration);
-      uniforms.uProgress.value = k * k * (3 - 2 * k);
-      if (k < 1) requestAnimationFrame(step);
-    }
-    requestAnimationFrame(step);
-  }, 500);
+  // Arm the no-GSAP safety net only after the curtain gate opens. It delegates
+  // to the unified scheduler above; it never creates a second RAF chain.
+  let safetyArmed = false;
+  function armSafetyNet() {
+    if (safetyArmed || runtimeReduced) return;
+    safetyArmed = true;
+    setTimeout(() => {
+      if (!hero._driven && uniforms.uProgress.value < 1) {
+        beginFallbackConvergence();
+      }
+    }, 500);
+  }
+  const curtainState = window.AgentDockCurtain && window.AgentDockCurtain.state;
+  if (curtainState === "skipped" || curtainState === "exiting" || curtainState === "complete") {
+    armSafetyNet();
+  } else {
+    document.addEventListener("agentdock:curtain-exit-start", armSafetyNet, { once: true });
+    document.addEventListener("agentdock:curtain-skipped", armSafetyNet, { once: true });
+  }
 }
 
 init();

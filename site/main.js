@@ -521,20 +521,37 @@
   const curtain = document.getElementById("introCurtain");
   const curtainCount = document.getElementById("curtainCount");
   const rootEl = document.documentElement;
+  const curtainLifecycle = { state: "pending" };
+  window.AgentDockCurtain = curtainLifecycle;
+
+  function publishCurtainState(state, eventName) {
+    curtainLifecycle.state = state;
+    document.dispatchEvent(new CustomEvent(eventName, { detail: { state } }));
+  }
 
   function runCurtain() {
-    if (!curtain) return;
-    if (reducedMotion.matches || window.innerWidth <= 680) return;
+    if (!curtain || reducedMotion.matches || window.innerWidth <= 680) {
+      publishCurtainState("skipped", "agentdock:curtain-skipped");
+      return;
+    }
+    curtainLifecycle.state = "running";
     rootEl.classList.add("curtain-active");
     const start = performance.now();
     const duration = 1400;
     let finished = false;
+    let completed = false;
 
     function finish() {
       if (finished) return;
       finished = true;
+      publishCurtainState("exiting", "agentdock:curtain-exit-start");
       curtain.classList.add("is-done");
-      const cleanup = () => rootEl.classList.remove("curtain-active");
+      const cleanup = () => {
+        rootEl.classList.remove("curtain-active");
+        if (completed) return;
+        completed = true;
+        publishCurtainState("complete", "agentdock:curtain-complete");
+      };
       curtain.addEventListener("transitionend", cleanup, { once: true });
       setTimeout(cleanup, 900);
     }
