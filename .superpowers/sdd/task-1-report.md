@@ -12,14 +12,14 @@ GREEN；本地提交信息见 Commit 段。
   - 上游：`https://github.com/mrdoob/three.js`
   - 获取产物：`build/three.core.min.js`、`build/three.module.min.js`
   - 许可证：MIT，完整文本已写入 `site/vendor/LICENSES.txt`
-  - 实际 npm registry tarball：`https://registry.npmmirror.com/three/-/three-0.185.1.tgz`
+  - 官方 npm registry tarball：`https://registry.npmjs.org/three/-/three-0.185.1.tgz`
 - GSAP `3.15.0`
   - 包：`gsap@3.15.0`
   - 上游：`https://github.com/greensock/GSAP`
   - 获取产物：`dist/gsap.min.js`、`dist/ScrollTrigger.min.js`
   - 许可证：GSAP Standard “No Charge” License
   - 许可证地址：`https://gsap.com/standard-license/`
-  - 实际 npm registry tarball：`https://registry.npmmirror.com/gsap/-/gsap-3.15.0.tgz`
+  - 官方 npm registry tarball：`https://registry.npmjs.org/gsap/-/gsap-3.15.0.tgz`
 
 两项依赖均通过 npm 的 `latest` dist-tag 安装，再从包内复制浏览器产物；网站运行时不访问 CDN。
 
@@ -83,4 +83,5 @@ GREEN；本地提交信息见 Commit 段。
 ## Concerns
 
 - GSAP 使用其 Standard “No Charge” License，不是开源许可证；发布前应确认网站使用场景符合当前条款。
-- 当前 npm 配置从 `registry.npmmirror.com` 获取 tarball；完整性由 npm 的 SHA-512 校验和二次精确版本逐文件比较确认。
+- 最终复核改用 `registry.npmjs.org` 官方 tarball；官方 SHA-512 integrity
+  校验通过，且四个 vendored JavaScript 文件与官方包内字节逐一一致。

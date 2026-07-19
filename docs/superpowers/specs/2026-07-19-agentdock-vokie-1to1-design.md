@@ -1,7 +1,7 @@
 <!-- [skill: go-team-standards · 技术方案] AgentDock 官网 Vokie 机制 1:1 重做 -->
 # AgentDock 官网 Vokie 机制 1:1 重做设计
 
-日期：2026-07-19  
+日期：2026-07-19
 状态：用户已确认
 
 ## 1. 目标
