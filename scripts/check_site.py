@@ -43,6 +43,8 @@ REQUIRED_IDS = {
 REQUIRED_IDS.update({"siteHeader", "heroStage"})
 # Task 2 owns the adaptive navigation, intro curtain, and mobile menu nodes.
 REQUIRED_IDS.update({"menuButton", "mobileMenu", "introCurtain"})
+# Task 3 owns the one-viewport particle hero: the full-cover WebGL canvas.
+REQUIRED_IDS.update({"heroCanvas"})
 PRODUCT_SECTIONS = {
     "value", "status", "approval", "usage",
     "return", "integrations", "privacy", "download",
@@ -573,6 +575,82 @@ def main():
         ok = fail(
             "Escape notch handler must not refocus #notchToggle after closing it"
         ) and ok
+
+    # [skill: go-team-standards · Vokie 1:1] Task 3: one-viewport particle hero
+    # 静态锁定关键机制常量与降级钩子；粒子数量/收束/暂停/降级由浏览器行为测试验证。
+    hero_particles = SITE / "hero-particles.js"
+    motion_js = SITE / "motion.js"
+    for name in ("hero-particles.js", "motion.js"):
+        if not (SITE / name).is_file():
+            ok = fail(f"missing site/{name}") and ok
+
+    required_hero_scripts = (
+        "./vendor/gsap.min.js",
+        "./vendor/ScrollTrigger.min.js",
+        "./hero-particles.js",
+        "./motion.js",
+    )
+    for src in required_hero_scripts:
+        if src not in parser.scripts:
+            ok = fail(f"index.html must load {src}") and ok
+    for module_src in ("./hero-particles.js", "./motion.js"):
+        if not re.search(
+            rf'<script[^>]*\btype="module"[^>]*\bsrc="{re.escape(module_src)}"'
+            rf'|<script[^>]*\bsrc="{re.escape(module_src)}"[^>]*\btype="module"',
+            text,
+        ):
+            ok = fail(f"{module_src} must be loaded as type=module") and ok
+
+    hero_particles_js = (
+        hero_particles.read_text(encoding="utf-8") if hero_particles.is_file() else ""
+    )
+    motion_source = motion_js.read_text(encoding="utf-8") if motion_js.is_file() else ""
+    # 结构化/散乱双位置 shader、粒子数量分级、DPR 上限、可见性/离屏暂停、
+    # reduced-motion 静态、WebGL 失败降级钩子。
+    required_hero_particles = (
+        "./vendor/three.module.min.js",
+        "uProgress",
+        "aScatter",
+        "aStructured",
+        "2200",
+        "1200",
+        "powerPreference",
+        "1.5",
+        "visibilitychange",
+        "IntersectionObserver",
+        "prefers-reduced-motion",
+        "particles-active",
+    )
+    for contract in required_hero_particles:
+        if contract not in hero_particles_js:
+            ok = fail(f"hero-particles.js missing hero contract: {contract}") and ok
+
+    # GSAP 驱动 1.9s 收束、标题裁切入场、motion-ready 门控与 reduced-motion 静态。
+    required_motion = (
+        "gsap",
+        "1.9",
+        "motion-ready",
+        "clipPath",
+        "prefers-reduced-motion",
+    )
+    for contract in required_motion:
+        if contract not in motion_source:
+            ok = fail(f"motion.js missing hero contract: {contract}") and ok
+
+    required_hero_css = (
+        ".hero-canvas",
+        "z-index: -1",
+        "calc(100svh - 24px)",
+        "min-height: 580px",
+        "grid-template-rows:",
+        ".hero-fallback",
+        ".hero.particles-active .hero-fallback",
+        ".hero-dot-grid",
+        ".motion-ready .hero-title",
+    )
+    for contract in required_hero_css:
+        if contract not in css:
+            ok = fail(f"styles.css missing hero contract: {contract}") and ok
 
     if ok:
         print("PASS: site contract")

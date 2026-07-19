@@ -77,48 +77,50 @@
 
   <main id="main">
     <section id="top" class="hero dark-section" data-header="dark">
-      <div class="hero-inner shell">
-        <p class="eyebrow reveal" data-i18n="heroEyebrow">Every agent, at a glance</p>
-        <h1 class="hero-title reveal">
-          <span data-i18n="heroLine1">Your agents are working.</span>
-          <span class="accent" data-i18n="heroLine2">You stay in flow.</span>
-        </h1>
-        <div class="hero-bottom reveal">
-          <a class="primary-cta download" href="https://api.agentdockstatus.app/v1/download/AgentDock-0.2.4.dmg" data-i18n="download">Download for Mac</a>
-          <p class="hero-description" data-i18n="heroDescription">Live status, approvals, and usage in your macOS notch.</p>
-        </div>
-        <div class="hero-stage reveal" id="heroStage">
-          <div class="notch-shell" aria-label="Interactive AgentDock preview">
-            <div class="menu-bar">
-              <span class="menu-brand"><img src="./favicon.png" alt="">AgentDock</span>
-              <span class="menu-meta"><span>MacBook Pro</span><span>9:41</span></span>
-            </div>
-            <div class="notch-wrap" id="notchWrap" data-demo-state data-active-state="running">
-              <button class="notch-trigger" id="notchToggle" type="button" aria-label="Show AgentDock status" aria-expanded="false" aria-controls="notchPanel">
-                <span class="notch-chip run"><i class="state-dot run" aria-hidden="true"></i><span data-demo-view="running" data-i18n="running">Running</span></span>
-                <span class="notch-chip need"><i class="state-dot need" aria-hidden="true"></i><span data-demo-view="waiting" data-i18n="needsYou">Needs you</span></span>
-                <span class="notch-chip usage"><i class="state-dot usage" aria-hidden="true"></i><span data-demo-view="usage" data-i18n="usage">Usage</span></span>
-              </button>
-              <div class="notch-panel" id="notchPanel">
-                <div class="panel-title"><strong>AGENTDOCK</strong><span data-i18n="panelHint">Click to pin</span></div>
-                <div class="session-list">
-                  <div class="session-row">
-                    <div><div class="session-name">Claude Code</div><div class="session-detail">api-gateway · opus-4.1</div></div>
-                    <span class="session-status run" data-i18n="running">Running</span>
-                  </div>
-                  <div class="session-row">
-                    <div><div class="session-name">Codex</div><div class="session-detail">checkout-flow · gpt-5</div></div>
-                    <span class="session-status need" data-i18n="needsYou">Needs you</span>
-                  </div>
-                  <div class="session-row">
-                    <div><div class="session-name">Cursor</div><div class="session-detail">weekly · 38% used</div></div>
-                    <span class="session-status usage" data-i18n="usage">Usage</span>
-                  </div>
+      <canvas class="hero-canvas" id="heroCanvas" aria-hidden="true"></canvas>
+      <div class="hero-fallback" id="heroStage">
+        <div class="hero-dot-grid" aria-hidden="true"></div>
+        <div class="notch-shell" aria-label="Interactive AgentDock preview">
+          <div class="menu-bar">
+            <span class="menu-brand"><img src="./favicon.png" alt="">AgentDock</span>
+            <span class="menu-meta"><span>MacBook Pro</span><span>9:41</span></span>
+          </div>
+          <div class="notch-wrap" id="notchWrap" data-demo-state data-active-state="running">
+            <button class="notch-trigger" id="notchToggle" type="button" aria-label="Show AgentDock status" aria-expanded="false" aria-controls="notchPanel">
+              <span class="notch-chip run"><i class="state-dot run" aria-hidden="true"></i><span data-demo-view="running" data-i18n="running">Running</span></span>
+              <span class="notch-chip need"><i class="state-dot need" aria-hidden="true"></i><span data-demo-view="waiting" data-i18n="needsYou">Needs you</span></span>
+              <span class="notch-chip usage"><i class="state-dot usage" aria-hidden="true"></i><span data-demo-view="usage" data-i18n="usage">Usage</span></span>
+            </button>
+            <div class="notch-panel" id="notchPanel">
+              <div class="panel-title"><strong>AGENTDOCK</strong><span data-i18n="panelHint">Click to pin</span></div>
+              <div class="session-list">
+                <div class="session-row">
+                  <div><div class="session-name">Claude Code</div><div class="session-detail">api-gateway · opus-4.1</div></div>
+                  <span class="session-status run" data-i18n="running">Running</span>
+                </div>
+                <div class="session-row">
+                  <div><div class="session-name">Codex</div><div class="session-detail">checkout-flow · gpt-5</div></div>
+                  <span class="session-status need" data-i18n="needsYou">Needs you</span>
+                </div>
+                <div class="session-row">
+                  <div><div class="session-name">Cursor</div><div class="session-detail">weekly · 38% used</div></div>
+                  <span class="session-status usage" data-i18n="usage">Usage</span>
                 </div>
               </div>
             </div>
-            <p class="stage-note" data-i18n="stageNote">Hover, click, or focus the notch to open the live panel.</p>
           </div>
+          <p class="stage-note" data-i18n="stageNote">Hover, click, or focus the notch to open the live panel.</p>
+        </div>
+      </div>
+      <div class="hero-inner shell">
+        <p class="eyebrow reveal" data-i18n="heroEyebrow">Every agent, at a glance</p>
+        <h1 class="hero-title">
+          <span class="line" data-i18n="heroLine1">Your agents are working.</span>
+          <span class="line accent" data-i18n="heroLine2">You stay in flow.</span>
+        </h1>
+        <div class="hero-bottom">
+          <a class="primary-cta download" href="https://api.agentdockstatus.app/v1/download/AgentDock-0.2.4.dmg" data-i18n="download">Download for Mac</a>
+          <p class="hero-description" data-i18n="heroDescription">Live status, approvals, and usage in your macOS notch.</p>
         </div>
       </div>
     </section>
@@ -308,5 +310,9 @@
   </footer>
 
   <script src="./main.js"></script>
+  <script src="./vendor/gsap.min.js"></script>
+  <script src="./vendor/ScrollTrigger.min.js"></script>
+  <script type="module" src="./hero-particles.js"></script>
+  <script type="module" src="./motion.js"></script>
 </body>
 </html>
