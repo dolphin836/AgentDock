@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# [skill: go-team-standards · dev-dna] 校验本地动效依赖并禁止运行时 CDN
 from html.parser import HTMLParser
 from pathlib import Path
 import re
@@ -8,6 +9,21 @@ ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT / "site"
 HTML = SITE / "index.html"
 REQUIRED_FILES = ("styles.css", "main.js")
+REQUIRED_VENDOR_FILES = (
+    "three.module.min.js",
+    "gsap.min.js",
+    "ScrollTrigger.min.js",
+    "LICENSES.txt",
+)
+# Module entry points and scene IDs are activated with their implementations:
+# Task 2 owns navigation IDs, Task 3 owns the hero scene, and Task 4 owns
+# motion.js, the context scene, and the journey scene. Requiring them here
+# would reward empty placeholder nodes instead of tested behavior.
+RUNTIME_CDN_PATTERN = re.compile(
+    r"https?://(?:cdn\.jsdelivr\.net|unpkg\.com|cdnjs\.cloudflare\.com|"
+    r"esm\.sh|cdn\.skypack\.dev)(?:/|$)",
+    re.IGNORECASE,
+)
 REQUIRED_IDS = {
     "main", "top", "value", "status", "approval", "usage",
     "return", "integrations", "privacy", "download",
@@ -176,6 +192,26 @@ def main():
     for name in REQUIRED_FILES:
         if not (SITE / name).is_file():
             ok = fail(f"missing site/{name}") and ok
+
+    for name in REQUIRED_VENDOR_FILES:
+        vendor_file = SITE / "vendor" / name
+        if not vendor_file.is_file():
+            ok = fail(f"missing site/vendor/{name}") and ok
+        elif vendor_file.stat().st_size == 0:
+            ok = fail(f"empty site/vendor/{name}") and ok
+
+    runtime_sources = [
+        path
+        for path in SITE.rglob("*")
+        if path.is_file()
+        and path.suffix in {".html", ".css", ".js"}
+        and "vendor" not in path.parts
+    ]
+    for path in runtime_sources:
+        content = path.read_text(encoding="utf-8")
+        if RUNTIME_CDN_PATTERN.search(content):
+            relative_path = path.relative_to(ROOT)
+            ok = fail(f"{relative_path} must not reference a runtime CDN") and ok
 
     missing_ids = REQUIRED_IDS - parser.ids
     if missing_ids:
