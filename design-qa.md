@@ -1,123 +1,121 @@
-<!-- [skill: go-team-standards · 部署发布 · QA 记录] AgentDock homepage verification evidence -->
+<!-- [skill: go-team-standards · 部署发布 · QA 记录] AgentDock 首页 Vokie 机制对照与发布验证 -->
 # AgentDock Website Design QA
 
-## Comparison target
+## Scope and evidence standard
 
-The route under review is `site/index.html`. Task 6 compares AgentDock 1:1
-against the live Vokie site (https://vokie.com/) on *mechanism and composition*,
-not pixels: the same adaptive navigation, one-viewport particle hero, rounded
-`clip-path` chapter reveal, expanding capability panels, masked second particle
-field, pinned horizontal product journey, vertical-line background, and the
-left/right out-bleed cards — rendered with AgentDock's own brand, copy, product
-UI and particle shapes. No Vokie logo, image, copy, code, or particle shape is
-reproduced.
+The route under review is `site/index.html`. “1:1” means alignment of Vokie's
+layout and interaction mechanisms while retaining AgentDock's original brand,
+copy, product UI, palette and particle shapes. Verdicts below therefore use
+**mechanism aligned**, not pixel-match claims.
 
-## Evidence captured on 2026-07-19
+All screenshots were captured on 2026-07-19 with local Google Chrome/CDP.
+Evidence is local and git-ignored under `.superpowers/sdd/nav-tests/`.
 
-All frames were captured with local Chrome over CDP (puppeteer-core, real
-`Google Chrome`). Live Vokie reference frames and local AgentDock frames were
-taken at matching viewports and scroll positions. These are local, uncommitted
-evidence files under the git-ignored `.superpowers/sdd/nav-tests/` tree.
+## Viewport evidence
 
-Live Vokie reference (read-only): `.superpowers/sdd/nav-tests/vokie/`
-- `vokie-1440-hero.png`, `vokie-1440-nav-condensed.png`, `vokie-1440-s1..s6.png`,
-  `vokie-1440-cta.png`, `vokie-1440-full.png`, `vokie-390-hero.png`,
-  `vokie-390-full.png`.
-
-Local AgentDock: `.superpowers/sdd/nav-tests/task6/`
-- Desktop 1440×1000: `t6-1440-hero-settled-en.png`, `t6-1440-hero-zh.png`,
-  `t6-1440-nav-condensed.png`, `t6-1440-value.png`, `t6-1440-capabilities.png`,
-  `t6-1440-context-settled.png`, `t6-1440-journey-run.png`,
-  `t6-1440-journey-mid.png`, `t6-1440-journey-end.png`,
-  `t6-1440-integrations.png`, `t6-1440-privacy.png`, `t6-1440-cta.png`.
-- Desktop 1280×800: `t6-1280-hero.png`, `t6-1280-journey-run.png`.
-- Tablet 834×1194: `t6-834-hero.png`, `t6-834-capabilities.png`.
-- Mobile 390×844: `t6-390-hero-en.png`, `t6-390-hero-zh.png`, `t6-390-full.png`,
-  `t6-390-menu-open.png`.
-- Mobile 360×800: `t6-360-hero.png`, `t6-360-full.png`.
-- Degradation: `t6-1440-reduced.png`, `t6-1440-nojs.png`, `t6-390-nojs.png`,
-  `t6-1440-nowebgl.png`.
-- Critique-and-fix evidence: `t6-390-menu-open-scrolled-FIXED.png`.
-
-## Mechanism comparison (live Vokie vs local, 1440 unless noted)
-
-| Mechanism | Live Vokie | Local AgentDock | Result |
+| Viewport/state | Live Vokie reference | Local AgentDock evidence | Observed difference |
 | --- | --- | --- | --- |
-| Nav initial | Full-width thin bar: brand / center links / actions | Same three-region 80px bar (`所有…` links, EN·中文, 下载) | Match |
-| Nav condensed | Floating dark capsule (~920, blur, border) after scroll | Capsule at `min(920px, …)` height 58, `blur(14px)`, top 11px | Match |
-| Nav theme / hide | Foreground follows chapter; hides on scroll-down | `data-header` per section; direction hide past one viewport | Match |
-| Hero | One viewport; particles converge into a blob behind title | One viewport; 2200/1200 particles converge (1.9s) into the AgentDock notch + two status bands; title, CTA, description | Match (original shape) |
-| First light chapter | Rounded top slice revealing on scroll | `.reveal-band` rounded 30px top, `clip-path` reveal from right | Match |
-| Feature panels | Horizontal expanding colored panels | Four dark capability panels, active grows to 40% w/ coral border | Match (brand palette) |
-| Second particle field | Prominent dot field behind centered copy | Masked/vignetted stream field, deliberately calm per design §5.3 | Match (intentionally subtler) |
-| Product journey | Desktop pinned horizontal track + progress line | `.journey.is-pinned` horizontal track, coral scaleX progress bar | Match |
-| Vertical lines | Low-contrast vertical lines background | Five `.context-lines` columns grow on scroll | Match |
-| Privacy card | Light card bleeding to a page edge | `.bleed-card.bleed-left` light card | Match |
-| Final CTA | Accent card bleeding to opposite edge | `.bleed-card.bleed-right` coral card | Match (coral vs blue) |
-| Mobile menu | Four-square button → full-screen clipped menu | Same four-square button, full-screen `clip-path` staggered links | Match |
+| 1440×1000 hero | `vokie/vokie-1440-hero.png` | `task6/t6-1440-hero-settled-en.png` | Both are one viewport with centered particle structure; AgentDock uses a coral notch/status-band shape and editorial title placement. |
+| 1440×1000 condensed nav | `vokie/vokie-1440-nav-condensed.png` | `task6/t6-1440-nav-condensed.png` | Both become a blurred floating capsule; AgentDock retains bilingual controls and coral action styling. |
+| 1440×1000 context field | `vokie/vokie-1440-s1.png` | `task6/t6-1440-context-density-final.png` | Middle-field visual density is now comparable; Vokie uses a uniform grid, AgentDock uses three original converging streams. |
+| 1280×800 hero | `vokie/vokie-1280-hero.png` | `task6/t6-1280-hero.png` | Mechanism aligned; typography, copy and particle geometry intentionally differ. |
+| 834×1194 hero | `vokie/vokie-834-hero.png` | `task6/t6-834-hero.png` | Mechanism aligned; both preserve the one-screen composition and mobile header mode. |
+| 390×844 hero | `vokie/vokie-390-hero.png` | `task6/t6-390-hero-en.png` | Mechanism aligned; AgentDock uses a full-width download action and notch silhouette. |
+| 390×844 menu open | `vokie/vokie-390-menu-open.png` | `task6/t6-390-menu-open.png` | Both use a full-screen dark menu; Vokie is a 2×2 grid, AgentDock is an editorial vertical list with clipped reveal. |
+| 360×800 hero | `vokie/vokie-360-hero.png` | `task6/t6-360-hero.png` | Mechanism aligned; no local horizontal overflow. |
 
-## Browser matrix (evidence-backed)
+Additional local chapter evidence:
 
-| Surface | Result |
+- Reveal band: `task6/t6-1440-value.png`.
+- Capability panels: `task6/t6-1440-capabilities.png`,
+  `task6/t6-834-capabilities.png`.
+- Pinned journey/progress: `task6/t6-1440-journey-run.png`,
+  `task6/t6-1440-journey-mid.png`, `task6/t6-1440-journey-end.png`,
+  `task6/t6-1280-journey-run.png`.
+- Vertical lines, privacy left bleed, CTA right bleed:
+  `task6/t6-1440-integrations.png`, `task6/t6-1440-privacy.png`,
+  `task6/t6-1440-cta.png`.
+- Fallbacks: `task6/t6-1440-reduced.png`,
+  `task6/t6-1440-nojs.png`, `task6/t6-390-nojs.png`,
+  `task6/t6-1440-nowebgl.png`.
+
+## Mechanism verdicts
+
+| Mechanism | Evidence-backed verdict |
 | --- | --- |
-| Desktop 1440×1000 EN/ZH | Rendered; hero particles reach `uProgress=1` (2200 pts, 119 frames); zero document overflow. |
-| Desktop 1280×800 | Journey pins horizontally (tall enough); zero overflow. |
-| Tablet 834×1194 | Four capability panels legible; zero overflow. |
-| Mobile 390×844 EN/ZH | Hero fits one viewport (1200 pts, converged); full-screen menu opens; zero overflow. |
-| Mobile 360×800 | Full-page render; zero overflow. |
-| Language | `setLanguage` round-trips: `zh-CN`/`en` on `<html lang>`, hero copy, and `#notchToggle`/`#menuButton`/`.mobile-nav` aria-labels. |
-| Notch (WebGL fallback) | Hidden (`display:none`) while particles active; visible & interactive when WebGL fails; hover/click-pin open, pointer-away keeps pinned, Escape closes. |
-| Approval demo | Allow/Review/Deny set `approved`/`review`/`denied` with matching `aria-pressed`. |
-| Reduced motion | Curtain skipped, no `.reveal` hidden, hero `uProgress=1`, `motion-ready` absent. |
-| JavaScript disabled | English content, notch product UI, nav anchors and downloads all visible/usable; zero overflow. |
-| WebGL disabled | Hero and context fall back to CSS dot-grid / masked paper; content intact. Three.js logs its own context-creation error, then the guarded fallback engages. |
-| saveData / low memory / low CPU | Hero drops to 1200 pts, context to 800 pts; content unaffected. |
-| Resources / console | Three raster favicons load (natural width 64); one stylesheet; no console errors or failed requests on the happy path; all `.download` links resolve to `…/AgentDock-0.2.4.dmg`. |
+| Initial / condensed navigation | Mechanism aligned: 80px full-width bar, then `min(920px, …)` × 58px capsule at 22vh; themed foreground and direction hide/show. |
+| Hero | Mechanism aligned: one viewport, title and lower action row, 1.9s convergence; AgentDock's shape is original. |
+| Reveal band | Mechanism aligned: rounded light slice with right-to-left `clip-path` reveal. |
+| Capability panels | Mechanism aligned: horizontal expansion on desktop and vertical cards on mobile; styling/content differ. |
+| Context particles | Mechanism aligned after review fix: broad masked middle field with reference-level density; geometry remains three AgentDock streams rather than Vokie's grid. |
+| Journey | Mechanism aligned: desktop pin + horizontal translation + progress; vertical degradation below 901px, under 700px height, or reduced motion. |
+| Integrations / cards | Mechanism aligned: five growing vertical lines, privacy left bleed, final CTA right bleed. |
+| Mobile menu | Mechanism aligned at interaction level: four-square control, full-screen overlay, Escape/focus management. Composition intentionally differs from Vokie's 2×2 menu. |
 
-## Critique and correction
+## Review findings and RED → GREEN evidence
 
-First real critique-and-fix round found a material mobile interaction defect:
-while the full-screen mobile menu is open, scrolling down triggered the header's
-direction-hide logic and slid the header — including the four-square button that
-is the only touch close control — off-screen (measured `btnTop=-72`, header
-`translateY(-89.7px)`, not reachable) while the menu stayed open, stranding a
-touch user.
+### Executable mobile-menu regression
 
-Regression-first: four browser assertions were added to
-`.superpowers/sdd/nav-tests/nav.test.mjs` (menu stays open, header not hidden,
-close button on-screen and reachable while scrolling with the menu open). They
-were RED against the prior code (3 failures). The minimal fix in `site/main.js`
-makes `updateHeader()` keep the header shown whenever `#mobileMenu` has the
-`is-open` class. `scripts/check_site.py` gained a matching static contract. The
-tests then passed (nav 63/0); `t6-390-menu-open-scrolled-FIXED.png` shows the
-header capsule and close control remaining on-screen (`btnTop=18`).
+The previous proof lived only in `.superpowers`. It is now committed as
+`scripts/check_site_browser.mjs`, using only Node built-ins, global WebSocket,
+and local Chrome CDP—no npm package.
 
-## Release substitution check
+The test runs 390×844 and 360×800, opens the menu, verifies first-link focus,
+scrolls down, confirms the header and close control remain visible/reachable,
+then sends Escape and verifies closed ARIA state plus restored toggle focus.
 
-Using a temporary copy of `site/index.html`, the same two Python regex
-substitutions in `scripts/package.sh` (version `9.9.9`) changed all five
-versioned download URLs to the test DMG URL and updated the visible `<b>v…</b>`
-label. A SHA-256 comparison confirmed the real `site/index.html` was unchanged.
+RED was reproduced against detached commit `ea3c2cb`:
+`FAIL: header remains visible while mobile menu is open`.
+GREEN on the current site: all 17 browser assertions pass. The source-string
+assertion in `scripts/check_site.py` remains auxiliary only.
 
-## Command results
+### Context particle density
 
-| Command | Result |
-| --- | --- |
-| `python3 scripts/check_site.py` | `PASS: site contract` |
-| `node --check` (main/motion/hero-particles/context-particles) | All OK |
-| `swift test` | 91 tests in 28 suites passed |
-| `git diff --check` | Clean (exit 0) |
-| Browser suites (nav/hero/journey/nojs/task5) | 63 / 86 / 92 / all / 81 passed, 0 failed |
+First comparison:
+`task6/t6-1440-context-settled.png` versus `vokie/vokie-1440-s1.png`
+showed AgentDock's field was materially too sparse.
+
+RED: the committed browser contract required a capable tier of at least 4000
+points, point size ≥4.8, base alpha ≥0.28, peak alpha ≥0.9 and a 12%–88%
+visible mask; the old 1600 / 3.0 / 0.12–0.62 implementation failed.
+
+GREEN: capable desktops now use 4000 points, size 5.0 and alpha 0.30–0.95;
+stream fan/control spread is wider, the vertical mask is 12%–88%, and the
+vignette exposes more of the middle. Final screenshot:
+`task6/t6-1440-context-density-final.png`. The original three-stream convergence
+is preserved. `saveData`, ≤4GB memory, ≤4 CPU cores, or coarse pointer uses the
+1600-point constrained tier; the committed CDP test verifies this downgrade.
+
+## Release replacement
+
+Release replacement is now reproducible without packaging:
+
+- `scripts/update_site_release.py` accepts explicit `--html`, `--version` and
+  `--url`.
+- `scripts/package.sh` delegates only the HTML replacement to that helper.
+- `scripts/test_update_site_release.py` copies the real index to a temporary
+  path, covers existing DMG plus legacy PKG links and both visible label forms,
+  then verifies the real `site/index.html` SHA-256 is unchanged.
+
+RED: test failed because `update_site_release.py` did not exist. GREEN: one
+test passes; 6 temporary links and 2 labels are replaced. No package was built
+and the production version remains `0.2.4`.
+
+## Accessibility, degradation and console evidence
+
+- EN/ZH, mobile focus trap, Escape, ARIA state, reduced motion, JS disabled,
+  WebGL failure, saveData/low-memory tiering, resources and happy-path console
+  were exercised.
+- **Accepted WebGL exception:** forcing WebGL creation failure produces
+  Three.js's expected `THREE.WebGLRenderer: Error creating WebGL context`
+  console error before AgentDock catches the constructor failure and exposes
+  the CSS/product fallback. This path is not claimed console-clean.
+- Happy-path page traversal has no console errors or failed local resources.
 
 ## Concerns
 
-- P3: The second (context) particle field is deliberately faint per design §5.3
-  ("no full-page uniform noise"); it renders (webgl, 200+ frames) but reads much
-  quieter than Vokie's prominent dot grid. This is an intentional divergence, not
-  a defect.
-- P3: When WebGL is unavailable, Three.js emits its own
-  `THREE.WebGLRenderer: Error creating WebGL context` console error before the
-  guarded fallback engages. It is third-party and harmless; the fallback UI is
-  correct.
-- Screenshot and reference frames are local, git-ignored evidence and are not
-  committed.
+- Screenshots remain local, git-ignored evidence rather than repository assets.
+- The WebGL-failure console entry is an explicitly accepted third-party
+  exception; fallback content remains functional.
+- Constrained devices intentionally render 1600 context particles rather than
+  the 4000-point desktop field to protect battery and memory.

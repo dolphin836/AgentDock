@@ -747,8 +747,8 @@ img { display: block; }
   height: 100%;
   z-index: -2;
   display: block;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 20%, #000 80%, transparent 100%);
-  mask-image: linear-gradient(to bottom, transparent 0%, #000 20%, #000 80%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 12%, #000 88%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 12%, #000 88%, transparent 100%);
 }
 #context.context-failed .context-canvas { display: none; }
 .context-mask {
@@ -756,15 +756,15 @@ img { display: block; }
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background: radial-gradient(120% 68% at 50% 50%, transparent 42%, var(--paper) 100%);
+  background: radial-gradient(120% 76% at 50% 50%, transparent 58%, var(--paper) 100%);
 }
 .context-copy { position: relative; z-index: 1; max-width: 62ch; margin-inline: auto; text-align: center; }
 .context-copy::before {
   content: "";
   position: absolute;
-  inset: -48px -72px;
+  inset: -34px -52px;
   z-index: -1;
-  background: radial-gradient(ellipse at center, var(--paper) 32%, transparent 78%);
+  background: radial-gradient(ellipse at center, var(--paper) 24%, transparent 68%);
 }
 .context-copy .chapter-lede { margin-inline: auto; }
 

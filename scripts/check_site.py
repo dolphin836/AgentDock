@@ -886,9 +886,16 @@ def main():
         ok = fail(
             "journey approval card must explicitly restore --text-on-light"
         ) and ok
-    # Second particle scene is masked to the middle band with top/bottom vignette.
-    if "80%" not in css or "20%" not in css:
-        ok = fail("styles.css context mask must fade at 20% and 80% bands") and ok
+    # Second particle scene keeps a broad visible middle band while fading the
+    # top/bottom edges. Executable CDP coverage is authoritative; this protects
+    # the declarative fallback from drifting.
+    if not re.search(
+        r"\.context-canvas\s*\{.*?mask-image:\s*linear-gradient"
+        r"\([^)]*#000 12%[^)]*#000 88%",
+        css,
+        re.DOTALL,
+    ):
+        ok = fail("styles.css context mask must preserve the 12%–88% visible band") and ok
     # Reduced motion must neutralize the reveal clip so content is never trapped.
     reduced_block = re.search(
         r"@media \(prefers-reduced-motion: reduce\) \{(?P<body>.*)\}",
@@ -953,6 +960,11 @@ def main():
         '"webglcontextlost"',
         "preventDefault()",
         "AgentDockContext",
+        "CAPABLE_COUNT = 4000",
+        "CONSTRAINED_COUNT = 1600",
+        "POINT_SIZE = 5.0",
+        "ALPHA_BASE = 0.3",
+        "ALPHA_PEAK = 0.95",
     )
     for contract in required_context_particles:
         if contract not in context_source:

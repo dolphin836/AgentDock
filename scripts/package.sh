@@ -115,23 +115,11 @@ rm -f site/AgentDock-*.pkg site/AgentDock-*.dmg
 cp "$DMG" site/
 DMG_URL="https://api.agentdockstatus.app/v1/download/AgentDock-$VERSION.dmg"
 # 官网与应用内更新都走 dmg;download 字段保持兼容旧客户端字段名
-python3 - "$DMG_URL" "$VERSION" <<'PY'
-from pathlib import Path
-import re, sys
-dmg_url, version = sys.argv[1], sys.argv[2]
-path = Path("site/index.html")
-text = path.read_text()
-# 兼容旧 pkg 链接与已是 dmg 的链接
-text, n = re.subn(
-    r'https://api\.agentdockstatus\.app/v1/download/AgentDock-[0-9.]+\.(?:pkg|dmg)',
-    dmg_url,
-    text,
-)
-text = re.sub(r'>v\d+\.\d+\.\d+<', f'>v{version}<', text)
-text = re.sub(r'(<b>)v\d+\.\d+\.\d+(</b>)', rf'\1v{version}\2', text)
-path.write_text(text)
-print(f"  index.html download href updated ({n} match)")
-PY
+# [skill: go-team-standards · 可复现发布替换] 使用可独立测试的显式 HTML 更新器
+python3 scripts/update_site_release.py \
+  --html site/index.html \
+  --version "$VERSION" \
+  --url "$DMG_URL"
 cat > site/version.json <<JSON
 {
   "version": "$VERSION",
