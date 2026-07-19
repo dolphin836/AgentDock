@@ -127,7 +127,8 @@
       </div>
     </section>
 
-    <section id="value" class="value light-section chapter" data-header="light">
+    <section id="value" class="value light-section chapter reveal-band" data-header="light">
+      <div class="reveal-band-inner">
       <div class="shell chapter-head reveal">
         <p class="chapter-index" data-i18n="valueIndex">01 / Focus</p>
         <h2 class="chapter-title" data-i18n="valueTitle">Know what needs you, without checking every window.</h2>
@@ -149,11 +150,42 @@
           <p data-i18n="valueThreeBody">Jump to the terminal or editor running that session.</p>
         </li>
       </ol>
+      </div>
+    </section>
+
+    <section id="capabilities" class="capabilities dark-section chapter" data-header="dark">
+      <div class="shell chapter-head reveal">
+        <p class="chapter-index" data-i18n="capabilitiesIndex">02 / Capabilities</p>
+        <h2 class="chapter-title" data-i18n="capabilitiesTitle">Four ways AgentDock keeps you oriented.</h2>
+        <p class="chapter-lede" data-i18n="capabilitiesLede">Hover a panel to expand it. Each capability has its own quiet surface, not a shared dashboard to babysit.</p>
+      </div>
+      <div class="shell capability-panels" role="list">
+        <article class="capability-panel" data-capability="status" role="listitem" tabindex="0">
+          <span class="capability-kicker" aria-hidden="true">01</span>
+          <h3 data-i18n="capStatusTitle">Status</h3>
+          <p data-i18n="capStatusBody">Running, thinking, waiting, and usage stay distinct across Claude Code, Codex, and Cursor.</p>
+        </article>
+        <article class="capability-panel" data-capability="approval" role="listitem" tabindex="0">
+          <span class="capability-kicker" aria-hidden="true">02</span>
+          <h3 data-i18n="capApprovalTitle">Approval</h3>
+          <p data-i18n="capApprovalBody">Answer permission requests from the notch and your choice returns to the session.</p>
+        </article>
+        <article class="capability-panel" data-capability="usage" role="listitem" tabindex="0">
+          <span class="capability-kicker" aria-hidden="true">03</span>
+          <h3 data-i18n="capUsageTitle">Usage</h3>
+          <p data-i18n="capUsageBody">A dedicated tab reads rate limits and account usage with text labels, never color alone.</p>
+        </article>
+        <article class="capability-panel" data-capability="return" role="listitem" tabindex="0">
+          <span class="capability-kicker" aria-hidden="true">04</span>
+          <h3 data-i18n="capReturnTitle">Return</h3>
+          <p data-i18n="capReturnBody">Click a session to jump straight back to the terminal or editor that runs it.</p>
+        </article>
+      </div>
     </section>
 
     <section id="status" class="status dark-section chapter" data-header="dark">
       <div class="shell chapter-head reveal">
-        <p class="chapter-index" data-i18n="statusIndex">02 / Status</p>
+        <p class="chapter-index" data-i18n="statusIndex">03 / Status</p>
         <h2 class="chapter-title" data-i18n="statusTitle">Three agents, read from where they already run.</h2>
         <p class="chapter-lede" data-i18n="statusLede">AgentDock listens to each tool on its own terms — no shared dashboard to keep open.</p>
       </div>
@@ -185,7 +217,7 @@
     <section id="approval" class="approval light-section chapter" data-header="light">
       <div class="shell chapter-split">
         <div class="chapter-copy reveal">
-          <p class="chapter-index" data-i18n="approvalIndex">03 / Approval</p>
+          <p class="chapter-index" data-i18n="approvalIndex">04 / Approval</p>
           <h2 class="chapter-title" data-i18n="approvalTitle">Answer approvals without switching windows.</h2>
           <p class="chapter-body" data-i18n="approvalBodyOne">Claude Code sends each permission request through a hook. Decide right here and your choice returns to the session.</p>
           <p class="chapter-body" data-i18n="approvalBodyTwo">For Codex and Cursor, AgentDock focuses the session and presses its approval shortcut for you. Assisted approval is available for Codex and Cursor only.</p>
@@ -209,7 +241,7 @@
 
     <section id="usage" class="usage dark-section chapter" data-header="dark">
       <div class="shell chapter-head reveal">
-        <p class="chapter-index" data-i18n="usageIndex">04 / Usage</p>
+        <p class="chapter-index" data-i18n="usageIndex">05 / Usage</p>
         <h2 class="chapter-title" data-i18n="usageTitle">Usage you can read, never guess.</h2>
         <p class="chapter-lede" data-i18n="usageLede">A dedicated Usage tab tracks Claude and Codex rate limits and your Cursor account usage — always with text labels, never color alone.</p>
       </div>
@@ -233,7 +265,7 @@
     <section id="return" class="workspace-return light-section chapter" data-header="light">
       <div class="shell chapter-split">
         <div class="chapter-copy reveal">
-          <p class="chapter-index" data-i18n="returnIndex">05 / Return</p>
+          <p class="chapter-index" data-i18n="returnIndex">06 / Return</p>
           <h2 class="chapter-title" data-i18n="returnTitle">One click back to the exact session.</h2>
           <p class="chapter-body" data-i18n="returnBodyOne">Click any session to jump straight to it — iTerm2, Terminal, and VS Code, plus other supported editors.</p>
           <p class="chapter-body" data-i18n="returnBodyTwo">AgentDock selects the matching project window. If it can't, it reveals the folder in Finder instead.</p>
@@ -246,11 +278,54 @@
       </div>
     </section>
 
+    <section id="context" class="context light-section chapter context-scene" data-header="light">
+      <canvas class="context-canvas" id="contextCanvas" aria-hidden="true"></canvas>
+      <div class="context-mask" aria-hidden="true"></div>
+      <div class="shell context-copy reveal">
+        <p class="chapter-index" data-i18n="contextIndex">07 / Context</p>
+        <h2 class="chapter-title" data-i18n="contextTitle">Three kinds of agent, one place to look.</h2>
+        <p class="chapter-lede" data-i18n="contextBody">Claude Code, Codex, and Cursor each run their own way. AgentDock draws them into a single entrance in the notch, so your attention has one destination instead of many.</p>
+      </div>
+    </section>
+
+    <section id="journey" class="journey dark-section chapter" data-header="dark">
+      <div class="shell chapter-head reveal">
+        <p class="chapter-index" data-i18n="journeyIndex">08 / Journey</p>
+        <h2 class="chapter-title" data-i18n="journeyTitle">A working session, start to finish.</h2>
+      </div>
+      <div class="journey-viewport" id="journeyViewport">
+        <div class="journey-track" id="journeyTrack">
+          <article class="journey-panel">
+            <span class="journey-step" aria-hidden="true">01</span>
+            <h3 data-i18n="journeyRunTitle">Running</h3>
+            <p data-i18n="journeyRunBody">See which agent is executing, thinking, or idle without opening a window.</p>
+          </article>
+          <article class="journey-panel">
+            <span class="journey-step" aria-hidden="true">02</span>
+            <h3 data-i18n="journeyWaitTitle">Waiting</h3>
+            <p data-i18n="journeyWaitBody">When an approval needs you, the notch surfaces it instead of stalling silently.</p>
+          </article>
+          <article class="journey-panel">
+            <span class="journey-step" aria-hidden="true">03</span>
+            <h3 data-i18n="journeyUsageTitle">Usage</h3>
+            <p data-i18n="journeyUsageBody">Check remaining limits and context across all three agents from one tab.</p>
+          </article>
+          <article class="journey-panel">
+            <span class="journey-step" aria-hidden="true">04</span>
+            <h3 data-i18n="journeyReturnTitle">Return</h3>
+            <p data-i18n="journeyReturnBody">Click a session and land back in the exact terminal or editor that runs it.</p>
+          </article>
+        </div>
+        <div class="journey-progress" id="journeyProgress" aria-hidden="true"><span class="journey-progress-bar"></span></div>
+      </div>
+    </section>
+
     <section id="integrations" class="integrations dark-section chapter" data-header="dark">
+      <div class="context-lines" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
       <div class="shell chapter-sticky">
         <div class="sticky-copy">
           <div class="reveal">
-            <p class="chapter-index" data-i18n="integrationsIndex">06 / Integrations</p>
+            <p class="chapter-index" data-i18n="integrationsIndex">09 / Integrations</p>
             <h2 class="chapter-title" data-i18n="integrationsTitle">Integrations that stay reversible.</h2>
             <p class="chapter-body" data-i18n="integrationsBody">Install or remove each agent from the settings panel. AgentDock backs up integration settings before installation. On uninstall, it removes AgentDock's own entries and restores prior settings where they can be recovered.</p>
           </div>
@@ -273,11 +348,13 @@
     </section>
 
     <section id="privacy" class="privacy light-section chapter" data-header="light">
-      <div class="shell chapter-head reveal">
-        <p class="chapter-index" data-i18n="privacyIndex">07 / Privacy</p>
+      <div class="bleed-card bleed-left reveal">
+        <div class="bleed-inner">
+      <div class="chapter-head">
+        <p class="chapter-index" data-i18n="privacyIndex">10 / Privacy</p>
         <h2 class="chapter-title" data-i18n="privacyTitle">Your work stays on your Mac.</h2>
       </div>
-      <dl class="shell privacy-list">
+      <dl class="privacy-list">
         <div class="privacy-row reveal">
           <dt data-i18n="privacyOneTerm">Local by default</dt>
           <dd data-i18n="privacyOneDesc">Session content, file paths, and token details stay on your Mac.</dd>
@@ -295,13 +372,17 @@
           <dd data-i18n="privacyFourDesc">Limited telemetry uses an installation-level identifier and includes launch, version, system, architecture, and crash metadata. It does not include session content or file paths.</dd>
         </div>
       </dl>
+        </div>
+      </div>
     </section>
 
     <section id="download" class="download-section dark-section chapter" data-header="dark">
-      <div class="shell final-cta reveal">
-        <h2 class="chapter-title" data-i18n="downloadTitle">Put your agents in the notch.</h2>
-        <a class="primary-cta download" href="https://api.agentdockstatus.app/v1/download/AgentDock-0.2.4.dmg" data-i18n="download">Download for Mac</a>
-        <p class="final-meta"><span data-i18n="downloadMeta">macOS 14+ · Universal · Free</span> · <b>v0.2.4</b></p>
+      <div class="bleed-card bleed-right reveal">
+        <div class="bleed-inner final-cta">
+          <h2 class="chapter-title" data-i18n="downloadTitle">Put your agents in the notch.</h2>
+          <a class="primary-cta download" href="https://api.agentdockstatus.app/v1/download/AgentDock-0.2.4.dmg" data-i18n="download">Download for Mac</a>
+          <p class="final-meta"><span data-i18n="downloadMeta">macOS 14+ · Universal · Free</span> · <b>v0.2.4</b></p>
+        </div>
       </div>
     </section>
   </main>

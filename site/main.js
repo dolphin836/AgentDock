@@ -36,13 +36,24 @@
       valueTwoBody: "Running, thinking, waiting, and usage stay distinct at a glance.",
       valueThreeTitle: "Return in one click",
       valueThreeBody: "Jump to the terminal or editor running that session.",
-      statusIndex: "02 / Status",
+      capabilitiesIndex: "02 / Capabilities",
+      capabilitiesTitle: "Four ways AgentDock keeps you oriented.",
+      capabilitiesLede: "Hover a panel to expand it. Each capability has its own quiet surface, not a shared dashboard to babysit.",
+      capStatusTitle: "Status",
+      capStatusBody: "Running, thinking, waiting, and usage stay distinct across Claude Code, Codex, and Cursor.",
+      capApprovalTitle: "Approval",
+      capApprovalBody: "Answer permission requests from the notch and your choice returns to the session.",
+      capUsageTitle: "Usage",
+      capUsageBody: "A dedicated tab reads rate limits and account usage with text labels, never color alone.",
+      capReturnTitle: "Return",
+      capReturnBody: "Click a session to jump straight back to the terminal or editor that runs it.",
+      statusIndex: "03 / Status",
       statusTitle: "Three agents, read from where they already run.",
       statusLede: "AgentDock listens to each tool on its own terms — no shared dashboard to keep open.",
       statusClaude: "Hooks and a status line report each session as it moves.",
       statusCodex: "A notify hook and the local session log together infer progress.",
       statusCursor: "Hooks, the live transcript, and local storage keep status current.",
-      approvalIndex: "03 / Approval",
+      approvalIndex: "04 / Approval",
       approvalTitle: "Answer approvals without switching windows.",
       approvalBodyOne: "Claude Code sends each permission request through a hook. Decide right here and your choice returns to the session.",
       approvalBodyTwo: "For Codex and Cursor, AgentDock focuses the session and presses its approval shortcut for you. Assisted approval is available for Codex and Cursor only.",
@@ -54,14 +65,14 @@
       approvalApproved: "Approved — sent to the session",
       approvalReview: "Opening the session to review",
       approvalDenied: "Denied — sent to the session",
-      usageIndex: "04 / Usage",
+      usageIndex: "05 / Usage",
       usageTitle: "Usage you can read, never guess.",
       usageLede: "A dedicated Usage tab tracks Claude and Codex rate limits and your Cursor account usage — always with text labels, never color alone.",
       usageClaudeFigure: "Weekly · 62% used",
       usageCodexFigure: "Weekly · 41% used",
       usageCursorFigure: "Monthly · 38% used",
       usageFoot: "Figures shown are an example of the Usage tab layout.",
-      returnIndex: "05 / Return",
+      returnIndex: "06 / Return",
       returnTitle: "One click back to the exact session.",
       returnBodyOne: "Click any session to jump straight to it — iTerm2, Terminal, and VS Code, plus other supported editors.",
       returnBodyTwo: "AgentDock selects the matching project window. If it can't, it reveals the folder in Finder instead.",
@@ -71,13 +82,26 @@
       returnTargetEditorsHow: "Opened at the project path",
       returnTargetFallback: "Finder",
       returnTargetFallbackHow: "Reveals the folder as a fallback",
-      integrationsIndex: "06 / Integrations",
+      contextIndex: "07 / Context",
+      contextTitle: "Three kinds of agent, one place to look.",
+      contextBody: "Claude Code, Codex, and Cursor each run their own way. AgentDock draws them into a single entrance in the notch, so your attention has one destination instead of many.",
+      journeyIndex: "08 / Journey",
+      journeyTitle: "A working session, start to finish.",
+      journeyRunTitle: "Running",
+      journeyRunBody: "See which agent is executing, thinking, or idle without opening a window.",
+      journeyWaitTitle: "Waiting",
+      journeyWaitBody: "When an approval needs you, the notch surfaces it instead of stalling silently.",
+      journeyUsageTitle: "Usage",
+      journeyUsageBody: "Check remaining limits and context across all three agents from one tab.",
+      journeyReturnTitle: "Return",
+      journeyReturnBody: "Click a session and land back in the exact terminal or editor that runs it.",
+      integrationsIndex: "09 / Integrations",
       integrationsTitle: "Integrations that stay reversible.",
       integrationsBody: "Install or remove each agent from the settings panel. AgentDock backs up integration settings before installation. On uninstall, it removes AgentDock's own entries and restores prior settings where they can be recovered.",
       integrationsClaude: "Registers hooks and a status line in settings.json, passing your original status line through untouched. Your file is saved as settings.json.agentdock-backup.",
       integrationsCodex: "Adds a notify line to config.toml and follows the local session log to infer progress.",
       integrationsCursor: "Adds hooks, follows the live transcript, and reads local storage for status and usage.",
-      privacyIndex: "07 / Privacy",
+      privacyIndex: "10 / Privacy",
       privacyTitle: "Your work stays on your Mac.",
       privacyOneTerm: "Local by default",
       privacyOneDesc: "Session content, file paths, and token details stay on your Mac.",
@@ -121,13 +145,24 @@
       valueTwoBody: "运行、思考、等待、用量，一眼就能分清。",
       valueThreeTitle: "一键回到现场",
       valueThreeBody: "跳回正在运行该会话的终端或编辑器。",
-      statusIndex: "02 / 状态",
+      capabilitiesIndex: "02 / 能力",
+      capabilitiesTitle: "AgentDock 让你保持方向感的四种方式。",
+      capabilitiesLede: "悬停任意面板即可展开。每项能力都有自己安静的界面，而不是一个要时刻盯着的共享面板。",
+      capStatusTitle: "状态",
+      capStatusBody: "运行、思考、等待与用量，在 Claude Code、Codex、Cursor 间始终分得清。",
+      capApprovalTitle: "审批",
+      capApprovalBody: "在刘海里答复权限请求，你的选择会回传给会话。",
+      capUsageTitle: "用量",
+      capUsageBody: "独立 tab 读取额度与账号用量，始终带文字标签，绝不只靠颜色。",
+      capReturnTitle: "回到现场",
+      capReturnBody: "点击会话，直接跳回运行它的终端或编辑器。",
+      statusIndex: "03 / 状态",
       statusTitle: "三家 Agent，各自就地读取。",
       statusLede: "AgentDock 以每个工具自己的方式监听状态——无需常开一个共享面板。",
       statusClaude: "通过 hooks 与状态栏实时上报每个会话。",
       statusCodex: "notify hook 加上本地会话日志推断进度。",
       statusCursor: "hooks、实时 transcript 与本地存储持续更新状态。",
-      approvalIndex: "03 / 审批",
+      approvalIndex: "04 / 审批",
       approvalTitle: "不切窗口，就地答复审批。",
       approvalBodyOne: "Claude Code 的每个权限请求都经 hook 送达。就在这里决定，结果会回传给会话。",
       approvalBodyTwo: "对 Codex 与 Cursor，AgentDock 会聚焦会话并替你按下审批快捷键。辅助代答仅支持 Codex 与 Cursor。",
@@ -139,14 +174,14 @@
       approvalApproved: "已批准——已发送到会话",
       approvalReview: "正在打开会话以便查看",
       approvalDenied: "已拒绝——已发送到会话",
-      usageIndex: "04 / 用量",
+      usageIndex: "05 / 用量",
       usageTitle: "用量看得清，不用猜。",
       usageLede: "独立的用量 tab 跟踪 Claude 与 Codex 的额度、以及你的 Cursor 账号用量——始终带文字标签，绝不只靠颜色。",
       usageClaudeFigure: "本周 · 已用 62%",
       usageCodexFigure: "本周 · 已用 41%",
       usageCursorFigure: "本月 · 已用 38%",
       usageFoot: "此处数字仅为用量 tab 布局示例。",
-      returnIndex: "05 / 回到现场",
+      returnIndex: "06 / 回到现场",
       returnTitle: "一键回到那个会话。",
       returnBodyOne: "点击任意会话即可直达——iTerm2、Terminal、VS Code，以及其他受支持的编辑器。",
       returnBodyTwo: "AgentDock 会选中匹配的项目窗口；若无法匹配，则改为在访达中定位该文件夹。",
@@ -156,13 +191,26 @@
       returnTargetEditorsHow: "按项目路径打开",
       returnTargetFallback: "访达",
       returnTargetFallbackHow: "兜底定位该文件夹",
-      integrationsIndex: "06 / 集成",
+      contextIndex: "07 / 汇聚",
+      contextTitle: "三类 Agent，只看一处。",
+      contextBody: "Claude Code、Codex 与 Cursor 各有各的运行方式。AgentDock 把它们汇入刘海里的同一个入口，让你的注意力只有一个去处，而不是许多个。",
+      journeyIndex: "08 / 旅程",
+      journeyTitle: "一次工作会话，从头到尾。",
+      journeyRunTitle: "运行",
+      journeyRunBody: "不用打开窗口，就知道哪个 Agent 正在执行、思考或空闲。",
+      journeyWaitTitle: "等待",
+      journeyWaitBody: "当审批需要你时，刘海会主动提示，而不是无声地卡住。",
+      journeyUsageTitle: "用量",
+      journeyUsageBody: "在一个 tab 里查看三类 Agent 的剩余额度与上下文。",
+      journeyReturnTitle: "回到现场",
+      journeyReturnBody: "点击会话，回到运行它的那个终端或编辑器。",
+      integrationsIndex: "09 / 集成",
       integrationsTitle: "可随时还原的集成。",
       integrationsBody: "在设置面板中逐个安装或卸载 Agent。AgentDock 会在安装前备份集成配置。卸载时只移除 AgentDock 自身写入的配置，并仅在原设置可恢复时还原。",
       integrationsClaude: "在 settings.json 中注册 hooks 与状态栏，并原样透传你原本的状态栏输出。你的文件会备份为 settings.json.agentdock-backup。",
       integrationsCodex: "向 config.toml 追加一行 notify，并跟随本地会话日志推断进度。",
       integrationsCursor: "添加 hooks、跟随实时 transcript，并读取本地存储获取状态与用量。",
-      privacyIndex: "07 / 隐私",
+      privacyIndex: "10 / 隐私",
       privacyTitle: "你的工作留在你的 Mac 上。",
       privacyOneTerm: "默认本地",
       privacyOneDesc: "会话内容、文件路径与 token 详情都留在你的 Mac 上。",
@@ -286,6 +334,28 @@
       setApproval(approvalStateByAction[button.dataset.action])
     )
   );
+
+  // --- Capability panels: hover/focus expanding accordion (progressive) ---
+  // Pure DOM enhancement so the panels still read as four equal cards without
+  // JavaScript. Active panel grows (CSS flex-basis), the rest shrink.
+  const capabilityPanels = Array.from(document.querySelectorAll(".capability-panel"));
+  const capabilityWrap = document.querySelector(".capability-panels");
+  function setActivePanel(panel) {
+    capabilityPanels.forEach((node) => node.classList.toggle("is-active", node === panel));
+  }
+  function clearActivePanels() {
+    capabilityPanels.forEach((node) => node.classList.remove("is-active"));
+  }
+  capabilityPanels.forEach((panel) => {
+    panel.addEventListener("mouseenter", () => setActivePanel(panel));
+    panel.addEventListener("focusin", () => setActivePanel(panel));
+  });
+  if (capabilityWrap) {
+    capabilityWrap.addEventListener("mouseleave", clearActivePanels);
+    capabilityWrap.addEventListener("focusout", (event) => {
+      if (!capabilityWrap.contains(event.relatedTarget)) clearActivePanels();
+    });
+  }
 
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   const demoStates = ["running", "waiting", "usage"];

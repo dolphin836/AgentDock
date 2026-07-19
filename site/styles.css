@@ -670,6 +670,197 @@ img { display: block; }
 .final-meta { margin: 0; color: var(--text-dim); font-size: 14px; }
 .final-meta b { color: var(--text-on-dark); }
 
+/* ============================================================
+   Task 4 — chapter choreography & product journey (design §3/§5.2/§6)
+   ============================================================ */
+
+/* Focus reveal band: rounded top slice, clip-path reveal driven by scroll.
+   The clip is applied by motion.js only; JS/GSAP failure leaves it visible. */
+.reveal-band {
+  position: relative;
+  z-index: 1;
+  margin-top: -30px;
+  border-radius: 30px 30px 0 0;
+  overflow: hidden;
+}
+.reveal-band-inner { will-change: clip-path; }
+
+/* Capability panels — horizontal expanding accordion (design §3.4).
+   Default four equal 25% cards; active grows to 40%, the rest shrink to 20%. */
+.capability-panels {
+  display: flex;
+  gap: 14px;
+  margin-top: clamp(40px, 6vw, 80px);
+  align-items: stretch;
+}
+.capability-panel {
+  flex: 0 1 25%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: clamp(24px, 2.4vw, 34px);
+  border: 1px solid var(--line-dark);
+  border-radius: 18px;
+  background: oklch(0.19 0.012 25 / 0.55);
+  overflow: hidden;
+  transition: flex-basis 480ms var(--ease-out), background 320ms var(--ease-out),
+    border-color 320ms var(--ease-out);
+}
+.capability-panel:focus-visible { outline: 2px solid var(--coral); outline-offset: 3px; }
+.capability-kicker { font-family: var(--font-mono); font-size: 12px; color: var(--coral); letter-spacing: 0.14em; }
+.capability-panel h3 {
+  margin: 0;
+  font-size: clamp(1.15rem, 1.9vw, 1.55rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+.capability-panel p {
+  margin: 0;
+  max-width: 34ch;
+  color: var(--text-dim);
+  font-size: 1rem;
+  line-height: 1.5;
+  opacity: 0.5;
+  transition: opacity 320ms var(--ease-out);
+}
+/* When one panel is engaged, siblings collapse to 20% and it grows to 40%. */
+.capability-panels:hover .capability-panel,
+.capability-panels:focus-within .capability-panel { flex-basis: 20%; }
+/* Specificity must beat the (0,3,0) :hover rule above, so scope to the wrap. */
+.capability-panels .capability-panel.is-active {
+  flex-basis: 40%;
+  background: oklch(0.22 0.014 25 / 0.78);
+  border-color: var(--coral);
+}
+.capability-panels .capability-panel.is-active p { opacity: 1; }
+
+/* Agent context — second particle scene, masked to the middle band (§5.2). */
+.context-scene { position: relative; isolation: isolate; overflow: hidden; }
+#context { min-height: 100dvh; display: flex; align-items: center; }
+.context-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -2;
+  display: block;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 20%, #000 80%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 20%, #000 80%, transparent 100%);
+}
+#context.context-failed .context-canvas { display: none; }
+.context-mask {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(120% 68% at 50% 50%, transparent 42%, var(--paper) 100%);
+}
+.context-copy { position: relative; z-index: 1; max-width: 62ch; margin-inline: auto; text-align: center; }
+.context-copy::before {
+  content: "";
+  position: absolute;
+  inset: -48px -72px;
+  z-index: -1;
+  background: radial-gradient(ellipse at center, var(--paper) 32%, transparent 78%);
+}
+.context-copy .chapter-lede { margin-inline: auto; }
+
+/* Workflow journey — vertical by default; JS pins it horizontally on desktop. */
+.journey-viewport { position: relative; margin-top: clamp(40px, 6vw, 72px); }
+.journey-track { display: flex; flex-direction: column; gap: 20px; }
+.journey-panel {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: clamp(28px, 4vw, 48px);
+  border: 1px solid var(--line-dark);
+  border-radius: 20px;
+  background: oklch(0.19 0.012 25 / 0.55);
+}
+.journey-step { font-family: var(--font-mono); font-size: 13px; color: var(--coral); letter-spacing: 0.14em; }
+.journey-panel h3 { margin: 0; font-size: clamp(1.5rem, 3vw, 2.4rem); font-weight: 600; letter-spacing: -0.03em; }
+.journey-panel p { margin: 0; max-width: 42ch; color: var(--text-dim); font-size: clamp(1rem, 1.4vw, 1.2rem); line-height: 1.55; }
+.journey-progress { position: relative; height: 2px; margin-top: 24px; background: var(--line-dark); border-radius: 2px; overflow: hidden; }
+.journey-progress-bar { position: absolute; inset: 0; transform-origin: left center; transform: scaleX(0); background: var(--coral); }
+/* Pinned desktop track: 100vh viewport, panels laid out in a horizontal row. */
+.journey.is-pinned .journey-viewport {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+}
+.journey.is-pinned .journey-track {
+  flex-direction: row;
+  gap: clamp(28px, 4vw, 72px);
+  align-items: stretch;
+  will-change: transform;
+}
+.journey.is-pinned .journey-panel { flex: 0 0 min(64vw, 540px); justify-content: center; }
+.journey.is-pinned .journey-progress { margin-top: 40px; }
+
+/* Integrations — five low-contrast vertical lines that grow on scroll (§5.3). */
+.integrations { position: relative; isolation: isolate; }
+.context-lines {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  display: flex;
+  justify-content: space-between;
+  padding-inline: clamp(24px, 9vw, 150px);
+  pointer-events: none;
+}
+.context-lines span { width: 1px; background: var(--line-dark); transform-origin: top center; }
+
+/* Bleed cards — privacy bleeds left, final CTA bleeds right (§3.8/§3.9). */
+.bleed-card {
+  width: min(var(--shell), calc(100% - 48px));
+  margin-inline: auto;
+  padding: clamp(36px, 5vw, 72px) clamp(24px, 4vw, 56px);
+  border-radius: 24px;
+}
+.bleed-inner { width: 100%; }
+.privacy .bleed-card { background: var(--paper-muted); border: 1px solid var(--line-light); }
+.privacy .bleed-card .privacy-list { margin-top: clamp(32px, 5vw, 56px); }
+.download-section .bleed-card { background: var(--coral); color: var(--ink); }
+.download-section .bleed-inner.final-cta { align-items: center; }
+.download-section .bleed-card .chapter-title { color: var(--ink); }
+.download-section .bleed-card .primary-cta { background: var(--ink); border-color: var(--ink); color: var(--text-on-dark); }
+.download-section .bleed-card .primary-cta:hover { background: oklch(0.24 0.014 25); }
+.download-section .bleed-card .final-meta { color: oklch(0.26 0.04 30); }
+.download-section .bleed-card .final-meta b { color: var(--ink); }
+@media (min-width: 901px) {
+  .privacy .bleed-card.bleed-left {
+    width: min(1180px, 84vw);
+    margin-left: 0;
+    margin-right: auto;
+    padding-left: max(clamp(24px, 4vw, 56px), calc((100vw - var(--shell)) / 2 + 6px));
+    border-radius: 0 30px 30px 0;
+  }
+  .download-section .bleed-card.bleed-right {
+    width: min(1180px, 84vw);
+    margin-left: auto;
+    margin-right: 0;
+    padding-right: max(clamp(24px, 4vw, 56px), calc((100vw - var(--shell)) / 2 + 6px));
+    border-radius: 30px 0 0 30px;
+  }
+}
+
+/* Panels degrade to full-width stacked cards on phones (design §8, 767px). */
+@media (max-width: 767px) {
+  .capability-panels { flex-direction: column; }
+  .capability-panel,
+  .capability-panels:hover .capability-panel,
+  .capability-panels:focus-within .capability-panel,
+  .capability-panels .capability-panel.is-active { flex-basis: auto; }
+  .capability-panel h3 { white-space: normal; }
+  .capability-panel p { opacity: 1; }
+  .context-copy::before { inset: -28px -24px; }
+}
+
 /* Scroll reveal */
 /* [skill: go-team-standards · dev-dna] 仅在脚本启用后隐藏待揭示内容 */
 .has-js .reveal {
@@ -782,4 +973,9 @@ footer img { width: 20px; height: 20px; border-radius: 5px; }
   /* Never run the intro curtain or clip reveals under reduced motion */
   .intro-curtain { display: none !important; }
   .mobile-link { clip-path: none !important; }
+  /* Chapter choreography must not trap content when motion is off */
+  .reveal-band-inner { clip-path: none !important; }
+  .journey.is-pinned .journey-viewport { height: auto; overflow: visible; }
+  .journey.is-pinned .journey-track { flex-direction: column; }
+  .context-lines span { transform: scaleY(1) !important; }
 }

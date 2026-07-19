@@ -45,9 +45,16 @@ REQUIRED_IDS.update({"siteHeader", "heroStage"})
 REQUIRED_IDS.update({"menuButton", "mobileMenu", "introCurtain"})
 # Task 3 owns the one-viewport particle hero: the full-cover WebGL canvas.
 REQUIRED_IDS.update({"heroCanvas"})
+# Task 4 owns the chapter choreography: capability panels overview, the second
+# (context) particle scene, and the pinned horizontal product journey.
+REQUIRED_IDS.update(
+    {"capabilities", "context", "journey", "contextCanvas",
+     "journeyViewport", "journeyTrack", "journeyProgress"}
+)
 PRODUCT_SECTIONS = {
     "value", "status", "approval", "usage",
     "return", "integrations", "privacy", "download",
+    "capabilities", "context", "journey",
 }
 # Every hero and product section must declare an explicit nav theme so the
 # header foreground follows dark/light chapters (design §4.1).
@@ -715,6 +722,144 @@ def main():
         ok = fail(
             "styles.css must make <580px heroes 580px tall and vertically scrollable"
         ) and ok
+
+    # [skill: go-team-standards · Vokie 1:1] Task 4: chapter choreography & journey
+    # 静态锁定关键机制契约（DOM 结构、CSS 形态、motion.js/ScrollTrigger 钩子、
+    # 第二粒子场分级）。滚动/pin/横移/进度/懒加载/降级由浏览器行为测试验证。
+    context_particles = SITE / "context-particles.js"
+    if not context_particles.is_file():
+        ok = fail("missing site/context-particles.js") and ok
+    context_source = (
+        context_particles.read_text(encoding="utf-8")
+        if context_particles.is_file()
+        else ""
+    )
+
+    # DOM structure counts (mechanism scaffolding must be real, not empty).
+    capability_panels = len(re.findall(r'class="[^"]*\bcapability-panel\b', text))
+    if capability_panels < 4:
+        ok = fail(
+            f"at least 4 .capability-panel elements required, found {capability_panels}"
+        ) and ok
+    journey_panels = len(re.findall(r'class="[^"]*\bjourney-panel\b', text))
+    if journey_panels < 4:
+        ok = fail(
+            f"at least 4 .journey-panel elements required, found {journey_panels}"
+        ) and ok
+    lines_block = re.search(
+        r'<div\s+class="context-lines"[^>]*>(?P<body>.*?)</div>',
+        text,
+        re.DOTALL,
+    )
+    if not lines_block:
+        ok = fail("index.html must contain a .context-lines background block") and ok
+    else:
+        line_spans = len(re.findall(r"<span", lines_block.group("body")))
+        if line_spans < 5:
+            ok = fail(
+                f"context-lines must contain at least 5 columns, found {line_spans}"
+            ) and ok
+    if not re.search(r'id="contextCanvas"', text):
+        ok = fail("index.html must contain the #contextCanvas scene canvas") and ok
+    # Bleed cards: privacy bleeds left, final CTA bleeds right (design §3.8/§3.9).
+    if not re.search(r'<div class="bleed-card bleed-left\b', text):
+        ok = fail("privacy must use a .bleed-card.bleed-left large card") and ok
+    if not re.search(r'<div class="bleed-card bleed-right\b', text):
+        ok = fail("final CTA must use a .bleed-card.bleed-right coral card") and ok
+
+    # CSS mechanism contracts.
+    required_chapter_css = (
+        ".reveal-band",
+        "border-radius: 30px 30px 0 0",
+        ".reveal-band-inner",
+        ".capability-panels",
+        ".capability-panel",
+        "flex: 0 1 25%",
+        "flex-basis: 40%",
+        "flex-basis: 20%",
+        "@media (max-width: 767px)",
+        "#context",
+        "100dvh",
+        ".context-canvas",
+        ".context-scene",
+        "mask-image: linear-gradient(",
+        ".journey-viewport",
+        ".journey-track",
+        ".journey-panel",
+        ".journey-progress",
+        "flex-direction: column",
+        ".journey.is-pinned .journey-track",
+        "flex-direction: row",
+        ".context-lines",
+        ".context-lines span",
+        ".bleed-card",
+        "@media (min-width: 901px)",
+    )
+    for contract in required_chapter_css:
+        if contract not in css:
+            ok = fail(f"styles.css missing chapter contract: {contract}") and ok
+    # Second particle scene is masked to the middle band with top/bottom vignette.
+    if "80%" not in css or "20%" not in css:
+        ok = fail("styles.css context mask must fade at 20% and 80% bands") and ok
+    # Reduced motion must neutralize the reveal clip so content is never trapped.
+    reduced_block = re.search(
+        r"@media \(prefers-reduced-motion: reduce\) \{(?P<body>.*)\}",
+        css,
+        re.DOTALL,
+    )
+    if reduced_block and "clip-path: none" not in reduced_block.group("body"):
+        ok = fail(
+            "reduced-motion must reset reveal clip-path to none (no trapped content)"
+        ) and ok
+
+    # motion.js scroll orchestration hooks (behavior verified in the browser).
+    required_chapter_motion = (
+        "ScrollTrigger",
+        "registerPlugin",
+        "inset(0 100% 0 0)",
+        '"top bottom"',
+        '"top 42%"',
+        "scrub: 1",
+        "pin: true",
+        "(min-width: 901px)",
+        ">= 700",
+        "is-pinned",
+        'import("./context-particles.js")',
+        "requestIdleCallback",
+        "scaleY",
+        "Math.max(",
+    )
+    for contract in required_chapter_motion:
+        if contract not in motion_source:
+            ok = fail(f"motion.js missing chapter contract: {contract}") and ok
+
+    # Capability panel accordion lives in main.js as progressive enhancement.
+    required_chapter_js = (
+        "capability-panel",
+        "is-active",
+    )
+    for contract in required_chapter_js:
+        if contract not in js:
+            ok = fail(f"main.js missing capability panel hook: {contract}") and ok
+
+    # Second particle field: lazy, device-tiered, reduced-motion static, resilient.
+    required_context_particles = (
+        "./vendor/three.module.min.js",
+        "contextCanvas",
+        "saveData",
+        "deviceMemory",
+        "hardwareConcurrency",
+        "pointer: coarse",
+        "prefers-reduced-motion",
+        "IntersectionObserver",
+        "visibilitychange",
+        '"webglcontextlost"',
+        "preventDefault()",
+        "AgentDockContext",
+    )
+    for contract in required_context_particles:
+        if contract not in context_source:
+            ok = fail(f"context-particles.js missing contract: {contract}") and ok
 
     if ok:
         print("PASS: site contract")
