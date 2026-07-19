@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # [skill: go-team-standards · dev-dna] 校验本地动效依赖并禁止运行时 CDN
+import hashlib
 from html.parser import HTMLParser
 from pathlib import Path
 import re
@@ -9,20 +10,30 @@ ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT / "site"
 HTML = SITE / "index.html"
 REQUIRED_FILES = ("styles.css", "main.js")
-REQUIRED_VENDOR_FILES = (
-    "three.module.min.js",
-    "gsap.min.js",
-    "ScrollTrigger.min.js",
-    "LICENSES.txt",
-)
+VENDOR_SHA256 = {
+    "three.core.min.js": "05b2609338c76cd65daf74f3ac515bc9a5045e1b3b33edc07d8c9bd55250fa90",
+    "three.module.min.js": "86bcee248b64f44bcfc23c331ae74619061957d59cab040171dcb6fb5900beb6",
+    "gsap.min.js": "92bb9a96476f983d212a2bc4f54c889039c1696dd4461d40a736860938570fbb",
+    "ScrollTrigger.min.js": "b0b14d67b55b0c43c756ac0b106cfcb09d0879945f6ead64451065b0672916a2",
+    "LICENSES.txt": "cd3202138b82af70f2003c3f51b70cd993806cec4a3c1bbd9893dc06f1dac3dd",
+}
 # Module entry points and scene IDs are activated with their implementations:
 # Task 2 owns navigation IDs, Task 3 owns the hero scene, and Task 4 owns
 # motion.js, the context scene, and the journey scene. Requiring them here
 # would reward empty placeholder nodes instead of tested behavior.
-RUNTIME_CDN_PATTERN = re.compile(
-    r"https?://(?:cdn\.jsdelivr\.net|unpkg\.com|cdnjs\.cloudflare\.com|"
-    r"esm\.sh|cdn\.skypack\.dev)(?:/|$)",
+REMOTE_RUNTIME_PREFIXES = ("http://", "https://", "//")
+CSS_URL_PATTERN = re.compile(
+    r"""url\(\s*(?P<quote>["']?)(?P<url>.*?)(?P=quote)\s*\)""",
     re.IGNORECASE,
+)
+CSS_IMPORT_PATTERN = re.compile(
+    r"""@import\s+["'](?P<url>[^"']+)["']""",
+    re.IGNORECASE,
+)
+JS_IMPORT_SPECIFIER_PATTERN = re.compile(
+    r"""(?:\b(?:import|export)(?![\w$])\s*(?:[^"'();]*?\bfrom\s*)?|"""
+    r"""\bimport(?![\w$])\s*\(\s*)["'](?P<url>[^"']+)["']""",
+    re.MULTILINE,
 )
 REQUIRED_IDS = {
     "main", "top", "value", "status", "approval", "usage",
@@ -160,9 +171,34 @@ class SiteParser(HTMLParser):
                 self.buttons_without_text.append("<button>")
 
 
+class RuntimeResourceParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.resources = []
+
+    def handle_starttag(self, tag, attrs):
+        values = dict(attrs)
+        if tag == "script" and values.get("src"):
+            self.resources.append(("script", values["src"]))
+        if tag == "link" and values.get("href"):
+            self.resources.append(("link", values["href"]))
+
+
 def fail(message):
     print(f"FAIL: {message}")
     return False
+
+
+def is_remote_runtime_url(url):
+    return url.strip().lower().startswith(REMOTE_RUNTIME_PREFIXES)
+
+
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(64 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 # [skill: go-team-standards · dev-dna] 分语言提取翻译键，确保双语契约对称
@@ -193,25 +229,65 @@ def main():
         if not (SITE / name).is_file():
             ok = fail(f"missing site/{name}") and ok
 
-    for name in REQUIRED_VENDOR_FILES:
+    for name, expected_sha256 in VENDOR_SHA256.items():
         vendor_file = SITE / "vendor" / name
         if not vendor_file.is_file():
             ok = fail(f"missing site/vendor/{name}") and ok
-        elif vendor_file.stat().st_size == 0:
-            ok = fail(f"empty site/vendor/{name}") and ok
+            continue
+        actual_sha256 = sha256_file(vendor_file)
+        if actual_sha256 != expected_sha256:
+            ok = fail(
+                f"site/vendor/{name} SHA-256 mismatch: "
+                f"expected {expected_sha256}, got {actual_sha256}"
+            ) and ok
 
     runtime_sources = [
         path
         for path in SITE.rglob("*")
         if path.is_file()
         and path.suffix in {".html", ".css", ".js"}
-        and "vendor" not in path.parts
     ]
     for path in runtime_sources:
         content = path.read_text(encoding="utf-8")
-        if RUNTIME_CDN_PATTERN.search(content):
-            relative_path = path.relative_to(ROOT)
-            ok = fail(f"{relative_path} must not reference a runtime CDN") and ok
+        relative_path = path.relative_to(ROOT)
+        if path.suffix == ".html":
+            resource_parser = RuntimeResourceParser()
+            resource_parser.feed(content)
+            for tag, url in resource_parser.resources:
+                if is_remote_runtime_url(url):
+                    ok = fail(
+                        f"{relative_path} has remote <{tag}> runtime resource: {url}"
+                    ) and ok
+        elif path.suffix == ".css":
+            css_urls = [
+                match.group("url").strip()
+                for match in CSS_URL_PATTERN.finditer(content)
+            ]
+            css_urls.extend(
+                match.group("url").strip()
+                for match in CSS_IMPORT_PATTERN.finditer(content)
+            )
+            for url in css_urls:
+                if is_remote_runtime_url(url):
+                    ok = fail(
+                        f"{relative_path} has remote CSS runtime resource: {url}"
+                    ) and ok
+        elif path.suffix == ".js":
+            import_urls = {
+                match.group("url").strip()
+                for match in JS_IMPORT_SPECIFIER_PATTERN.finditer(content)
+            }
+            for url in sorted(import_urls):
+                if is_remote_runtime_url(url):
+                    ok = fail(
+                        f"{relative_path} has remote JavaScript import: {url}"
+                    ) and ok
+                if path.name == "three.module.min.js" and url.startswith(("./", "../")):
+                    dependency = (path.parent / url).resolve()
+                    if not dependency.is_file():
+                        ok = fail(
+                            f"{relative_path} imports missing dependency: {url}"
+                        ) and ok
 
     missing_ids = REQUIRED_IDS - parser.ids
     if missing_ids:

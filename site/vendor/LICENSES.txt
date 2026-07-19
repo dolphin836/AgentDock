@@ -4,7 +4,10 @@ Vendored motion library notices
 Three.js
 --------
 Version: 0.185.1
-Vendored file: three.module.min.js
+Vendored files: three.core.min.js, three.module.min.js
+Artifact SHA-256:
+  three.core.min.js  05b2609338c76cd65daf74f3ac515bc9a5045e1b3b33edc07d8c9bd55250fa90
+  three.module.min.js  86bcee248b64f44bcfc23c331ae74619061957d59cab040171dcb6fb5900beb6
 Package: https://www.npmjs.com/package/three/v/0.185.1
 Upstream source: https://github.com/mrdoob/three.js
 Retrieved tarball: https://registry.npmmirror.com/three/-/three-0.185.1.tgz
@@ -36,6 +39,9 @@ GSAP
 ----
 Version: 3.15.0
 Vendored files: gsap.min.js, ScrollTrigger.min.js
+Artifact SHA-256:
+  gsap.min.js  92bb9a96476f983d212a2bc4f54c889039c1696dd4461d40a736860938570fbb
+  ScrollTrigger.min.js  b0b14d67b55b0c43c756ac0b106cfcb09d0879945f6ead64451065b0672916a2
 Package: https://www.npmjs.com/package/gsap/v/3.15.0
 Upstream source: https://github.com/greensock/GSAP
 Retrieved tarball: https://registry.npmmirror.com/gsap/-/gsap-3.15.0.tgz
