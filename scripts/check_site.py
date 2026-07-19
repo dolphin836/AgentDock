@@ -534,6 +534,10 @@ def main():
         '"Tab"',
         "inert",
         "restoreFocus",
+        "focusHashTarget",
+        'target.setAttribute("tabindex", "-1")',
+        "target.scrollIntoView()",
+        "restoreFocus: false",
     )
     for contract in required_nav_js:
         if contract not in js:

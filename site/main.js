@@ -432,6 +432,30 @@
       : [];
   }
 
+  function focusHashTarget(hash) {
+    if (!hash || hash === "#") return false;
+    let targetId;
+    try {
+      targetId = decodeURIComponent(hash.slice(1));
+    } catch {
+      return false;
+    }
+    const target = document.getElementById(targetId);
+    if (!target) return false;
+    const hadTabindex = target.hasAttribute("tabindex");
+    if (!hadTabindex) {
+      target.setAttribute("tabindex", "-1");
+      target.addEventListener(
+        "blur",
+        () => target.removeAttribute("tabindex"),
+        { once: true }
+      );
+    }
+    target.focus({ preventScroll: true });
+    target.scrollIntoView();
+    return document.activeElement === target;
+  }
+
   function setMenu(open, { restoreFocus = !open } = {}) {
     if (!mobileMenu || !menuButton) return;
     const wasOpen = menuOpen;
@@ -460,9 +484,17 @@
 
   if (mobileMenu && menuButton) {
     menuButton.addEventListener("click", () => setMenu(!menuOpen));
-    mobileMenu.querySelectorAll(".mobile-link").forEach((link) =>
-      link.addEventListener("click", () => setMenu(false, { restoreFocus: false }))
-    );
+    mobileMenu.querySelectorAll(".mobile-link").forEach((link) => {
+      link.addEventListener("click", (event) => {
+        setMenu(false, { restoreFocus: false });
+        if (!link.hash) return;
+        const target = document.getElementById(link.hash.slice(1));
+        if (!target) return;
+        event.preventDefault();
+        window.history.pushState(null, "", link.hash);
+        focusHashTarget(link.hash);
+      });
+    });
     mobileMenu.addEventListener("keydown", (event) => {
       if (event.key === "Tab") {
         const focusables = menuFocusables();
