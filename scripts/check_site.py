@@ -35,11 +35,16 @@ JS_IMPORT_SPECIFIER_PATTERN = re.compile(
     r"""\bimport(?![\w$])\s*\(\s*)["'](?P<url>[^"']+)["']""",
     re.MULTILINE,
 )
+# Task 5 collapses the redundant Status/Approval/Usage/Return detail chapters:
+# the live surfaces migrate into the journey and the four standalone sections
+# are deleted. The interactive approval demo keeps its ids (approvalPanel /
+# approvalStatus) but they now live inside #journey, not a dedicated section.
 REQUIRED_IDS = {
-    "main", "top", "value", "status", "approval", "usage",
-    "return", "integrations", "privacy", "download",
+    "main", "top", "value", "integrations", "privacy", "download",
     "notchToggle", "notchPanel", "approvalPanel", "approvalStatus",
 }
+# These section ids were merged away in Task 5 and must not reappear.
+REMOVED_SECTION_IDS = {"status", "approval", "usage", "return"}
 REQUIRED_IDS.update({"siteHeader", "heroStage"})
 # Task 2 owns the adaptive navigation, intro curtain, and mobile menu nodes.
 REQUIRED_IDS.update({"menuButton", "mobileMenu", "introCurtain"})
@@ -52,8 +57,7 @@ REQUIRED_IDS.update(
      "journeyViewport", "journeyTrack", "journeyProgress"}
 )
 PRODUCT_SECTIONS = {
-    "value", "status", "approval", "usage",
-    "return", "integrations", "privacy", "download",
+    "value", "integrations", "privacy", "download",
     "capabilities", "context", "journey",
 }
 # Every hero and product section must declare an explicit nav theme so the
@@ -125,6 +129,7 @@ class SiteParser(HTMLParser):
         self.menu_button_label = None
         self.mobile_menu_hidden = None
         self.mobile_menu_inert = None
+        self.internal_anchors = set()
 
     def handle_starttag(self, tag, attrs):
         values = dict(attrs)
@@ -160,6 +165,10 @@ class SiteParser(HTMLParser):
             self.h1_count += 1
         if tag == "a" and values.get("href") == "#main":
             self.skip_link_target = "#main"
+        if tag == "a":
+            href = values.get("href", "")
+            if href.startswith("#") and len(href) > 1:
+                self.internal_anchors.add(href[1:])
         if values.get("id") == "notchToggle":
             self.notch_toggle_controls = values.get("aria-controls")
             self.notch_toggle_expanded = values.get("aria-expanded")
@@ -414,8 +423,59 @@ def main():
             f"found {parser.agent_rows}"
         ) and ok
 
+    # --- Task 5: structural convergence of the four detail chapters ---
+    # The Status/Approval/Usage/Return sections must be gone (merged away), and
+    # their live surfaces must be migrated into the journey rather than deleted.
+    stale_sections = REMOVED_SECTION_IDS & parser.ids
+    if stale_sections:
+        ok = fail(
+            "redundant detail sections must be merged away, still present: "
+            f"{sorted(stale_sections)}"
+        ) and ok
+
+    # Every in-page anchor (nav, mobile menu, noscript, skip link) must resolve
+    # to a real id so removing sections can never leave a dangling link.
+    dangling = sorted(a for a in parser.internal_anchors if a not in parser.ids)
+    if dangling:
+        ok = fail(f"navigation anchors point to missing ids: {dangling}") and ok
+
+    # The journey is the new home for the migrated demos: it must carry the
+    # interactive approval surface and the live agent status rows.
+    journey_block = re.search(
+        r'<section id="journey".*?</section>',
+        text,
+        re.DOTALL,
+    )
+    if not journey_block:
+        ok = fail("index.html must contain a #journey section") and ok
+    else:
+        jb = journey_block.group(0)
+        if 'id="approvalPanel"' not in jb or 'id="approvalStatus"' not in jb:
+            ok = fail("journey must host the migrated approval demo") and ok
+        if "agent-row" not in jb:
+            ok = fail("journey must host the migrated agent status rows") and ok
+        for action in sorted(REQUIRED_ACTIONS):
+            if f'data-action="{action}"' not in jb:
+                ok = fail(
+                    f"journey approval demo missing data-action: {action}"
+                ) and ok
+
     js = (SITE / "main.js").read_text(encoding="utf-8") if (SITE / "main.js").exists() else ""
     css = (SITE / "styles.css").read_text(encoding="utf-8") if (SITE / "styles.css").exists() else ""
+
+    # Task 5 renumbers the surviving chapters into a clean 01–06 sequence after
+    # the four detail chapters are merged away (design §3).
+    required_index_copy = {
+        "valueIndex": "01 /",
+        "capabilitiesIndex": "02 /",
+        "contextIndex": "03 /",
+        "journeyIndex": "04 /",
+        "integrationsIndex": "05 /",
+        "privacyIndex": "06 /",
+    }
+    for key, prefix in required_index_copy.items():
+        if not re.search(rf'{key}:\s*"{re.escape(prefix)}', js):
+            ok = fail(f"main.js chapter index {key!r} must start with {prefix!r}") and ok
     copy_files = {"index.html": text, "main.js": js}
     for name, required_snippets in REQUIRED_COPY.items():
         for snippet in required_snippets:

@@ -803,6 +803,23 @@ img { display: block; }
 .journey.is-pinned .journey-panel { flex: 0 0 min(64vw, 540px); justify-content: center; }
 .journey.is-pinned .journey-progress { margin-top: 40px; }
 
+/* Task 5 — live surfaces migrated into the journey panels (Status/Approval/
+   Usage/Return demos). Rendered on the dark journey surface, compact enough to
+   sit inside a single panel; always visible (no .reveal gating) so JS/GSAP
+   failure or reduced-motion never hides them. */
+.journey-demo { margin-top: clamp(20px, 2.6vw, 30px); }
+.journey-demo.agent-list { margin-top: clamp(20px, 2.6vw, 30px); }
+.journey-panel .agent-row { padding: 15px 0; gap: 16px; }
+.journey-panel .agent-name { font-size: 1.02rem; }
+.journey-panel .agent-note { margin-top: 5px; font-size: 0.9rem; }
+.journey-demo.usage-meters { margin-top: clamp(20px, 2.6vw, 30px); gap: 18px; max-width: none; }
+.journey-panel .approval-panel { max-width: 460px; }
+.journey-note { margin: 14px 0 0; max-width: 48ch; color: var(--text-faint); font-family: var(--font-mono); font-size: 11px; line-height: 1.6; }
+.journey-demo.return-targets li { border-top-color: var(--line-dark); }
+.journey-demo.return-targets li:last-child { border-bottom-color: var(--line-dark); }
+.journey-panel .return-targets li { font-size: 1rem; }
+.journey-panel .return-how { color: var(--text-faint); }
+
 /* Integrations — five low-contrast vertical lines that grow on scroll (§5.3). */
 .integrations { position: relative; isolation: isolate; }
 .context-lines {
@@ -891,7 +908,7 @@ footer img { width: 20px; height: 20px; border-radius: 5px; }
   .sticky-copy { position: static; top: auto; }
   .notch-wrap { width: min(560px, calc(100% - 40px)); }
   .privacy-row { grid-template-columns: 200px minmax(0, 1fr); }
-  .approval-demo, .notch-shell { width: 100%; }
+  .notch-shell { width: 100%; }
 }
 
 /* ≤900px: swap desktop nav + header download for the four-square mobile menu */
