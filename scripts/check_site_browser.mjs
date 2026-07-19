@@ -373,34 +373,107 @@ async function run() {
         languageAndCapability.zhPressed === "true",
       "language selection updates localized document metadata",
     );
-    await cdp.evaluate(`(async () => {
-      const journey = document.getElementById("journeyViewport");
-      window.scrollTo({
-        top: journey.getBoundingClientRect().top + window.scrollY,
-        behavior: "instant",
-      });
-      await new Promise(requestAnimationFrame);
-      const button = document.querySelector("#approvalPanel .approval-btn");
-      button.focus({ preventScroll: true });
-      button.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    const journeyFocusCases = await cdp.evaluate(`(async () => {
+      const viewport = document.getElementById("journeyViewport");
+      const panels = Array.from(document.querySelectorAll(".journey-panel"));
+      panels.forEach((panel) => panel.setAttribute("tabindex", "-1"));
+      const trigger = window.ScrollTrigger.getAll().find(
+        (candidate) => candidate.trigger === viewport,
+      );
+      const frame = () => new Promise(requestAnimationFrame);
+      const runCase = async (name, originProgress, panelIndex, targetSelector = null) => {
+        trigger.refresh();
+        const start = trigger.start;
+        const end = trigger.end;
+        window.scrollTo({ top: start + (end - start) * originProgress, behavior: "instant" });
+        await frame();
+        document.querySelector("[data-lang='en']").focus({ preventScroll: true });
+        const target = targetSelector
+          ? panels[panelIndex].querySelector(targetSelector)
+          : panels[panelIndex];
+        target.focus({ preventScroll: true });
+        target.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+        await frame();
+        await frame();
+        await frame();
+        const targetRect = target.getBoundingClientRect();
+        const viewportRect = viewport.getBoundingClientRect();
+        return {
+          name,
+          start,
+          end,
+          scrollY: window.scrollY,
+          targetLeft: targetRect.left,
+          targetRight: targetRect.right,
+          viewportLeft: viewportRect.left,
+          viewportRight: viewportRect.right,
+          focused: document.activeElement === target,
+        };
+      };
+      return [
+        await runCase("first-at-start", 0, 0),
+        await runCase("last-from-start", 0, panels.length - 1),
+        await runCase("first-from-end", 1, 0),
+        await runCase("middle-forward", 0.34, 2),
+        await runCase("middle-backward", 0.67, 1, ".approval-btn"),
+        await runCase("last-at-end", 1, panels.length - 1),
+      ];
     })()`);
-    await sleep(100);
-    const journeyFocus = await cdp.evaluate(`(() => {
-      const button = document.querySelector("#approvalPanel .approval-btn");
-      const rect = button.getBoundingClientRect();
+    journeyFocusCases.forEach((result) => {
+      check(
+        result.focused &&
+          result.scrollY >= result.start - 1 &&
+          result.scrollY <= result.end + 1 &&
+          result.targetLeft >= result.viewportLeft - 1 &&
+          result.targetRight <= result.viewportRight + 1,
+        `journey ${result.name} stays in refreshed pin range with horizontal focus visibility (focused=${result.focused}, scroll=${result.scrollY}, range=${result.start}-${result.end}, target=${result.targetLeft}-${result.targetRight}, viewport=${result.viewportLeft}-${result.viewportRight})`,
+      );
+    });
+
+    await setViewport(cdp, 1280, 900);
+    await sleep(350);
+    const journeyAfterResize = await cdp.evaluate(`(async () => {
+      const viewport = document.getElementById("journeyViewport");
+      const panels = Array.from(document.querySelectorAll(".journey-panel"));
+      panels.forEach((panel) => panel.setAttribute("tabindex", "-1"));
+      const frame = () => new Promise(requestAnimationFrame);
+      const trigger = window.ScrollTrigger.getAll().find(
+        (candidate) => candidate.trigger === viewport,
+      );
+      trigger.refresh();
+      const start = trigger.start;
+      const end = trigger.end;
+      window.scrollTo({ top: end, behavior: "instant" });
+      await frame();
+      document.querySelector("[data-lang='en']").focus({ preventScroll: true });
+      panels[0].focus({ preventScroll: true });
+      panels[0].dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      await frame();
+      await frame();
+      await frame();
+      const targetRect = panels[0].getBoundingClientRect();
+      const viewportRect = viewport.getBoundingClientRect();
       return {
-        y: window.scrollY,
-        top: rect.top,
-        bottom: rect.bottom,
-        viewportHeight: window.innerHeight,
+        start,
+        end,
+        scrollY: window.scrollY,
+        targetLeft: targetRect.left,
+        targetRight: targetRect.right,
+        viewportLeft: viewportRect.left,
+        viewportRight: viewportRect.right,
+        focused: document.activeElement === panels[0],
       };
     })()`);
     check(
-      journeyFocus.y > 0 &&
-        journeyFocus.top >= 0 &&
-        journeyFocus.bottom <= journeyFocus.viewportHeight,
-      `desktop pinned journey scrolls a focused noncurrent panel into view (y=${journeyFocus.y}, top=${journeyFocus.top}, bottom=${journeyFocus.bottom})`,
+      journeyAfterResize.focused &&
+        journeyAfterResize.scrollY >= journeyAfterResize.start - 1 &&
+        journeyAfterResize.scrollY <= journeyAfterResize.end + 1 &&
+        journeyAfterResize.targetLeft >= journeyAfterResize.viewportLeft - 1 &&
+        journeyAfterResize.targetRight <= journeyAfterResize.viewportRight + 1,
+      "journey focus uses rebuilt pin geometry after resize",
     );
+    await setViewport(cdp, 1440, 1000);
+    await sleep(350);
     await cdp.evaluate(`(async () => {
       const section = document.getElementById("context");
       window.scrollTo({
@@ -487,6 +560,39 @@ async function run() {
     }
     const constrainedCount = await cdp.evaluate("window.AgentDockContext?.config?.count");
     check(constrainedCount === 1600, "saveData and low-memory context tier uses 1600 particles");
+
+    await cdp.send("Page.addScriptToEvaluateOnNewDocument", {
+      source: `(() => {
+        const nativeRAF = window.requestAnimationFrame.bind(window);
+        let failed = false;
+        window.requestAnimationFrame = (callback) => {
+          if (!failed && document.getElementById("introCurtain")) {
+            failed = true;
+            throw new Error("forced curtain animation failure");
+          }
+          return nativeRAF(callback);
+        };
+      })();`,
+    });
+    await load(cdp, `${url}?curtain-error`);
+    await sleep(1200);
+    const curtainError = await cdp.evaluate(`(() => ({
+      state: window.AgentDockCurtain?.state,
+      mainInert: document.getElementById("main").hasAttribute("inert"),
+      footerInert: document.querySelector("footer").hasAttribute("inert"),
+      journeyPinned: document.getElementById("journey").classList.contains("is-pinned"),
+      triggerReady: window.ScrollTrigger.getAll().some(
+        (trigger) => trigger.trigger === document.getElementById("journeyViewport"),
+      ),
+    }))()`);
+    check(
+      curtainError.state === "error" &&
+        !curtainError.mainInert &&
+        !curtainError.footerInert &&
+        curtainError.journeyPinned &&
+        curtainError.triggerReady,
+      "curtain error releases inert and initializes chapter motion",
+    );
 
     console.log("PASS: browser site contract");
   } finally {

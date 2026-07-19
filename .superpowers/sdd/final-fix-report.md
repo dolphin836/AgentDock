@@ -53,3 +53,21 @@
   rendered anti-aliasing.
 - GSAP licensing remains usage-dependent. Re-review its upstream terms before
   offering the animation or site-building capability as a product feature.
+
+## Final review follow-up
+
+- Pinned journey focus now refreshes and uses only the resulting
+  `ScrollTrigger.start` and `ScrollTrigger.end`. Panel geometry determines the
+  progress within that pin interval; the animation progress is synchronized
+  immediately so the focused target is horizontally visible on the next frame.
+- Browser regression coverage checks first/last panels, middle forward and
+  backward movement, reverse focus from the pin end, the approval button, and
+  geometry after desktop resize. Every assertion checks the focused target's
+  `left`/`right` against the journey viewport, as well as the scroll position
+  against the refreshed pin range.
+- `agentdock:curtain-error` now initializes the hero fallback, opens the chapter
+  gate, and refreshes ScrollTrigger after inert cleanup. A forced-error browser
+  path verifies content release and pinned chapter initialization.
+- The ignored Task 1 report now cites the official registry tarballs and records
+  the final official integrity and byte-for-byte vendor verification. It is
+  intentionally excluded from this commit.

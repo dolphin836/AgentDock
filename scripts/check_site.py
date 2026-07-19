@@ -1089,10 +1089,19 @@ def main():
         "menuButton",
         "focusin",
         "focusJourneyPanel",
+        "journeyScrollTrigger.start",
+        "journeyScrollTrigger.end",
+        "targetRect.left",
+        "targetRect.right",
+        "handleCurtainError",
     )
     for contract in required_final_accessibility_hooks:
         if contract not in js and contract not in motion_source:
             ok = fail(f"missing final accessibility behavior hook: {contract}") and ok
+    if "measuredStart" in motion_source:
+        ok = fail(
+            "journey focus must use refreshed ScrollTrigger start/end, not layout position"
+        ) and ok
 
     required_official_registry_records = (
         "https://registry.npmjs.org/three/-/three-0.185.1.tgz",

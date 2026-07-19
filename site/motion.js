@@ -120,6 +120,7 @@ let chapterGateOpen = false;
 let chapterLayoutKey = "";
 let journeyScrollTrigger = null;
 let journeyViewport = null;
+let journeyFocusSyncing = false;
 
 function initChapters() {
   if (!chapterGateOpen || !gsap || !ScrollTrigger || reducedMotion.matches) return;
@@ -221,6 +222,7 @@ function initJourney() {
 
 function focusJourneyPanel(event) {
   if (
+    journeyFocusSyncing ||
     !journeyScrollTrigger ||
     !journeyViewport ||
     reducedMotion.matches ||
@@ -234,32 +236,65 @@ function focusJourneyPanel(event) {
 
   const panels = Array.from(journeyViewport.querySelectorAll(".journey-panel"));
   const panelIndex = panels.indexOf(panel);
-  const currentIndex = Math.round(
-    journeyScrollTrigger.progress * Math.max(0, panels.length - 1)
-  );
   if (panelIndex < 0) return;
-  if (panelIndex === currentIndex) {
-    const panelRect = panel.getBoundingClientRect();
-    if (panelRect.top < 0 || panelRect.bottom > window.innerHeight) {
-      panel.scrollIntoView({ block: "center", behavior: "auto" });
-    }
-    return;
-  }
 
-  journeyScrollTrigger.refresh();
-  const progress = panels.length > 1 ? panelIndex / (panels.length - 1) : 0;
-  const measuredStart =
-    journeyViewport.getBoundingClientRect().top + window.scrollY;
-  const triggerStart = journeyScrollTrigger.start;
-  const start =
-    Math.abs(triggerStart - measuredStart) > 1 ? measuredStart : triggerStart;
-  const scrollY =
-    start + (journeyScrollTrigger.end - journeyScrollTrigger.start) * progress;
-  window.scrollTo({ top: scrollY, behavior: "auto" });
-  const panelRect = panel.getBoundingClientRect();
-  if (panelRect.top < 0 || panelRect.bottom > window.innerHeight) {
-    panel.scrollIntoView({ block: "center", behavior: "auto" });
+  const target = event.target;
+  journeyFocusSyncing = true;
+  try {
+    journeyScrollTrigger.refresh();
+    if (document.activeElement !== target && typeof target.focus === "function") {
+      target.focus({ preventScroll: true });
+    }
+  } finally {
+    journeyFocusSyncing = false;
   }
+  const track = document.getElementById("journeyTrack");
+  const overflow = track
+    ? Math.max(0, track.scrollWidth - journeyViewport.clientWidth)
+    : 0;
+  const centeredOffset = Math.max(
+    0,
+    Math.min(
+      overflow,
+      panel.offsetLeft + panel.offsetWidth / 2 - journeyViewport.clientWidth / 2
+    )
+  );
+  const progress =
+    overflow > 0
+      ? centeredOffset / overflow
+      : panels.length > 1
+        ? panelIndex / (panels.length - 1)
+        : 0;
+  const start = journeyScrollTrigger.start;
+  const end = journeyScrollTrigger.end;
+  const range = end - start;
+  const scrollToProgress = (nextProgress) => {
+    const rootStyle = document.documentElement.style;
+    const previousBehavior = rootStyle.scrollBehavior;
+    rootStyle.scrollBehavior = "auto";
+    window.scrollTo(0, start + range * nextProgress);
+    rootStyle.scrollBehavior = previousBehavior;
+    if (journeyScrollTrigger.animation) {
+      journeyScrollTrigger.animation.progress(nextProgress);
+    }
+  };
+  window.requestAnimationFrame(() => {
+    scrollToProgress(progress);
+    window.requestAnimationFrame(() => {
+      const targetRect = target.getBoundingClientRect();
+      const viewportRect = journeyViewport.getBoundingClientRect();
+      let correctedProgress = progress;
+      if (overflow > 0 && targetRect.left < viewportRect.left) {
+        correctedProgress -= (viewportRect.left - targetRect.left) / overflow;
+      } else if (overflow > 0 && targetRect.right > viewportRect.right) {
+        correctedProgress += (targetRect.right - viewportRect.right) / overflow;
+      }
+      correctedProgress = Math.max(0, Math.min(1, correctedProgress));
+      if (correctedProgress !== progress) {
+        scrollToProgress(correctedProgress);
+      }
+    });
+  });
 }
 
 function teardownChapters() {
@@ -317,6 +352,14 @@ function openChapterGate() {
   chapterGateOpen = true;
   chapterLayoutKey = getChapterLayoutKey();
   initChapters();
+}
+
+function handleCurtainError() {
+  initHeroMotion();
+  openChapterGate();
+  if (ScrollTrigger && typeof ScrollTrigger.refresh === "function") {
+    ScrollTrigger.refresh();
+  }
 }
 
 // --- Second particle field: lazy import with capable-device idle preload ---
@@ -393,12 +436,16 @@ if (curtainState === "skipped") {
 } else if (curtainState === "complete") {
   initHeroMotion();
   openChapterGate();
+} else if (curtainState === "error") {
+  handleCurtainError();
 } else if (curtainState === "exiting") {
   initHeroMotion();
   document.addEventListener("agentdock:curtain-complete", openChapterGate, { once: true });
+  document.addEventListener("agentdock:curtain-error", handleCurtainError, { once: true });
 } else {
   document.addEventListener("agentdock:curtain-exit-start", initHeroMotion, { once: true });
   document.addEventListener("agentdock:curtain-complete", openChapterGate, { once: true });
+  document.addEventListener("agentdock:curtain-error", handleCurtainError, { once: true });
   document.addEventListener(
     "agentdock:curtain-skipped",
     () => {
