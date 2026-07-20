@@ -110,16 +110,24 @@ fi
 hdiutil convert "$TEMP_DMG" -format UDZO -imagekey zlib-level=9 -o "$DMG" >/dev/null
 rm -f "$TEMP_DMG"
 
-echo "[publish] 发布到 site/(dmg + version.json + 下载链接)…"
+echo "[publish] 发布到 site/(重建官网 + dmg + version.json)…"
+DMG_URL="https://api.agentdockstatus.app/v1/download/AgentDock-$VERSION.dmg"
+
+# 权威发布路径:带发布版本/下载链接的 env 重建 Next 静态站点,再静态 copy 到 site/。
+# 版本值由 website/src/lib/release.ts 从 NEXT_PUBLIC_* 读取并内联进产物,
+# 不再对 index.html 做正则 patch(scripts/update_site_release.py 仅保留为兼容工具)。
+(
+  cd website
+  NEXT_PUBLIC_AGENTDOCK_VERSION="$VERSION" \
+  NEXT_PUBLIC_AGENTDOCK_DMG_URL="$DMG_URL" \
+    npm run build
+  # 只 copy,不再触发第二次(无 env 的)build
+  npm run copy:site
+)
+
+# 官网与应用内更新都走 dmg;download 字段保持兼容旧客户端字段名
 rm -f site/AgentDock-*.pkg site/AgentDock-*.dmg
 cp "$DMG" site/
-DMG_URL="https://api.agentdockstatus.app/v1/download/AgentDock-$VERSION.dmg"
-# 官网与应用内更新都走 dmg;download 字段保持兼容旧客户端字段名
-# [skill: go-team-standards · 可复现发布替换] 使用可独立测试的显式 HTML 更新器
-python3 scripts/update_site_release.py \
-  --html site/index.html \
-  --version "$VERSION" \
-  --url "$DMG_URL"
 cat > site/version.json <<JSON
 {
   "version": "$VERSION",

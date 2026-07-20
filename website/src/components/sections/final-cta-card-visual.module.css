@@ -1,0 +1,323 @@
+.section {
+  --gutter: 32px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(540px, 1fr);
+  align-items: stretch;
+  overflow: visible;
+}
+
+.visual {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 540px;
+  padding: 48px;
+  background: #f3f5f8;
+}
+
+.macWindow {
+  position: relative;
+  width: min(100%, 470px);
+  min-height: 382px;
+  overflow: hidden;
+  padding: 24px 28px 30px;
+  color: rgba(255, 255, 255, 0.9);
+  background: #111827;
+  border-radius: 26px;
+  box-shadow: 0 26px 62px rgba(15, 23, 42, 0.18);
+}
+
+.windowChrome {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  height: 12px;
+}
+
+.windowDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.27);
+}
+
+.notch {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 134px;
+  height: 28px;
+  background: #030712;
+  border-radius: 0 0 17px 17px;
+  transform: translateX(-50%);
+}
+
+.notchCamera {
+  width: 6px;
+  height: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.65);
+  border-radius: 50%;
+}
+
+.statusStack {
+  display: grid;
+  gap: 10px;
+  margin-top: 58px;
+}
+
+.agentRow {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 60px;
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 560;
+  letter-spacing: -0.01em;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+}
+
+.agentMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  font-family: var(--font-mono, "Geist Mono", monospace);
+  font-size: 12px;
+  font-weight: 600;
+  color: #111827;
+  background: #dbeafe;
+  border-radius: 8px;
+}
+
+.agentState {
+  font-family: var(--font-mono, "Geist Mono", monospace);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.56);
+}
+
+.agentRunning .agentMark {
+  background: #bfdbfe;
+}
+
+.agentWaiting .agentMark {
+  background: #fde68a;
+}
+
+.agentReady .agentMark {
+  background: #bbf7d0;
+}
+
+.notchCaption {
+  margin: 31px 0 0;
+  font-family: var(--font-mono, "Geist Mono", monospace);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.64);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  min-height: 540px;
+  padding: 72px 64px;
+  color: white;
+  background: #2563eb;
+  border-radius: 30px;
+}
+
+.eyebrow {
+  margin: 0 0 28px;
+  font-family: var(--font-mono, "Geist Mono", monospace);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  line-height: 1.2;
+  color: white;
+}
+
+.card h2 {
+  max-width: 620px;
+  margin: 0;
+  font-size: clamp(48px, 4.17vw, 60px);
+  font-weight: 560;
+  letter-spacing: -0.06em;
+  line-height: 1.02;
+}
+
+.card h2 span {
+  display: block;
+  margin-top: 18px;
+  font-size: 0.32em;
+  font-weight: 500;
+  letter-spacing: -0.035em;
+}
+
+.body {
+  max-width: 520px;
+  margin: 46px 0 34px;
+  font-size: 19px;
+  line-height: 1.65;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.download {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 12px 22px;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: white;
+  text-decoration: none;
+  background: #111;
+  border-radius: 8px;
+  isolation: isolate;
+  transition: background-color 180ms ease-out;
+}
+
+.download::after {
+  position: absolute;
+  inset: -50% auto -50% -36%;
+  z-index: -1;
+  width: 28%;
+  content: "";
+  background: rgba(255, 255, 255, 0.28);
+  opacity: 0;
+  transform: skewX(-22deg) translateX(-260%);
+}
+
+.download:hover {
+  background: #1d4ed8;
+}
+
+.download:hover::after {
+  opacity: 1;
+  animation: sheen 760ms ease-out both;
+}
+
+.download:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 3px;
+}
+
+.cursor {
+  display: inline-block;
+  margin-left: 3px;
+  font-family: var(--font-mono, "Geist Mono", monospace);
+  animation: cursorBlink 1.4s steps(2, start) infinite;
+}
+
+.metadata {
+  margin: 28px 0 0;
+  font-family: var(--font-mono, "Geist Mono", monospace);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+@keyframes sheen {
+  from {
+    transform: skewX(-22deg) translateX(-260%);
+  }
+
+  to {
+    transform: skewX(-22deg) translateX(670%);
+  }
+}
+
+@keyframes cursorBlink {
+  0%,
+  48% {
+    opacity: 1;
+  }
+
+  49%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (min-width: 901px) {
+  .card {
+    --edge: max(
+      var(--page-gutter),
+      calc((100vw - var(--content-width)) / 2)
+    );
+    width: calc(100% + var(--edge));
+    margin-right: calc(var(--edge) * -1);
+    border-radius: 30px 0 0 30px;
+  }
+}
+
+@media (max-width: 900px) {
+  .section {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .visual,
+  .card {
+    min-height: 540px;
+  }
+
+  .card {
+    padding: 54px 40px;
+  }
+}
+
+@media (max-width: 680px) {
+  .visual {
+    min-height: 430px;
+    padding: 32px 24px;
+  }
+
+  .macWindow {
+    min-height: 340px;
+    padding: 22px 20px 24px;
+  }
+
+  .card {
+    min-height: 0;
+    padding: 44px 24px;
+    border-radius: 22px;
+  }
+
+  .card h2 {
+    font-size: 48px;
+  }
+
+  .body {
+    font-size: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .download::after {
+    display: none;
+  }
+
+  .cursor {
+    animation: none;
+    opacity: 1;
+  }
+}

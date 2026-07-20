@@ -1,0 +1,58 @@
+.curtain {
+  position: fixed;
+  inset: 0;
+  z-index: 180;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  pointer-events: none;
+  color: #dadada;
+  background: #111111;
+  clip-path: inset(0);
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  transition:
+    clip-path 0.9s cubic-bezier(0.62, 0.16, 0.13, 1.01),
+    transform 0.9s cubic-bezier(0.62, 0.16, 0.13, 1.01);
+  will-change: clip-path, transform;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-family: var(--font-sans);
+  font-size: 30px;
+  font-weight: 620;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+
+.icon {
+  width: 48px;
+  height: 48px;
+}
+
+.progress {
+  position: absolute;
+  right: var(--page-gutter);
+  bottom: var(--page-gutter);
+  font-family: var(--font-geist-mono), "SFMono-Regular", Consolas, monospace;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.exiting {
+  clip-path: inset(0 0 100%);
+  transform: translateY(-24px);
+}
+
+@media (max-width: 680px), (prefers-reduced-motion: reduce) {
+  .curtain {
+    display: none;
+  }
+}

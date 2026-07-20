@@ -1,0 +1,284 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --page-gutter: 18px;
+  --content-width: 1440px;
+  --spacing-unit: 0.25rem;
+  --font-sans: var(--font-geist-sans), Inter, ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), "SFMono-Regular", Consolas, monospace;
+  --text-label: 0.75rem;
+  --text-nav: 0.8125rem;
+  --text-body: 1rem;
+  --text-lead: 1.1875rem;
+  --text-card-title: 1.25rem;
+  --text-section-title: clamp(2.25rem, 5vw, 3.75rem);
+  --text-display: clamp(2.4375rem, 6vw, 4.25rem);
+  --line-label: 1.3;
+  --line-body: 1.5;
+  --line-lead: 1.7;
+
+  --ink: #111111;
+  --ink-soft: #1b1b1b;
+  --ink-muted: #535353;
+  --paper: #dadada;
+  --paper-pure: #e7e7e7;
+  --mist: #f5f5f5;
+  --white: #ffffff;
+  --accent-blue: #2563eb;
+  --accent-blue-hover: #1d4ed8;
+  --border-dark: rgb(255 255 255 / 16%);
+  --border-light: rgb(17 17 17 / 14%);
+  --focus-ring: #7ba4ff;
+  --ease-structural: cubic-bezier(0.62, 0.16, 0.13, 1.01);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 150ms;
+  --duration-base: 240ms;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--paper-pure);
+  --card-foreground: var(--ink);
+  --popover: var(--paper-pure);
+  --popover-foreground: var(--ink);
+  --primary: var(--accent-blue);
+  --primary-foreground: var(--white);
+  --secondary: #cfcfcf;
+  --secondary-foreground: var(--ink);
+  --muted: #cfcfcf;
+  --muted-foreground: var(--ink-muted);
+  --accent: #c5c5c5;
+  --accent-foreground: var(--ink);
+  --destructive: #c83e33;
+  --border: var(--border-light);
+  --input: var(--border-light);
+  --ring: var(--focus-ring);
+  --chart-1: var(--accent-blue);
+  --chart-2: #535353;
+  --chart-3: #8c8c8c;
+  --chart-4: #b1b1b1;
+  --chart-5: #d0d0d0;
+  --radius: var(--radius-md);
+  --sidebar: var(--paper-pure);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--accent-blue);
+  --sidebar-primary-foreground: var(--white);
+  --sidebar-accent: #cfcfcf;
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--border-light);
+  --sidebar-ring: var(--focus-ring);
+}
+
+.dark {
+  --background: var(--ink);
+  --foreground: var(--white);
+  --card: var(--ink-soft);
+  --card-foreground: var(--white);
+  --popover: var(--ink-soft);
+  --popover-foreground: var(--white);
+  --primary: var(--accent-blue);
+  --primary-foreground: var(--white);
+  --secondary: #292929;
+  --secondary-foreground: var(--white);
+  --muted: #292929;
+  --muted-foreground: rgb(255 255 255 / 64%);
+  --accent: #292929;
+  --accent-foreground: var(--white);
+  --border: var(--border-dark);
+  --input: var(--border-dark);
+  --sidebar: var(--ink-soft);
+  --sidebar-foreground: var(--white);
+  --sidebar-primary: var(--accent-blue);
+  --sidebar-primary-foreground: var(--white);
+  --sidebar-accent: #292929;
+  --sidebar-accent-foreground: var(--white);
+  --sidebar-border: var(--border-dark);
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    min-width: 320px;
+    scroll-behavior: smooth;
+    scroll-padding-top: 5rem;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    min-width: 320px;
+    min-height: 100vh;
+    overflow-x: clip;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    font-weight: 400;
+    line-height: 1.5;
+  }
+
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  button,
+  a,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  button,
+  [role="button"] {
+    cursor: pointer;
+  }
+
+  img,
+  picture,
+  svg,
+  video,
+  canvas {
+    display: block;
+    max-width: 100%;
+  }
+
+  ::selection {
+    background: var(--accent-blue);
+    color: var(--white);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 3px;
+  }
+
+  h1,
+  h2,
+  h3,
+  p {
+    margin: 0;
+  }
+}
+
+.skip-link {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 200;
+  padding: 10px 14px;
+  color: var(--ink);
+  background: var(--paper-pure);
+  transform: translateY(-160%);
+  transition: transform 180ms var(--ease-out);
+}
+
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+.site-container {
+  width: min(calc(100% - (var(--page-gutter) * 2)), var(--content-width));
+  margin-inline: auto;
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 520;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --page-gutter: 24px;
+  }
+}
+
+@media (min-width: 901px) {
+  :root {
+    --page-gutter: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  /* Reveal targets always render in their final state when motion is reduced,
+     regardless of whether the global reveal observer has run. */
+  .motion-ready [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}

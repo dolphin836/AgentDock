@@ -1,1 +1,2 @@
 site/vendor/*.min.js -diff linguist-generated=true
+site/_next/** -diff linguist-generated=true whitespace=-trailing-space
