@@ -22,11 +22,23 @@ public struct AgentEvent: Sendable, Equatable {
     public let appPath: String?
     /// 事件自带的模型名(Cursor hook 每个事件都带;其他 agent 走 statusline/SQLite)
     public let model: String?
+    /// 同一工具调用在 hook/transcript 间共享的 id(tool_use_id/tool_call_id)。
+    public let correlationId: String?
+    /// Cursor 子 agent hook 显式或从 transcript 路径解析出的父会话 id。
+    public let parentSessionId: String?
+    /// Cursor 子 agent hook 的 child id(首选别名)。
+    public let subagentId: String?
+    /// 子 agent 的全部跨通道身份别名(subagent_id/tool_call_id + transcript path stem 等),
+    /// 供 Aggregator 关联同一 canonical child;subagentId 为其首选项。
+    public let subagentAliases: [String]
     public let timestamp: Date
 
     public init(sessionId: String, kind: AgentKind, cwd: String? = nil,
                 name: String, detail: String? = nil, tool: String? = nil,
-                appPath: String? = nil, model: String? = nil, timestamp: Date = Date()) {
+                appPath: String? = nil, model: String? = nil,
+                correlationId: String? = nil, parentSessionId: String? = nil,
+                subagentId: String? = nil, subagentAliases: [String] = [],
+                timestamp: Date = Date()) {
         self.sessionId = sessionId
         self.kind = kind
         self.cwd = cwd
@@ -35,6 +47,10 @@ public struct AgentEvent: Sendable, Equatable {
         self.tool = tool
         self.appPath = appPath
         self.model = model
+        self.correlationId = correlationId
+        self.parentSessionId = parentSessionId
+        self.subagentId = subagentId
+        self.subagentAliases = subagentAliases
         self.timestamp = timestamp
     }
 }

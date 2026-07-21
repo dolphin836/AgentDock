@@ -32,10 +32,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// 存活 codex 进程的 cwd → 宿主 App,每轮 backfill 刷新
     private var codexLiveHosts: [String: String] = [:]
-    /// Cursor 的子 agent 会话 id(Task/best-of-N 派生),每轮 backfill 刷新 + 点查缓存
+    /// Cursor 的子 agent 会话 id(Task/best-of-N 派生),每轮 backfill 用最新快照替换
     private var cursorSubagentIds: Set<String> = []
-    /// 已确认是用户主会话的 id(点查结果缓存,避免重复开库)
+    /// 已确认是用户主会话的 id,每轮 backfill 用最新快照替换以保持有界
     private var cursorKnownMainIds: Set<String> = []
+    /// hook/transcript 同一原生事件的一次性短窗口去重
+    private let cursorHookDeduplicator = CursorHookEventDeduplicator()
+    /// Cursor hook 通道首次活跃日志只记录一次
+    private var cursorHookChannelLogged = false
+    /// 把子 agent transcript 聚合成父会话的 Task 进度事件
+    private let cursorSubagentAggregator = CursorSubagentAggregator()
     /// 已注入过「向你提问」事件的 bubble,避免每轮重复触发
     private var seenQuestionBubbles: Set<String> = []
     /// 挂起中的交互卡片(bubbleId → 会话与类型):由高频监视器秒级检测处理结果
@@ -45,22 +51,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var fastInteractionTimer: Timer?
     private var fastProbeInFlight = false
 
-    // MARK: 通道优先级(三家同一套机制:主通道健康则次级让位,过期自动降级)
+    // MARK: 采集通道
     //
-    // Cursor:  1.hooks(亚秒) → 2.transcript tailer(秒级) → 3.bubble 探测(10s) → 4.回填(10s)
+    // Cursor: hooks 与 transcript 并行；相同事件按精确指纹一次性去重。其后是
+    // bubble 探测(10s)与回填(10s)。
     // Claude:  1.hooks(亚秒) → 2.注册表 status(10s,Claude 自报的权威状态) → 3.transcript 回填(10s)
     // Codex:   1.rollout tailer + notify(秒级) → 2.SQLite 尾部推断(10s,天然幂等,常开兜底)
     //
-    // 健康判定不猜版本,以事实为准:收到主通道事件即健康(2 分钟信任窗口)。
-    // 本版 Cursor 的 hooks 是坏的,哪个版本修好了,App 不用改动自动升级。
-
+    // Claude 仍按 2 分钟窗口判断 hook 通道是否健康。
     private static let channelTrustWindow: TimeInterval = 120
-    /// 最近一次收到各家主通道事件的时间
-    private var lastCursorHookAt: Date = .distantPast
     private var lastClaudeHookAt: Date = .distantPast
-    private var cursorHooksHealthy: Bool {
-        Date().timeIntervalSince(lastCursorHookAt) < Self.channelTrustWindow
-    }
     private var claudeHooksHealthy: Bool {
         Date().timeIntervalSince(lastClaudeHookAt) < Self.channelTrustWindow
     }
@@ -96,6 +96,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .none:
                 return true  // 库里还没记录(会话刚创建):暂放行,回填名单会兜底清理
             }
+        }
+        store.cursorHasActiveSubagents = { [weak self] id in
+            self?.cursorSubagentAggregator.hasActiveChildren(parentId: id) ?? false
         }
         // 活动历史:状态区间与 token 采样落库(HistoryStore 内部异步,不阻塞)
         store.transitionObserver = { sessionId, kind, project, newState in
@@ -492,7 +495,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 self.allowedClaudeIds = Set(registryEntries.map(\.sessionId))
                 self.codexLiveHosts = codexHosts
-                self.cursorSubagentIds.formUnion(cursorSnapshot.subagentIds)
+                // stale/试探终态回收可能放出父完成态或被 defer 的父终态,逐条 apply,
+                // 避免子任务丢终态导致父会话永久卡 running。
+                for reconciled in self.cursorSubagentAggregator.prune() {
+                    self.store.apply(reconciled)
+                }
+                // 只保留最新两小时快照，避免点查缓存随 App 生命周期无限增长。
+                self.cursorSubagentIds = cursorSnapshot.subagentIds
+                self.cursorKnownMainIds = Set(cursorSnapshot.sessions.map(\.id))
                 self.store.backfill(resolved)
                 self.handlePendingInteractions(interactions)
                 if useClaudeRegistryStatus {
@@ -533,11 +543,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let result = EventIngestor.parseLine(line)
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                // 主通道事件到达 = 该家 hooks 通道健康,次级通道让位
                 switch result {
                 case .event(let e) where e.kind == .cursor:
-                    if !self.cursorHooksHealthy { NSLog("AgentDock: cursor hooks channel active") }
-                    self.lastCursorHookAt = Date()
+                    if !self.cursorHookChannelLogged {
+                        NSLog("AgentDock: cursor hooks channel active")
+                        self.cursorHookChannelLogged = true
+                    }
+                    if e.name == "subagentStart" || e.name == "subagentStop" {
+                        // 官方 hook 在父会话上下文触发(parent_conversation_id==conversation_id):
+                        // parentId 优先取显式父 id,否则回落到本会话 id。
+                        let parentId = e.parentSessionId
+                            ?? (e.subagentAliases.isEmpty && e.subagentId == nil ? nil : e.sessionId)
+                        guard let parentId else { return }
+                        // start 必须能识别 child;stop 允许空别名(降级版本)→ Aggregator FIFO 释放。
+                        if e.name == "subagentStart", e.subagentAliases.isEmpty, e.subagentId == nil {
+                            return
+                        }
+                        self.store.apply(self.cursorSubagentAggregator.ingestHook(
+                            parentId: parentId, childId: e.subagentId ?? "",
+                            eventName: e.name, cwd: e.cwd, aliases: e.subagentAliases))
+                        return  // 原始 subagent hook 绝不直接进入 EventMapping
+                    }
+                    // hook 通道:先看对侧 transcript 是否已 apply 同一事件(乱序双向去重)。
+                    if self.cursorHookDeduplicator.consumeDuplicate(e, ownChannel: .hook) {
+                        return
+                    }
+                    self.cursorHookDeduplicator.record(e, channel: .hook)
+                    if (e.name == "stop" || e.name == "sessionEnd"),
+                       self.cursorSubagentAggregator.hasActiveChildren(parentId: e.sessionId) {
+                        self.cursorSubagentAggregator.deferParentTerminal(
+                            parentId: e.sessionId, eventName: e.name)
+                        return
+                    }
+                    if e.name == "sessionEnd" {
+                        // 无活跃 child 的权威父终态清掉任何陈旧聚合状态。
+                        self.cursorSubagentAggregator.reset(parentId: e.sessionId)
+                    }
                 case .event(let e) where e.kind == .claudeCode:
                     if !self.claudeHooksHealthy { NSLog("AgentDock: claude hooks channel active") }
                     self.lastClaudeHookAt = Date()
@@ -568,23 +609,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Cursor 的 hooks 在部分版本上不可用(MainThreadShellExec not initialized),
     /// transcript 是唯一稳定的实时信号:秒级 tail,与 hooks 事件走同一状态机。
+    /// 子 agent transcript(subagents/)不再过滤:它们聚合成父会话的 Task 进度;
+    /// 主 transcript 与 hooks 按稳定事件指纹一次性去重。
     private func startCursorTailer() {
         let root = Self.home + "/.cursor/projects"
         guard FileManager.default.fileExists(atPath: root) else { return }
         let tailer = CodexSessionTailer(
             root: root,
-            // subagents/ 下是子 agent transcript,秒级通道也必须排除,
-            // 否则会抢在 SQLite 子 agent 名单刷新前漏成重复会话
-            pathFilter: { $0.contains("/agent-transcripts/") && !$0.contains("/subagents/") }
-        ) { path, sessionId, line in
+            pathFilter: { $0.contains("/agent-transcripts/") }
+        ) { path, _, line in
             // projects/<slug>/agent-transcripts/... → 从 slug 还原项目路径
             let cwd: String? = path.components(separatedBy: "/")
                 .drop(while: { $0 != "projects" }).dropFirst().first
                 .flatMap { SessionBackfillScanner.resolvePathSlug($0) }
-            let result = EventIngestor.parseCursorTranscriptLine(
-                sessionId: sessionId, cwd: cwd, line: line)
+            let identity = SessionBackfillScanner.cursorTranscriptIdentity(path: path)
             Task { @MainActor [weak self] in
-                guard let self, !self.cursorHooksHealthy else { return }
+                guard let self else { return }
+                if let parentId = identity.parentId {
+                    // 子 agent:聚合为父会话的 Task 进度(不作为独立会话展示)
+                    self.store.apply(self.cursorSubagentAggregator.ingest(
+                        parentId: parentId, childId: identity.sessionId, cwd: cwd, line: line))
+                    return
+                }
+                let result = EventIngestor.parseCursorTranscriptLine(
+                    sessionId: identity.sessionId, cwd: cwd, line: line)
+                if case .event(let e) = result {
+                    // transcript 通道:对侧 hook 已 apply 则丢弃;否则登记本通道供后到的 hook 去重。
+                    if self.cursorHookDeduplicator.consumeDuplicate(e, ownChannel: .transcript) {
+                        return  // 一条 hook 只抑制一条精确匹配 transcript
+                    }
+                    self.cursorHookDeduplicator.record(e, channel: .transcript)
+                }
+                if case .event(let e) = result,
+                   (e.name == "stop" || e.name == "sessionEnd"),
+                   self.cursorSubagentAggregator.hasActiveChildren(parentId: e.sessionId) {
+                    self.cursorSubagentAggregator.deferParentTerminal(
+                        parentId: e.sessionId, eventName: e.name)
+                    return
+                }
                 self.store.apply(result)
             }
         }

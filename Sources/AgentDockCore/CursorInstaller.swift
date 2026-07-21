@@ -8,7 +8,11 @@ public struct CursorInstaller {
     public let emitPath: String
 
     static let hookEvents = ["sessionStart", "beforeSubmitPrompt", "preToolUse",
-                             "postToolUse", "stop", "sessionEnd"]
+                             "postToolUse", "postToolUseFailure",
+                             "beforeShellExecution", "afterShellExecution",
+                             "beforeMCPExecution", "afterMCPExecution",
+                             "subagentStart", "subagentStop",
+                             "stop", "sessionEnd"]
 
     public init(hooksPath: String, emitPath: String) {
         self.hooksPath = hooksPath

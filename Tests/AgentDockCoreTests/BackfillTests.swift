@@ -116,6 +116,38 @@ import Foundation
         #expect(SessionBackfillScanner.resolvePathSlug("empty-window", directoryExists: exists) == nil)
     }
 
+    @Test func cursorTranscriptIdentityParsesParentChild() {
+        // 主会话:agent-transcripts/<conv>/<conv>.jsonl → 保持原 id,无父
+        let main = "/Users/eric/.cursor/projects/slug/agent-transcripts/conv-1/conv-1.jsonl"
+        let mainId = SessionBackfillScanner.cursorTranscriptIdentity(path: main)
+        #expect(mainId.sessionId == "conv-1")
+        #expect(mainId.parentId == nil)
+        #expect(!mainId.isSubagent)
+
+        // 子会话:agent-transcripts/<parent>/subagents/<child>.jsonl
+        let sub = "/Users/eric/.cursor/projects/slug/agent-transcripts/conv-1/subagents/sub-9.jsonl"
+        let subId = SessionBackfillScanner.cursorTranscriptIdentity(path: sub)
+        #expect(subId.sessionId == "sub-9")
+        #expect(subId.parentId == "conv-1")
+        #expect(subId.isSubagent)
+    }
+
+    @Test func cursorTranscriptIdentityHandlesNestedPaths() {
+        // 更深的嵌套路径也应正确定位 subagents 前一层为父
+        let nested = "/a/b/c/agent-transcripts/deep/parent-x/subagents/child-y.jsonl"
+        let id = SessionBackfillScanner.cursorTranscriptIdentity(path: nested)
+        #expect(id.sessionId == "child-y")
+        #expect(id.parentId == "parent-x")
+        #expect(id.isSubagent)
+
+        // 嵌套子 agent 仍归并到 root parent，不能误取第二个 subagents 前的 child。
+        let grandchild =
+            "/a/agent-transcripts/root/subagents/child/subagents/grandchild.jsonl"
+        let nestedId = SessionBackfillScanner.cursorTranscriptIdentity(path: grandchild)
+        #expect(nestedId.sessionId == "grandchild")
+        #expect(nestedId.parentId == "root")
+    }
+
     @Test func codexThreadIdExtraction() {
         #expect(SessionBackfillScanner.codexThreadId(
             fromRolloutName: "rollout-2026-07-04T10-21-24-019f2ab7-513b-7083-95e4-58f8b095e141")
@@ -215,6 +247,81 @@ import Foundation
         #expect(session?.metrics?.contextPct == 24)       // 缺失字段补上
         #expect(session?.metrics?.totalTokens == 237_000)
         #expect(session?.state == .runningTool)           // disconnected 不覆盖实时态
+    }
+
+    @Test func equalTimeCursorDoneDoesNotOverrideRunning() {
+        let store = SessionStore()
+        let now = Date()
+        // transcript tailer 建立的运行态(preToolUse → runningTool)
+        store.apply(.event(AgentEvent(sessionId: "cx", kind: .cursor, cwd: "/x/p",
+                                      name: "preToolUse", tool: "Shell", timestamp: now)))
+        #expect(store.sessions[0].state == .runningTool)
+        // 状态库/尾部推断的 done,mtime 与内存完全相同 → 不得压过实时运行态
+        // (子任务仍在跑时父会话的主 transcript 可能已 turn_ended)
+        store.backfill([
+            AgentSession(id: "cx", kind: .cursor, projectName: "p", cwd: "/x/p",
+                         state: .done, lastActivity: now),
+        ])
+        #expect(store.sessions[0].state == .runningTool)
+    }
+
+    @Test func newerCursorDoneOverridesRunning() {
+        let store = SessionStore()
+        let now = Date()
+        store.apply(.event(AgentEvent(sessionId: "cx", kind: .cursor, cwd: "/x/p",
+                                      name: "preToolUse", tool: "Shell", timestamp: now)))
+        // candidate 时间更新 → 采纳终态
+        store.backfill([
+            AgentSession(id: "cx", kind: .cursor, projectName: "p", cwd: "/x/p",
+                         state: .done, lastActivity: now.addingTimeInterval(5)),
+        ])
+        #expect(store.sessions[0].state == .done)
+    }
+
+    @Test func newerCursorDoneDoesNotOverrideWhileSubagentActive() {
+        let store = SessionStore()
+        let now = Date()
+        var active = true
+        store.cursorHasActiveSubagents = { _ in active }
+        store.apply(.event(AgentEvent(sessionId: "cx", kind: .cursor, cwd: "/x/p",
+                                      name: "subagentProgress", tool: "Task", timestamp: now)))
+        let candidate = AgentSession(
+            id: "cx", kind: .cursor, projectName: "p", cwd: "/x/p",
+            state: .done, lastActivity: now.addingTimeInterval(5))
+        store.backfill([candidate])
+        #expect(store.sessions[0].state == .runningTool)
+        // 活跃子任务结束后，同一个 newer candidate 应恢复原有终态采纳行为。
+        active = false
+        store.backfill([candidate])
+        #expect(store.sessions[0].state == .done)
+    }
+
+    @Test func newerCursorDoneOverridesWhenNoSubagentActive() {
+        let store = SessionStore()
+        let now = Date()
+        store.cursorHasActiveSubagents = { _ in false }
+        store.apply(.event(AgentEvent(sessionId: "cx", kind: .cursor, cwd: "/x/p",
+                                      name: "subagentProgress", tool: "Task", timestamp: now)))
+        store.backfill([
+            AgentSession(id: "cx", kind: .cursor, projectName: "p", cwd: "/x/p",
+                         state: .done, lastActivity: now.addingTimeInterval(5)),
+        ])
+        #expect(store.sessions[0].state == .done)
+    }
+
+    @Test func equalCursorDoneIsBlockedWhileSubagentActive() {
+        let store = SessionStore()
+        let now = Date()
+        store.cursorHasActiveSubagents = { $0 == "cx" }
+        store.apply(.event(AgentEvent(
+            sessionId: "cx", kind: .cursor, cwd: "/x/p",
+            name: "sessionStart", timestamp: now)))
+        #expect(store.sessions[0].state == .idle)
+        store.backfill([
+            AgentSession(id: "cx", kind: .cursor, projectName: "p", cwd: "/x/p",
+                         state: .done, lastActivity: now),
+        ])
+        #expect(store.sessions[0].state == .idle)
     }
 
     @Test func backfillFillsMissingAppPath() {

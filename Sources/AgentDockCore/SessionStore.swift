@@ -22,6 +22,8 @@ public final class SessionStore {
 
     /// Cursor 会话准入校验(过滤 Task/best-of-N 派生的子 agent);nil = 不过滤
     public var cursorSessionValidator: ((String) -> Bool)?
+    /// Cursor 父会话是否仍有活跃子任务；用于阻止回填 done 抢先结束父会话。
+    public var cursorHasActiveSubagents: ((String) -> Bool)?
 
     /// 状态转换观察者(历史记录用):newState = nil 表示会话被移除
     public var transitionObserver: ((_ sessionId: String, _ kind: AgentKind, _ project: String,
@@ -197,6 +199,9 @@ public final class SessionStore {
             if candidate.kind == .cursor,
                let validator = cursorSessionValidator, !validator(candidate.id) { continue }
             if let i = sessions.firstIndex(where: { $0.id == candidate.id }) {
+                let blocksCursorDone =
+                    candidate.kind == .cursor && candidate.state == .done
+                    && cursorHasActiveSubagents?(candidate.id) == true
                 if sessions[i].appPath == nil, let app = candidate.appPath {
                     sessions[i].appPath = app
                 }
@@ -206,11 +211,16 @@ public final class SessionStore {
                     sessions[i].projectName = candidate.projectName
                 }
                 if candidate.lastActivity > sessions[i].lastActivity {
-                    // 磁盘比内存新:会话在别处有了新动静,刷新活跃时间和指标
-                    sessions[i].lastActivity = candidate.lastActivity
+                    // 活跃子任务期间不推进 Cursor done 候选的基准时间；子任务结束后
+                    // 同一候选仍保持 newer，下一轮即可恢复正常终态采纳。
                     if let m = candidate.metrics { sessions[i].metrics = m }
-                    if shouldAdoptBackfillState(current: sessions[i].state, candidate: candidate.state) {
-                        sessions[i].state = candidate.state
+                    if !blocksCursorDone {
+                        // 磁盘比内存新:会话在别处有了新动静,刷新活跃时间和状态
+                        sessions[i].lastActivity = candidate.lastActivity
+                        if shouldAdoptBackfillState(
+                            current: sessions[i].state, candidate: candidate.state) {
+                            sessions[i].state = candidate.state
+                        }
                     }
                 } else if let cm = candidate.metrics {
                     // 内存较新:不整体覆盖,只补上事件流拿不到的缺失字段
@@ -226,7 +236,15 @@ public final class SessionStore {
                 // 否则被 prune 判为 disconnected 的僵尸会话会被每轮回填复活成 thinking。
                 if candidate.lastActivity == sessions[i].lastActivity,
                    candidate.state == .done || candidate.state == .waitingApproval {
-                    sessions[i].state = candidate.state
+                    // Cursor:相等时间的终态来自状态库/transcript 尾部推断,不能压过实时
+                    // 运行/等待态——子任务仍在跑时父会话的主 transcript 可能已 turn_ended,
+                    // 若采纳会误判 done。只有 candidate 时间更新时(上面的分支)才采纳终态。
+                    let liveStates: Set<SessionState> =
+                        [.thinking, .runningTool, .waitingInput, .waitingApproval]
+                    if !blocksCursorDone
+                        && !(candidate.kind == .cursor && liveStates.contains(sessions[i].state)) {
+                        sessions[i].state = candidate.state
+                    }
                 }
             } else {
                 var fresh = candidate

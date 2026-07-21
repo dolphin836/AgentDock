@@ -63,6 +63,24 @@ private func ev(_ name: String, _ kind: AgentKind = .claudeCode) -> AgentEvent {
         #expect(mapEventToState(ev("unknownEvent", .cursor), current: .runningTool) == .runningTool)
     }
 
+    @Test func cursorSubagentProgressMapsToRunningTool() {
+        let progress = AgentEvent(sessionId: "P", kind: .cursor, name: "subagentProgress",
+                                  detail: "2 个子任务", tool: "Task")
+        #expect(mapEventToState(progress, current: .thinking) == .runningTool)
+        #expect(mapEventToState(progress, current: .done) == .runningTool)
+        // 原始 hook 必须先经 Aggregator；若调用方漏拦，mapping 不得提前切状态。
+        #expect(mapEventToState(ev("subagentStart", .cursor), current: .thinking) == .thinking)
+        #expect(mapEventToState(ev("subagentStop", .cursor), current: .runningTool) == .runningTool)
+    }
+
+    @Test func cursorShellAndMCPHookMapping() {
+        #expect(mapEventToState(ev("beforeShellExecution", .cursor), current: .thinking) == .runningTool)
+        #expect(mapEventToState(ev("afterShellExecution", .cursor), current: .runningTool) == .thinking)
+        #expect(mapEventToState(ev("beforeMCPExecution", .cursor), current: .thinking) == .runningTool)
+        #expect(mapEventToState(ev("afterMCPExecution", .cursor), current: .runningTool) == .thinking)
+        #expect(mapEventToState(ev("postToolUseFailure", .cursor), current: .runningTool) == .thinking)
+    }
+
     @Test func idleNotificationIsNotApproval() {
         let idle = AgentEvent(sessionId: "s1", kind: .claudeCode,
                               name: "Notification", detail: "Claude is waiting for your input")

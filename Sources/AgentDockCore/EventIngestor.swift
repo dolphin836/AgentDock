@@ -43,10 +43,24 @@ public enum EventIngestor {
         let input = p["tool_input"] as? [String: Any]
         let detail = toolDetail(tool: tool, input: input, fallback: tool)
         let cwd = (p["workspace_roots"] as? [String])?.first
+        let correlationId = (p["tool_use_id"] as? String)
+            ?? (p["tool_call_id"] as? String)
+        let transcriptIdentity = (p["agent_transcript_path"] as? String)
+            .map(SessionBackfillScanner.cursorTranscriptIdentity(path:))
+        let parentSessionId = (p["parent_conversation_id"] as? String)
+            ?? transcriptIdentity.flatMap(\.parentId)
+        // 官方 hook 在父会话上下文触发:subagent_id 实为父 Task 的 tool_call_id,而
+        // agent_transcript_path 的 stem 是子会话 uuid——同一逻辑子任务的两个别名,都登记。
+        let explicitSubagentId = p["subagent_id"] as? String
+        let transcriptChildId = transcriptIdentity.flatMap { $0.isSubagent ? $0.sessionId : nil }
+        let subagentId = explicitSubagentId ?? transcriptChildId
+        let subagentAliases = Array(Set([explicitSubagentId, transcriptChildId].compactMap { $0 }))
         return .event(AgentEvent(
             sessionId: sessionId, kind: .cursor,
             cwd: cwd, name: name, detail: detail, tool: tool, appPath: appPath,
-            model: p["model"] as? String))
+            model: p["model"] as? String, correlationId: correlationId,
+            parentSessionId: parentSessionId, subagentId: subagentId,
+            subagentAliases: subagentAliases))
     }
 
     private static func parseClaudeHook(_ p: [String: Any], appPath: String?) -> IngestResult {
@@ -139,9 +153,13 @@ public enum EventIngestor {
         let toolUse = content.last { $0["type"] as? String == "tool_use" }
         if let toolUse {
             let tool = toolUse["name"] as? String
+            let correlationId = (toolUse["id"] as? String)
+                ?? (toolUse["tool_use_id"] as? String)
+                ?? (toolUse["tool_call_id"] as? String)
             return .event(AgentEvent(
                 sessionId: sessionId, kind: .cursor, cwd: cwd,
-                name: "preToolUse", detail: tool, tool: tool))
+                name: "preToolUse", detail: tool, tool: tool,
+                correlationId: correlationId))
         }
         return .event(AgentEvent(sessionId: sessionId, kind: .cursor, cwd: cwd, name: "postToolUse"))
     }

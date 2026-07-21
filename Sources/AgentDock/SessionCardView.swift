@@ -212,7 +212,14 @@ extension AgentSession {
             case .edit: return settings.t("Editing…", "编辑中…")
             case .shell: return settings.t("Running cmd…", "命令执行中…")
             case .verify: return settings.t("Verifying…", "验证中…")
-            case .subtask: return settings.t("Subagent…", "子任务中…")
+            case .subtask:
+                // 子任务聚合进度:显示运行中子任务数(优先安全解析 detail 计数)。
+                if let event = currentToolEvent, SubagentDisplay.isProgressEvent(event.name) {
+                    let count = SubagentDisplay.runningCount(detail: event.detail)
+                    return settings.t(SubagentDisplay.runningLabel(count: count, chinese: false),
+                                      SubagentDisplay.runningLabel(count: count, chinese: true))
+                }
+                return settings.t("Subagent…", "子任务中…")
             case .mcp: return settings.t("MCP call…", "MCP 调用中…")
             }
         }
@@ -243,17 +250,20 @@ extension AgentSession {
         case "exec_command_begin": return Self.shellCategory(command: event.detail)
         case "patch_apply_begin": return .edit
         case "mcp_tool_call_begin": return .mcp
+        // 子 agent 聚合进度 → 子任务(不是真实工具调用,单独归类)
+        case _ where SubagentDisplay.isProgressEvent(event.name): return .subtask
         default: return nil
         }
     }
 
-    /// 最近一条「工具开始」事件
+    /// 最近一条「工具开始」事件(含子任务聚合进度;完成事件不计,避免污染当前工具)
     private var currentToolEvent: AgentEvent? {
         for event in recentEvents.reversed() {
             switch event.name {
             case "PreToolUse", "preToolUse", "function_call", "custom_tool_call",
                  "web_search_call", "tool_search_call",
-                 "exec_command_begin", "patch_apply_begin", "mcp_tool_call_begin":
+                 "exec_command_begin", "patch_apply_begin", "mcp_tool_call_begin",
+                 "subagentProgress":
                 return event
             default: continue
             }

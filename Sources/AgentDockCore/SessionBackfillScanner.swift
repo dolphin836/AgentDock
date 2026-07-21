@@ -94,6 +94,33 @@ public enum SessionBackfillScanner {
         return sessions
     }
 
+    /// Cursor transcript 路径解析出的会话身份。
+    public struct CursorTranscriptIdentity: Equatable, Sendable {
+        /// 事件归属的会话 id:子 agent 用 child id,主会话用其本身 id。
+        public let sessionId: String
+        /// 父会话 id(子 agent 时非空;主会话为 nil)。
+        public let parentId: String?
+        public var isSubagent: Bool { parentId != nil }
+
+        public init(sessionId: String, parentId: String?) {
+            self.sessionId = sessionId
+            self.parentId = parentId
+        }
+    }
+
+    /// 从完整 transcript 路径解析父/子身份(纯函数,不碰文件系统):
+    /// - 主会话:`.../agent-transcripts/<会话>/<会话>.jsonl` → sessionId=会话,parentId=nil
+    /// - 子会话:`.../agent-transcripts/<父>/subagents/<子>.jsonl` → sessionId=子,parentId=父
+    /// 定位 "subagents" 组件,其前一层即父目录名,兼容更深的嵌套路径。
+    public static func cursorTranscriptIdentity(path: String) -> CursorTranscriptIdentity {
+        let comps = (path as NSString).pathComponents
+        let file = ((path as NSString).lastPathComponent as NSString).deletingPathExtension
+        if let subIdx = comps.firstIndex(of: "subagents"), subIdx > 0 {
+            return CursorTranscriptIdentity(sessionId: file, parentId: comps[subIdx - 1])
+        }
+        return CursorTranscriptIdentity(sessionId: file, parentId: nil)
+    }
+
     /// "Users-eric-Work-Code-platform-debit-card" → "/Users/eric/Work/Code/platform-debit-card"。
     /// "-" 既可能是路径分隔也可能是目录名的一部分,按文件系统实际存在的目录回溯猜解。
     public static func resolvePathSlug(

@@ -172,6 +172,31 @@ private func tempDir() -> String {
         }
     }
 
+    @Test func installsShellAndMCPHookEvents() throws {
+        let (installer, path) = makeInstaller()
+        try installer.install()
+        let obj = try JSONSerialization.jsonObject(
+            with: FileManager.default.contents(atPath: path)!) as! [String: Any]
+        let hooks = obj["hooks"] as! [String: Any]
+        // 补齐 shell/MCP/失败 hook,才能在 hooks 修好的版本上拿到完整工具态
+        for event in ["beforeShellExecution", "afterShellExecution",
+                      "beforeMCPExecution", "afterMCPExecution", "postToolUseFailure",
+                      "subagentStart", "subagentStop"] {
+            #expect(hooks[event] != nil, "missing hook: \(event)")
+            let entries = hooks[event] as! [[String: Any]]
+            #expect(entries.contains { ($0["command"] as! String).contains("agentdock-emit") })
+        }
+        // 卸载后新事件也应被清干净
+        try installer.uninstall()
+        let after = try JSONSerialization.jsonObject(
+            with: FileManager.default.contents(atPath: path)!) as! [String: Any]
+        let afterHooks = after["hooks"] as! [String: Any]
+        #expect(afterHooks["beforeShellExecution"] == nil)
+        #expect(afterHooks["afterMCPExecution"] == nil)
+        #expect(afterHooks["subagentStart"] == nil)
+        #expect(afterHooks["subagentStop"] == nil)
+    }
+
     @Test func installPreservesUserHooksAndIsIdempotent() throws {
         let (installer, path) = makeInstaller()
         let existing = #"{"version":1,"hooks":{"preToolUse":[{"command":"my-hook.sh"}]}}"#

@@ -53,6 +53,10 @@ public func mapEventToState(_ event: AgentEvent, current: SessionState) -> Sessi
             return .runningTool
         case "postToolUse", "postToolUseFailure", "afterShellExecution", "afterMCPExecution":
             return .thinking
+        // 子 agent 聚合注入:父会话有 Task 派生的子任务在跑(非真实 preToolUse,
+        // 单独命名以免被当作工具调用 begin 反复计数)
+        case "subagentProgress": return .runningTool
+        case "subagentComplete": return .thinking
         // bubble 探测注入的审批卡片信号(Auto-review 拦截等)
         case "approvalRequest": return .waitingApproval
         case "approvalResolved": return .thinking

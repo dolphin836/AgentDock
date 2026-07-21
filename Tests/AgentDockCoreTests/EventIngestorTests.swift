@@ -72,6 +72,7 @@ private func data(_ s: String) -> Data { Data(s.utf8) }
         let line = data("""
         {"source":"cursor","type":"hook","app":"/Applications/Cursor.app","payload":{
           "conversation_id":"conv-1","hook_event_name":"preToolUse","model":"fable-5",
+          "tool_use_id":"tool-123",
           "tool_name":"Shell","tool_input":{"command":"swift test"},
           "workspace_roots":["/Users/eric/AgentDock"]}}
         """)
@@ -83,8 +84,34 @@ private func data(_ s: String) -> Data { Data(s.utf8) }
         #expect(e.name == "preToolUse")
         #expect(e.cwd == "/Users/eric/AgentDock")
         #expect(e.detail == "swift test")
+        #expect(e.correlationId == "tool-123")
         #expect(e.model == "fable-5")
         #expect(e.appPath == "/Applications/Cursor.app")
+    }
+
+    @Test func cursorSubagentHookIdentityFromExplicitFieldsAndPath() {
+        let explicit = data("""
+        {"source":"cursor","type":"hook","payload":{
+          "conversation_id":"child-1","parent_conversation_id":"parent-1",
+          "subagent_id":"child-1","hook_event_name":"subagentStart",
+          "agent_transcript_path":"/x/agent-transcripts/parent-1/subagents/child-1.jsonl"}}
+        """)
+        guard case .event(let direct) = EventIngestor.parseLine(explicit) else {
+            Issue.record("expected .event"); return
+        }
+        #expect(direct.parentSessionId == "parent-1")
+        #expect(direct.subagentId == "child-1")
+
+        let pathOnly = data("""
+        {"source":"cursor","type":"hook","payload":{
+          "conversation_id":"parent-2","hook_event_name":"subagentStop",
+          "agent_transcript_path":"/x/agent-transcripts/parent-2/subagents/child-2.jsonl"}}
+        """)
+        guard case .event(let derived) = EventIngestor.parseLine(pathOnly) else {
+            Issue.record("expected .event"); return
+        }
+        #expect(derived.parentSessionId == "parent-2")
+        #expect(derived.subagentId == "child-2")
     }
 
     @Test func cursorMcpHookKeepsServerToolDetail() {
@@ -114,11 +141,12 @@ private func data(_ s: String) -> Data { Data(s.utf8) }
         #expect(submit.kind == .cursor)
         #expect(submit.cwd == "/x/p")
 
-        guard case .event(let tool) = parse(#"{"role":"assistant","message":{"content":[{"type":"text","text":"x"},{"type":"tool_use","name":"Shell"}]}}"#) else {
+        guard case .event(let tool) = parse(#"{"role":"assistant","message":{"content":[{"type":"text","text":"x"},{"type":"tool_use","id":"tool-9","name":"Shell"}]}}"#) else {
             Issue.record("expected .event"); return
         }
         #expect(tool.name == "preToolUse")
         #expect(tool.detail == "Shell")
+        #expect(tool.correlationId == "tool-9")
 
         guard case .event(let text) = parse(#"{"role":"assistant","message":{"content":[{"type":"text","text":"done"}]}}"#) else {
             Issue.record("expected .event"); return
