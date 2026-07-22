@@ -15,11 +15,10 @@ DMG_URL = "https://api.agentdockstatus.app/v1/download/AgentDock-0.2.4.dmg"
 # (`v<!-- -->0.2.4`) in the static export, so match the label tolerantly.
 VERSION_LABEL_PATTERN = re.compile(r"v(?:<!--\s*-->)?0\.2\.4")
 REQUIRED_IDS = {
-    "main-content", "top", "product", "context-focus", "voice", "meeting",
-    "context", "integrations", "memory", "privacy", "download", "footer",
-    "site-menu",
+    "main-content", "top", "voice", "meeting", "integrations", "privacy",
+    "download", "final-cta-heading", "site-menu",
 }
-HEADER_IDS = REQUIRED_IDS - {"main-content", "site-menu"}
+HEADER_IDS = {"top"}
 
 
 class Parser(HTMLParser):
@@ -32,9 +31,15 @@ class Parser(HTMLParser):
         self.skip_target = None
         self.menu_button = None
         self.menu = None
+        self.section_count = 0
+        self.footer_count = 0
 
     def handle_starttag(self, tag, attrs):
         values = dict(attrs)
+        if tag == "section":
+            self.section_count += 1
+        if tag == "footer":
+            self.footer_count += 1
         identifier = values.get("id")
         if identifier:
             self.ids.add(identifier)
@@ -80,6 +85,8 @@ def main():
             ok = fail(f"missing retained release asset site/{name}") and ok
     if "AgentDock" not in text or not any((SITE / "macos").rglob("*")):
         ok = fail("missing AgentDock first-party site assets") and ok
+    if not (SITE / "hero-dot-grid.png").is_file():
+        ok = fail("missing dotted hero background asset") and ok
 
     for kind, url in parser.runtime_resources:
         if url.lower().startswith(("http://", "https://", "//")):
@@ -106,6 +113,11 @@ def main():
             ok = fail(f"#{identifier} must declare data-header=dark|light") and ok
     if parser.skip_target != "#main-content":
         ok = fail("missing skip link to #main-content") and ok
+    if parser.section_count != 1 or parser.footer_count != 0:
+        ok = fail(
+            f"homepage must contain exactly one section and no footer "
+            f"(sections={parser.section_count}, footers={parser.footer_count})"
+        ) and ok
     if (
         not parser.menu_button
         or parser.menu_button.get("aria-controls") != "site-menu"

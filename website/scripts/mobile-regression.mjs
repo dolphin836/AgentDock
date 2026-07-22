@@ -19,25 +19,28 @@ const browser = await puppeteer.launch({
 });
 
 function assert(condition, message) {
-  if (!condition) {
-    throw new Error(message);
-  }
+  if (!condition) throw new Error(message);
 }
 
 try {
   const page = await browser.newPage();
+  const errors = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(message.text());
+  });
+  page.on("pageerror", (error) => errors.push(error.message));
+
   await page.setViewport(viewport);
   await page.goto(targetUrl, { waitUntil: "networkidle0", timeout: 30_000 });
   await page.waitForSelector("#hero-title");
 
   const baseline = await page.evaluate(() => {
     const title = document.querySelector("#hero-title");
-    const tabList = document.querySelector('[role="tablist"]');
-    const tabs = [...document.querySelectorAll('[role="tab"]')];
     const menuButton = document.querySelector(
       "button[data-mobile-menu-button]",
     );
-
+    const hero = document.querySelector("#top");
+    const dotLayer = hero?.querySelector("div");
     const heroLines = [...(title?.querySelectorAll("span") ?? [])].map(
       (line) => {
         const range = document.createRange();
@@ -51,7 +54,15 @@ try {
 
     return {
       scrollWidth: document.documentElement.scrollWidth,
+      scrollHeight: document.documentElement.scrollHeight,
+      heroHeight: hero?.getBoundingClientRect().height ?? 0,
       heroLines,
+      sectionCount: document.querySelectorAll("main > section").length,
+      footerCount: document.querySelectorAll("footer").length,
+      hasCanvas: Boolean(hero?.querySelector("canvas")),
+      hasDotTexture:
+        dotLayer instanceof HTMLElement &&
+        getComputedStyle(dotLayer).backgroundImage.includes("hero-dot-grid.png"),
       menu: {
         id: document.querySelector("#site-menu")?.id,
         ariaModal: document.querySelector("#site-menu")?.getAttribute("aria-modal"),
@@ -59,29 +70,25 @@ try {
         buttonTarget: menuButton?.getAttribute("aria-controls"),
         rect: menuButton?.getBoundingClientRect().toJSON(),
       },
-      tabs: {
-        count: tabs.length,
-        tabIndexes: tabs.map((tab) => tab.getAttribute("tabindex")),
-        selected: tabs.map((tab) => tab.getAttribute("aria-selected")),
-        controls: tabs.map((tab) => tab.getAttribute("aria-controls")),
-        controlsValid: tabs.every((tab) => {
-          const controlsId = tab.getAttribute("aria-controls");
-          return (
-            controlsId !== null &&
-            document.getElementById(controlsId)?.getAttribute("role") === "tabpanel"
-          );
-        }),
-        scrollWidth: tabList?.scrollWidth ?? 0,
-        clientWidth: tabList?.clientWidth ?? 0,
-        scrollSnapType: tabList ? getComputedStyle(tabList).scrollSnapType : "",
-        maskImage: tabList ? getComputedStyle(tabList).maskImage : "",
-      },
     };
   });
 
   assert(
     baseline.scrollWidth === viewport.width,
     `Expected scrollWidth ${viewport.width}, received ${baseline.scrollWidth}`,
+  );
+  assert(
+    baseline.scrollHeight === viewport.height &&
+      baseline.heroHeight === viewport.height,
+    `Homepage must fit exactly one mobile viewport: ${JSON.stringify(baseline)}`,
+  );
+  assert(
+    baseline.sectionCount === 1 && baseline.footerCount === 0,
+    `Only the hero section may remain: ${JSON.stringify(baseline)}`,
+  );
+  assert(
+    baseline.hasCanvas && baseline.hasDotTexture,
+    "Hero must render both the particle canvas and dotted black texture",
   );
   assert(
     baseline.heroLines.every((line) => line.rects === 1 && line.text.length > 1),
@@ -95,64 +102,6 @@ try {
       baseline.menu.rect?.height >= 44,
     `Mobile menu contract failed: ${JSON.stringify(baseline.menu)}`,
   );
-  assert(baseline.tabs.count > 1, "Expected multiple voice tabs");
-  assert(
-    baseline.tabs.scrollWidth > baseline.tabs.clientWidth,
-    `Voice tabs must overflow horizontally: ${JSON.stringify(baseline.tabs)}`,
-  );
-  assert(
-    baseline.tabs.scrollSnapType.includes("x"),
-    `Voice tabs must use horizontal scroll snap: ${baseline.tabs.scrollSnapType}`,
-  );
-  assert(
-    baseline.tabs.maskImage !== "none",
-    "Voice tabs must apply a right-edge fade mask",
-  );
-  assert(
-    baseline.tabs.tabIndexes.filter((value) => value === "0").length === 1 &&
-      baseline.tabs.tabIndexes.every(
-        (value) => value === "0" || value === "-1",
-      ),
-    `Voice tabs must use roving tabindex: ${JSON.stringify(baseline.tabs.tabIndexes)}`,
-  );
-  assert(
-    baseline.tabs.selected.filter((value) => value === "true").length === 1 &&
-      baseline.tabs.controlsValid,
-    `Voice tab ARIA references failed: ${JSON.stringify(baseline.tabs)}`,
-  );
-
-  const firstTab = '[role="tab"]:nth-of-type(1)';
-  await page.focus(firstTab);
-  await page.keyboard.press("ArrowRight");
-  const afterRight = await page.evaluate(() => ({
-    activeId: document.activeElement?.id,
-    selected: document.activeElement?.getAttribute("aria-selected"),
-    tabIndex: document.activeElement?.getAttribute("tabindex"),
-  }));
-  assert(
-    afterRight.selected === "true" && afterRight.tabIndex === "0",
-    `ArrowRight must move the active roving tab: ${JSON.stringify(afterRight)}`,
-  );
-
-  await page.keyboard.press("End");
-  const afterEnd = await page.evaluate(() => document.activeElement?.id);
-  await page.keyboard.press("Home");
-  const afterHome = await page.evaluate(() => ({
-    activeId: document.activeElement?.id,
-    panelId: document
-      .querySelector('[role="tab"][aria-selected="true"]')
-      ?.getAttribute("aria-controls"),
-    panelLabel: document
-      .querySelector('[role="tabpanel"]')
-      ?.getAttribute("aria-labelledby"),
-  }));
-  assert(afterEnd?.includes("return-workspace"), `End did not select last tab: ${afterEnd}`);
-  assert(
-    afterHome.activeId?.includes("live-status") &&
-      afterHome.panelId &&
-      afterHome.panelLabel === afterHome.activeId,
-    `Home/ARIA linkage failed: ${JSON.stringify(afterHome)}`,
-  );
 
   await page.click("button[data-mobile-menu-button]");
   await page.waitForFunction(
@@ -161,50 +110,58 @@ try {
   await page.waitForFunction(
     () => Boolean(document.activeElement?.closest("#site-menu")),
   );
-  await page.keyboard.down("Shift");
-  await page.keyboard.press("Tab");
-  await page.keyboard.up("Shift");
-  const focusAfterReverseTab = await page.evaluate(() => ({
-    isMenuButton: document.activeElement?.matches("[data-mobile-menu-button]"),
-  }));
-  await page.keyboard.press("Tab");
-  const focusAfterForwardTab = await page.evaluate(() => ({
-    inMenu: Boolean(document.activeElement?.closest("#site-menu")),
+
+  const menuState = await page.evaluate(() => ({
+    expanded: document
+      .querySelector("[data-mobile-menu-button]")
+      ?.getAttribute("aria-expanded"),
+    focused: Boolean(document.activeElement?.closest("#site-menu")),
+    links: document.querySelectorAll("#site-menu a").length,
+    undersized: [
+      ...document.querySelectorAll(
+        "#site-menu a, button[data-mobile-menu-button]",
+      ),
+    ]
+      .map((element) => ({
+        label: element.textContent?.trim() || element.getAttribute("aria-label"),
+        height: element.getBoundingClientRect().height,
+      }))
+      .filter((target) => target.height < 44),
   }));
   assert(
-    focusAfterReverseTab.isMenuButton && focusAfterForwardTab.inMenu,
-    `Mobile menu focus escaped its trap: ${JSON.stringify({
-      focusAfterReverseTab,
-      focusAfterForwardTab,
-    })}`,
+    menuState.expanded === "true" && menuState.focused && menuState.links === 5,
+    `Mobile menu did not open correctly: ${JSON.stringify(menuState)}`,
+  );
+  assert(
+    menuState.undersized.length === 0,
+    `Touch targets under 44px: ${JSON.stringify(menuState.undersized)}`,
   );
 
-  const touchTargets = await page.evaluate(() =>
-    [...document.querySelectorAll(
-      "footer a, #meeting button, button[data-mobile-menu-button]",
-    )].map((element) => {
-      const rect = element.getBoundingClientRect();
-      return {
-        label: element.textContent?.trim() || element.getAttribute("aria-label"),
-        height: rect.height,
-      };
-    }),
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(
+    () => document.querySelector("#site-menu")?.getAttribute("aria-hidden") === "true",
   );
-  const undersized = touchTargets.filter((target) => target.height < 44);
+
+  const initialLanguage = await page.evaluate(
+    () => document.documentElement.lang,
+  );
+  await page.click("button[aria-label^='Switch to']");
+  const toggledLanguage = await page.evaluate(
+    () => document.documentElement.lang,
+  );
   assert(
-    undersized.length === 0,
-    `Touch targets under 44px: ${JSON.stringify(undersized)}`,
+    new Set([initialLanguage, toggledLanguage]).size === 2,
+    "Language toggle must switch the document language",
   );
+  assert(errors.length === 0, `Console errors: ${errors.join("; ")}`);
 
   console.log(
     JSON.stringify(
       {
         viewport: `${viewport.width}x${viewport.height}`,
-        scrollWidth: baseline.scrollWidth,
-        heroLineRects: baseline.heroLines.map((line) => line.rects),
-        voiceTabViewport: `${baseline.tabs.clientWidth}/${baseline.tabs.scrollWidth}`,
-        touchTargetCount: touchTargets.length,
-        minTouchHeight: Math.min(...touchTargets.map((target) => target.height)),
+        oneScreen: true,
+        dottedTexture: baseline.hasDotTexture,
+        menuLinks: menuState.links,
       },
       null,
       2,

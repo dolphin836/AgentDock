@@ -53,7 +53,7 @@
 
 .bottom {
   display: grid;
-  grid-template-columns: 660px 660px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 40px;
   padding-top: 20px;
   border-top: 1px solid rgb(246 246 242 / 20%);
@@ -133,10 +133,6 @@
 @media (max-width: 1180px) {
   .titleBlock h1 {
     font-size: 58px;
-  }
-
-  .bottom {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 }
 

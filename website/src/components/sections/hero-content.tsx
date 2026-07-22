@@ -62,7 +62,7 @@ export function HeroContent() {
           <div className={styles.actions}>
             <a
               className={styles.demo}
-              href="#voice"
+              href="#top"
               onBlur={() => setDemoActive(false)}
               onFocus={() => setDemoActive(true)}
               onMouseEnter={() => setDemoActive(true)}

@@ -1,44 +1,32 @@
-# AgentDock website design QA
+# AgentDock one-screen website design QA
 
-## Visual truth and implementation
+## Visual truth
 
-- Source of visual truth: live `https://vokie.com/` captured in the in-app browser.
-- Primary source evidence: `.design-evidence/vokie-desktop-top.png` and `.design-evidence/vokie-mobile-top.png`.
-- Implementation evidence: `.design-evidence/agentdock-v2-desktop-top-final.png` and `.design-evidence/agentdock-v2-mobile-top-final.png`.
-- Focused implementation evidence: `.design-evidence/agentdock-v2-desktop-section-01-ready.png`, `.design-evidence/agentdock-v2-desktop-tabs.png`, `.design-evidence/agentdock-v2-desktop-tabs-approval.png`, `.design-evidence/agentdock-v2-desktop-journey-start.png`, `.design-evidence/agentdock-v2-desktop-journey-end.png`, `.design-evidence/agentdock-v2-desktop-integrations.png`, `.design-evidence/agentdock-v2-desktop-privacy.png`, `.design-evidence/agentdock-v2-mobile-mosaic.png`, `.design-evidence/agentdock-v2-mobile-menu.png`, and `.design-evidence/agentdock-v2-mobile-journey.png`.
-- Desktop viewport: 1440 × 1000 CSS pixels; both top screenshots are 1425 × 990 captured pixels after browser chrome/scrollbar exclusion.
-- Mobile viewport: 390 × 844 CSS pixels; both top screenshots are 375 × 812 captured pixels after browser chrome/scrollbar exclusion.
-- States compared: loaded hero in Chinese, desktop status/approval tab states, desktop pinned journey at start/end, mobile navigation open, mobile vertical journey, privacy, and integrations.
+- Content/layout reference: user-provided `codex-clipboard-8d801e59-c2bc-44dc-89d5-b500820f482e.png`.
+- Dot-grid reference: user-provided `codex-clipboard-df42d6e8-bca1-41ba-aa9c-bad7f8fa47a8.png`.
+- Final implementation evidence: `.design-evidence/agentdock-one-screen-dots-desktop.png`.
+- Final local preview: `http://127.0.0.1:4173/?one-screen=1`.
 
-## Comparison history
+## Comparison result
 
-1. Initial implementation versus source: hero structure matched, but AgentDock used pill CTAs while Vokie used a quiet underlined action. Mobile particles also obscured the title and the open menu inherited a light header tone.
-2. Corrective pass: replaced the hero pills with the source-style underlined action, reduced particle contrast, resized/repositioned the mobile particle field, and forced the open menu header to the dark palette.
-3. Final same-input comparison: source and implementation were opened together at identical desktop and mobile viewports. Header height, gutters, dark carbon background, warm-gray typography, hero framing, bottom rule/copy split, and overall information density align. Product-specific differences are intentional: the particle silhouette is the AgentDock notch and all copy/product imagery is AgentDock content.
-
-## Detailed findings
-
-- Typography: Geist/system fallback, 570-ish display weights, tight negative tracking, mono uppercase labels, and the 68 px desktop hero scale match the source character.
-- Color: `#111111` carbon, `#dadada` warm paper, `#e7e7e7` light stage, Vokie-like blue and coral feature panels, and low-contrast hairlines are consistent across sections.
-- Layout: fixed/condensing header, one-viewport hero, four large capability panels, convergence interlude, left-tab product stage, pinned horizontal desktop journey, light accordion, dark three-agent cards, usage panel, privacy field, split final CTA, and footer reproduce the source page rhythm.
-- Motion: particle convergence, global reveal transitions, card lift, image transitions, header condensing/hide behavior, tab/accordion transitions, and scroll-driven horizontal journey work. Reduced-motion styles remove nonessential motion.
-- Responsive: mobile uses the same 390 px breakpoint truth as the source, a 2 × 2 full-screen menu, single-column capability cards, horizontal feature tabs, vertical journey cards, and no horizontal overflow.
-- Assets: four original AgentDock product images are stored locally under `website/public/product/`; no Vokie assets or hotlinks are used.
+- The reference and final screenshot were opened together in one visual comparison pass.
+- The original header, eyebrow, particle-notch visual, two-line statement, bottom rule, action, and description keep the same hierarchy and spacing rhythm.
+- The final background remains carbon black and now carries a uniform low-contrast grid of tiny circular dots derived from the second reference.
+- No capability panels, feature tabs, journey, integrations, privacy section, final CTA, product screenshots, or footer remain below the hero.
+- At the in-app browser's 1280 × 720 viewport, document height and hero height are both exactly 720 px; the page has one section, zero footers, and no horizontal overflow.
+- The flexible bottom grid was corrected during QA so the description stays inside the right viewport edge at 1280 px.
 
 ## Interaction and contract verification
 
-- Desktop feature tabs switch copy and imagery with correct `tab`/`tabpanel` ARIA state.
-- Outcome accordion moves the expanded state and associated imagery.
-- Desktop journey translates from monitor through approval, usage, and return while the section is pinned; mobile resets to a vertical stack.
-- Mobile navigation opens as a focus-contained full-screen menu with readable dark contrast and closes normally.
-- English/Chinese switching updates the document language, hero, sections, navigation, and download copy.
-- Header, footer, and final CTA all resolve to the authoritative `AgentDock-0.2.4.dmg` URL; the final CTA exposes the release `data-version` contract.
-- In-app browser console: no errors or warnings on the final desktop/mobile pass.
+- Particle animation remains visible above the dotted image texture.
+- English/Chinese switching works and preserves the one-screen layout.
+- Header download and mobile-menu download both retain the authoritative AgentDock 0.2.4 DMG URL.
+- Existing navigation items resolve to anchors within the hero instead of removed sections.
+- In-app browser console contained no errors or warnings from the application.
 - `npm run check`: passed.
-- `npm run test:release`: passed, including sentinel build, language switch, download URL, version metadata, and console checks.
-- `python3 scripts/check_site.py`: passed against the exported `site/` tree.
+- `python3 scripts/check_site.py`: passed against the refreshed `site/` export.
 - `python3 scripts/test_update_site_release.py`: passed.
+- Browser regression scripts: syntax checked.
 - `git diff --check`: passed.
-- Static export refreshed from `website/out/` into `site/`.
 
 final result: passed

@@ -1,11 +1,22 @@
 .section {
   position: relative;
-  height: calc(100svh - 24px);
+  height: 100svh;
   min-height: 580px;
   overflow: hidden;
   isolation: isolate;
   background: #111111;
   color: #dadada;
+}
+
+.dotTexture {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: url("/hero-dot-grid.png");
+  background-position: center;
+  background-size: cover;
+  opacity: 0.68;
+  pointer-events: none;
 }
 
 .section::after {
@@ -19,16 +30,28 @@
   content: "";
 }
 
+.navTargets,
+.releaseMeta {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 @media (max-width: 680px) {
   .section {
-    height: calc(100svh - 18px);
+    height: 100svh;
     min-height: 620px;
   }
 }
 
 @media (max-width: 680px) and (max-height: 640px) {
   .section {
-    height: calc(100svh - 10px);
+    height: 100svh;
     min-height: 0;
   }
 }

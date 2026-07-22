@@ -1,8 +1,5 @@
-/* Hero particle canvas.
-   Fixed to the hero stage behind the copy. Never interactive and hidden from
-   the a11y tree. If WebGL fails or the context is lost, the canvas simply keeps
-   its solid #111 fill so the hero background stays intact without blocking the
-   foreground content (which lives at a higher stacking context). */
+/* Hero particle canvas. The dotted texture remains visible through its
+   transparent WebGL stage, while the section supplies the solid fallback. */
 .canvas {
   position: absolute;
   inset: 0;
@@ -11,7 +8,7 @@
   width: 100%;
   height: 100%;
   pointer-events: none;
-  background-color: #111111;
+  background-color: transparent;
 }
 
 @media (max-width: 680px) {
