@@ -6,15 +6,7 @@ import { IntroCurtain } from "@/components/intro/intro-curtain";
 import { Header } from "@/components/layout/header";
 import { Footer, footerContent } from "@/components/layout/footer";
 import Hero from "@/components/sections/hero";
-import { EthosCapabilityPanels } from "@/components/sections/ethos-capability-panels";
-import ContextFocus from "@/components/sections/context-focus";
-import { VoiceSection } from "@/components/sections/voice-section";
-import { MeetingJourney } from "@/components/sections/meeting-journey";
-import { OutcomesAccordion } from "@/components/sections/outcomes-accordion";
-import { ContextWorld } from "@/components/sections/context-world";
-import { MemorySection } from "@/components/sections/memory-section";
-import { PrivacySection } from "@/components/sections/privacy-section";
-import { FinalCta } from "@/components/sections/final-cta";
+import { HomeNarrative } from "@/components/sections/home-narrative";
 import { DOWNLOAD_URL } from "@/lib/release";
 import {
   getPreferredLanguage,
@@ -149,23 +141,13 @@ export function SitePage() {
     refreshScrollTriggerSoon();
   }, []);
 
-  const siteLanguage = toSiteLanguage(language);
-
   return (
     <>
       <IntroCurtain onComplete={handleIntroComplete} />
       <Header language={language} onLanguageToggle={toggleLanguage} />
       <main id="main-content">
         <Hero />
-        <EthosCapabilityPanels />
-        <ContextFocus />
-        <VoiceSection />
-        <MeetingJourney />
-        <OutcomesAccordion language={siteLanguage} />
-        <ContextWorld />
-        <MemorySection />
-        <PrivacySection />
-        <FinalCta />
+        <HomeNarrative />
       </main>
       <Footer
         anchors={FOOTER_ANCHORS}

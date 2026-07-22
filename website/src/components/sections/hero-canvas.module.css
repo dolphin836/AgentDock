@@ -13,3 +13,16 @@
   pointer-events: none;
   background-color: #111111;
 }
+
+@media (max-width: 680px) {
+  .canvas {
+    transform: translateY(-18px) scale(0.62);
+    transform-origin: 50% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas {
+    transition: none;
+  }
+}

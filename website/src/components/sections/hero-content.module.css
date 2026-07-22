@@ -63,56 +63,41 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 0;
 }
 
-.download,
 .demo {
   display: inline-flex;
+  width: fit-content;
   align-items: center;
-  justify-content: center;
-  gap: 24px;
-  min-height: 48px;
-  padding: 0 18px;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  font-size: 14px;
+  justify-content: flex-start;
+  min-height: 38px;
+  border: 0;
+  border-bottom: 1px solid rgb(246 246 242 / 42%);
+  padding: 0 0 10px;
+  background: transparent;
+  color: #dadada;
+  font-size: 13px;
   font-weight: 560;
   letter-spacing: -0.025em;
   text-decoration: none;
   transition:
-    background-color var(--duration-base) var(--ease-out),
     border-color var(--duration-base) var(--ease-out),
-    color var(--duration-base) var(--ease-out),
-    transform var(--duration-fast) var(--ease-out);
-}
-
-.download {
-  background: #f6f6f2;
-  color: #111;
-  box-shadow: 0 10px 30px rgb(0 0 0 / 20%);
-}
-
-.download:hover {
-  background: #fff;
-  transform: translateY(-2px);
-}
-
-.demo {
-  border-color: rgb(246 246 242 / 32%);
-  background: transparent;
-  color: #f6f6f2;
+    color var(--duration-base) var(--ease-out);
 }
 
 .demo:hover,
 .demo:focus-visible {
-  border-color: rgb(246 246 242 / 64%);
-  background: rgb(246 246 242 / 10%);
+  border-color: #dadada;
+  color: #fff;
 }
 
 .status {
   flex-basis: 100%;
-  margin-top: 4px;
+  max-width: 0;
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
   color: rgb(246 246 242 / 56%);
   font-family: var(--font-geist-mono), "Geist Mono", monospace;
   font-size: 11px;

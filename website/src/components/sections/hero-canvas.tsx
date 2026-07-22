@@ -45,7 +45,7 @@ const STATUS_DOTS: ReadonlyArray<{
   { x: 0.22, y: 0.34, color: [0.376, 0.647, 0.98] }, // done · sky
 ];
 
-const OUTLINE_COLOR: readonly [number, number, number] = [0.86, 0.86, 0.9];
+const OUTLINE_COLOR: readonly [number, number, number] = [0.42, 0.42, 0.45];
 
 function prefersReducedMotion(): boolean {
   return (
@@ -270,7 +270,7 @@ export function HeroCanvas({ className, id }: HeroCanvasProps) {
       sizeAttenuation: false,
       vertexColors: true,
       transparent: true,
-      opacity: 0.9,
+      opacity: 0.68,
       depthTest: false,
       depthWrite: false,
       blending: THREE.AdditiveBlending,

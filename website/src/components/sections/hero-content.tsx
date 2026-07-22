@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 
 import { useLanguage } from "@/hooks/use-language";
-import { DOWNLOAD_URL } from "@/lib/release";
 
 import styles from "./hero-content.module.css";
 
@@ -11,7 +10,6 @@ const copyByLanguage = {
   en: {
     eyebrow: "AGENTDOCK · FOR CLAUDE CODE, CODEX & CURSOR",
     titleLines: ["Every agent, in view.", "Your focus stays intact."],
-    download: "Download for Mac",
     demo: "See the notch",
     description:
       "AgentDock brings the live status, approvals, and usage of Claude Code, Codex, and Cursor into your macOS notch — glance up and return to the work in progress.",
@@ -22,7 +20,6 @@ const copyByLanguage = {
   zh: {
     eyebrow: "AGENTDOCK · 支持 CLAUDE CODE、CODEX 与 CURSOR",
     titleLines: ["所有 Agent，都在眼前。", "你的专注，不被打断。"],
-    download: "下载 Mac 版",
     demo: "查看刘海面板",
     description:
       "AgentDock 将 Claude Code、Codex 和 Cursor 的运行状态、审批与用量，汇聚到你的 macOS 刘海。抬眼即见，随时回到正在发生的工作。",
@@ -63,21 +60,16 @@ export function HeroContent() {
 
         <div className={styles.bottom}>
           <div className={styles.actions}>
-            <a className={styles.download} href={DOWNLOAD_URL}>
-              {copy.download}
-              <span aria-hidden="true">↗</span>
-            </a>
-            <button
+            <a
               className={styles.demo}
-              type="button"
+              href="#voice"
               onBlur={() => setDemoActive(false)}
               onFocus={() => setDemoActive(true)}
               onMouseEnter={() => setDemoActive(true)}
               onMouseLeave={() => setDemoActive(false)}
             >
               {copy.demo}
-              <span aria-hidden="true">→</span>
-            </button>
+            </a>
             <p className={styles.status} aria-live="polite">
               {demoStatus}
             </p>

@@ -135,6 +135,12 @@
   --header-scrolled-background: rgb(246 248 248 / 94%);
 }
 
+.header[data-menu-open="true"] {
+  --header-foreground: #fff;
+  --header-border: rgb(255 255 255 / 16%);
+  --header-scrolled-background: rgb(11 13 16 / 94%);
+}
+
 .header[data-scrolled="true"] .inner {
   width: min(calc(100% - 80px), 920px);
   height: 58px;
